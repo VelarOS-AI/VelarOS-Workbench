@@ -26,6 +26,7 @@ import {
   optionalNumber,
   optionalString,
 } from '../ipcBoundary'
+import { readWorkbenchProcessTarget } from '../WorkbenchProcessLaunch'
 
 import type { TerminalSessions } from './TerminalSessions'
 
@@ -107,6 +108,13 @@ function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartReque
   // 环境变量有一项不合规（名字不对、值不是字符串）就整份拒绝：悄悄丢掉一个变量，程序会带着错的配置跑起来。
   const env = readWorkbenchRunEnvironment(input['env'])
   if (!env) return null
+  if (input['initialCommand'] !== undefined && typeof input['initialCommand'] !== 'string')
+    return null
+  if (input['initialCommand'] !== undefined && input['initialProcess'] !== undefined) return null
+  const initialProcess = input['initialProcess'] === undefined
+    ? null
+    : readWorkbenchProcessTarget(input['initialProcess'])
+  if (input['initialProcess'] !== undefined && !initialProcess) return null
 
   const request: WorkbenchTerminalStartRequest = {
     projectRoot: input['projectRoot'] as string,
@@ -115,6 +123,7 @@ function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartReque
     ...optionalNumber(input, 'cols'),
     ...optionalNumber(input, 'rows'),
   }
+  if (initialProcess) request.initialProcess = initialProcess
   if (Object.keys(env).length > 0) request.env = env
   return request
 }

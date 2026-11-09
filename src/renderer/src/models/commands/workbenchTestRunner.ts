@@ -9,10 +9,11 @@ import type { SyntaxNode } from '@lezer/common'
 
 import { isPlainObject, isString } from '@velaros-ai/velaros/core'
 
+import type { WorkbenchPackageManagerTarget } from '@shared/contracts/workbench'
 import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
 
+import { buildWorkbenchProcessRunCommand, type WorkbenchRunCommand } from './workbenchCommandLines'
 import type { PackageManagerCommand } from './workbenchPackageScriptCommand'
-import { quoteWorkbenchShellArgument } from './workbenchShellQuote'
 
 export type WorkbenchTestRunnerKind = 'vitest' | 'jest'
 
@@ -273,17 +274,17 @@ export async function detectWorkbenchTestRunner(
 export function getWorkbenchTestRunnerExecutable(
   runner: WorkbenchTestRunnerKind,
   packageManager: PackageManagerCommand
-): string {
+): WorkbenchPackageManagerTarget {
   switch (packageManager) {
     case 'bun':
-      return `bunx --no-install ${runner}`
+      return { kind: 'package-manager', program: 'bunx', argv: ['--no-install', runner] }
     case 'pnpm':
-      return `pnpm exec ${runner}`
+      return { kind: 'package-manager', program: 'pnpm', argv: ['exec', runner] }
     case 'yarn':
       // `yarn run <可执行文件>` 在 Yarn 1 和新版里都把后面的参数原样交过去；`yarn exec` 在 Yarn 1 里会自己吃掉选项。
-      return `yarn run ${runner}`
+      return { kind: 'package-manager', program: 'yarn', argv: ['run', runner] }
     case 'npm':
-      return `npx --no-install ${runner}`
+      return { kind: 'package-manager', program: 'npx', argv: ['--no-install', runner] }
   }
 }
 
@@ -301,7 +302,6 @@ export interface WorkbenchTestRunCommandOptions {
   filePath: string
   /** 只跑全名匹配这个正则的测试；不给跑整个文件。 */
   pattern?: Nullable<string>
-  windows: boolean
 }
 
 /**
@@ -312,17 +312,21 @@ export function buildWorkbenchTestRunCommand({
   project,
   filePath,
   pattern,
-  windows,
-}: WorkbenchTestRunCommandOptions): string {
-  const file = quoteWorkbenchShellArgument(
-    relativeWorkbenchTestFilePath(filePath, project.packageDir),
-    windows
+}: WorkbenchTestRunCommandOptions): WorkbenchRunCommand {
+  const process = getWorkbenchTestRunnerExecutable(project.runner, project.packageManager)
+  const file = relativeWorkbenchTestFilePath(filePath, project.packageDir)
+  return buildWorkbenchProcessRunCommand(
+    {
+      ...process,
+      argv: [
+        ...process.argv,
+        project.runner === 'vitest' ? 'run' : '--runTestsByPath',
+        file,
+        ...(pattern ? ['-t', pattern] : []),
+      ],
+    },
+    project.packageDir ? { cwd: project.packageDir } : {}
   )
-  const executable = getWorkbenchTestRunnerExecutable(project.runner, project.packageManager)
-  const filter = pattern ? ` -t ${quoteWorkbenchShellArgument(pattern, windows)}` : ''
-  return project.runner === 'vitest'
-    ? `${executable} run ${file}${filter}`
-    : `${executable} --runTestsByPath ${file}${filter}`
 }
 
 /**
@@ -336,23 +340,22 @@ export function buildWorkbenchTestDebugTarget({
   project,
   filePath,
   pattern,
-  windows,
 }: WorkbenchTestRunCommandOptions): WorkbenchDebuggerLaunchTarget {
-  const file = quoteWorkbenchShellArgument(
-    relativeWorkbenchTestFilePath(filePath, project.packageDir),
-    windows
-  )
-  const filter = pattern ? ` -t ${quoteWorkbenchShellArgument(pattern, windows)}` : ''
+  const file = relativeWorkbenchTestFilePath(filePath, project.packageDir)
+  const filter = pattern ? ['-t', pattern] : []
   if (project.runner === 'vitest') {
-    const executable = getWorkbenchTestRunnerExecutable('vitest', project.packageManager)
+    const process = getWorkbenchTestRunnerExecutable('vitest', project.packageManager)
     return {
-      kind: 'inspect-command',
-      command: `${executable} run ${file}${filter} --no-file-parallelism --testTimeout=0`,
+      kind: 'inspect-process',
+      process: {
+        ...process,
+        argv: [...process.argv, 'run', file, ...filter, '--no-file-parallelism', '--testTimeout=0'],
+      },
     }
   }
   return {
     kind: 'node-package-bin',
     packageName: 'jest',
-    args: `--runInBand --runTestsByPath ${file}${filter} --testTimeout=100000000`,
+    argv: ['--runInBand', '--runTestsByPath', file, ...filter, '--testTimeout=100000000'],
   }
 }

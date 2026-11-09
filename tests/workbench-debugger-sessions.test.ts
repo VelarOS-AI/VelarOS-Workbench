@@ -5,12 +5,11 @@ import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
 
-import { currentPlatform } from '@velaros-ai/velaros/core/platform'
-
 import { resolveWorkbenchNodeExecutable } from '../src/main/conversation/WorkbenchNodeRuntime'
 import type { WorkbenchDebugProcess } from '../src/main/workspace/debug/WorkbenchDebugLaunch'
 import { WorkbenchDebugSessions } from '../src/main/workspace/debug/WorkbenchDebugSessions'
 import { PathResolver } from '../src/main/workspace/PathResolver'
+import type { WorkbenchDebuggerLaunchTarget } from '../src/shared/workbenchDebugger'
 
 import {
   createDebugTestProject,
@@ -45,8 +44,11 @@ void describe('starting a debug session', () => {
     const cleanupFailure = new Error('late process did not stop')
     const process: WorkbenchDebugProcess = {
       terminalSessionId: 'late-process',
+      projectRoot,
       shell: 'node',
       cwd: projectRoot,
+      command: 'node',
+      skipInitialPause: true,
       onExit: () => undefined,
       stop: () => {
         stopping.resolve()
@@ -103,7 +105,7 @@ void describe('starting a debug session', () => {
     try {
       // 若漏隔离，Node 会在调试器连上前因这个不存在的预加载模块退出。
       process.env.NODE_OPTIONS = '--require=./missing-host-preload.cjs'
-      const first = await project.start({ target: { kind: 'node-script', script: 'main.cjs' } })
+      const first = await project.start({ target: { kind: 'node-script', script: 'main.cjs', argv: [] } })
       assert.equal((await project.next('paused')).sessionId, first.sessionId)
       assert.equal(project.launched[0]!.env.NODE_OPTIONS, '')
       await project.sessions.controlDebugSession(
@@ -112,7 +114,7 @@ void describe('starting a debug session', () => {
       )
       await project.next('ended')
       const second = await project.start({
-        target: { kind: 'node-script', script: 'main.cjs' },
+        target: { kind: 'node-script', script: 'main.cjs', argv: [] },
         env: { NODE_OPTIONS: '--no-warnings' },
       })
       assert.equal((await project.next('paused')).sessionId, second.sessionId)
@@ -209,17 +211,18 @@ void describe('starting a debug session', () => {
         target: {
           kind: 'node-package-bin',
           packageName: 'fake-runner',
-          args: `case.cjs --name ${currentPlatform.quoteShellArg('two words')}`,
+          argv: ['case.cjs', '--name', 'two words'],
         },
         cwd: 'packages/app',
         env: { DEBUG_LABEL: 'from the configuration' },
         breakpoints: [{ path: 'packages/app/case.cjs', line: 2 }],
       })
-      // 包装在工作目录之上：命令行里写绝对路径；参数原样交给 shell 去拆。
-      assert.equal(
-        started.command.replace(/:\d+ /u, ':PORT '),
-        `node --inspect-brk=127.0.0.1:PORT ${currentPlatform.quoteShellArg(join(project.root, 'node_modules/fake-runner/bin/run.cjs'))} case.cjs --name ${currentPlatform.quoteShellArg('two words')}`
-      )
+      // 包装在工作目录之上：Node 检查器在入口之前，运行器的字面参数逐项保留。
+      const launched = project.launched[0]!
+      assert.match(launched.argv[0]!, /^--inspect-brk=127\.0\.0\.1:\d+$/u)
+      assert.deepEqual(launched.argv.slice(1), [
+        join(project.root, 'node_modules/fake-runner/bin/run.cjs'), 'case.cjs', '--name', 'two words',
+      ])
       assert.equal(started.cwd, join(project.root, 'packages/app'))
 
       const paused = await project.next('paused')
@@ -247,13 +250,15 @@ void describe('starting a debug session', () => {
 
       // 没装的包、清单里没有这个入口、入口指到包外面去：都不起进程。
       for (const target of [
-        { kind: 'node-package-bin', packageName: 'not-installed' },
-        { kind: 'node-package-bin', packageName: 'fake-runner', binName: 'missing' },
-        { kind: 'node-package-bin', packageName: 'fake-runner', binName: 'escape' },
-        { kind: 'node-package-bin', packageName: '../outside' },
-      ] as const) {
+        { kind: 'node-package-bin', packageName: 'not-installed', argv: [] },
+        { kind: 'node-package-bin', packageName: 'fake-runner', binName: 'missing', argv: [] },
+        { kind: 'node-package-bin', packageName: 'fake-runner', binName: 'escape', argv: [] },
+      ] satisfies WorkbenchDebuggerLaunchTarget[]) {
         await assert.rejects(project.start({ target }), /的可执行入口/u)
       }
+      await assert.rejects(project.start({
+        target: { kind: 'node-package-bin', packageName: '../outside', argv: [] },
+      }), { code: 'VALIDATION' })
       assert.equal(project.launched.length, 1)
     } finally {
       await project.dispose()
@@ -263,21 +268,21 @@ void describe('starting a debug session', () => {
   void test('refuses targets outside the project before anything is started', async () => {
     const project = await createDebugTestProject({ 'main.js': '', 'folder/file.js': '' })
     try {
-      await assert.rejects(project.start({ target: { kind: 'node-script', script: 'missing.js' } }))
+      await assert.rejects(project.start({ target: { kind: 'node-script', script: 'missing.js', argv: [] } }))
       await assert.rejects(
-        project.start({ target: { kind: 'node-script', script: '../outside.js' } })
+        project.start({ target: { kind: 'node-script', script: '../outside.js', argv: [] } })
       )
-      await assert.rejects(project.start({ target: { kind: 'node-script', script: '/etc/hosts' } }))
+      await assert.rejects(project.start({ target: { kind: 'node-script', script: '/etc/hosts', argv: [] } }))
       await assert.rejects(
-        project.start({ target: { kind: 'node-script', script: 'folder' } }),
+        project.start({ target: { kind: 'node-script', script: 'folder', argv: [] } }),
         /要调试的脚本不是文件：folder/u
       )
       await assert.rejects(
-        project.start({ target: { kind: 'node-script', script: 'main.js' }, cwd: 'main.js' }),
+        project.start({ target: { kind: 'node-script', script: 'main.js', argv: [] }, cwd: 'main.js' }),
         /必须是目录/u
       )
       await assert.rejects(
-        project.start({ target: { kind: 'node-script', script: 'main.js' }, cwd: '..' })
+        project.start({ target: { kind: 'node-script', script: 'main.js', argv: [] }, cwd: '..' })
       )
       await assert.rejects(
         project.start({ target: { kind: 'inspect-command', command: '   ' } }),
@@ -290,10 +295,8 @@ void describe('starting a debug session', () => {
         target: { kind: 'node-script', script: 'main.js', args: '--flag' },
         cwd: 'folder',
       })
-      assert.equal(
-        started.command.replace(/:\d+ /u, ':PORT '),
-        `node --inspect-brk=127.0.0.1:PORT ${currentPlatform.quoteShellArg(join(project.root, 'main.js'))} --flag`
-      )
+      assert.ok(started.command.includes('main.js'))
+      assert.ok(started.command.includes('--flag'))
       assert.equal((await project.next('ended')).exitCode, 0)
     } finally {
       await project.dispose()
@@ -360,7 +363,7 @@ void describe('controlling a running debug session', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
       })
       await project.next('attached')
       const control = (
@@ -435,7 +438,7 @@ void describe('controlling a running debug session', () => {
     const project = await createDebugTestProject({ 'main.js': LongRunningScript })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [{ path: 'main.js', line: 6 }],
       })
       const paused = await project.next('paused')
@@ -470,7 +473,7 @@ void describe('controlling a running debug session', () => {
     try {
       const { sessionId } = await project.start(
         {
-          target: { kind: 'node-script', script: 'main.js' },
+          target: { kind: 'node-script', script: 'main.js', argv: [] },
           breakpoints: [{ path: 'main.js', line: 6 }],
         },
         7

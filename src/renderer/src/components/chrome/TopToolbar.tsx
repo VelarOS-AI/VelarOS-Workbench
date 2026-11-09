@@ -162,8 +162,8 @@ function WorkbenchRunAction({
   const [duplicateRunDialogOpen, setDuplicateRunDialogOpen] = useState(false)
   const [draftCommand, setDraftCommand] = useState('')
   const activeOption = useMemo(
-    () => toNullable(topRun.options.find((option) => option.value === topRun.activeCommand)),
-    [topRun.activeCommand, topRun.options]
+    () => toNullable(topRun.options.find((option) => option.value === topRun.activeCommandKey)),
+    [topRun.activeCommandKey, topRun.options]
   )
   // 一次性 runner（程序化/agent）占用只影响转圈图标，不禁用侧边栏按钮；
   // 用户命令走可并行的 PTY 运行卡，相同命令由确认框裁决重新运行还是新开。
@@ -226,8 +226,8 @@ function WorkbenchRunAction({
     setMenuOpen(false)
   }
 
-  function handlePickOption(command: string): void {
-    topRun.configureCommand(command)
+  function handlePickOption(key: string): void {
+    topRun.selectCommand(key)
     setMenuOpen(false)
   }
 
@@ -441,7 +441,7 @@ function WorkbenchRunAction({
           )}
           {topRun.options.map((option) => {
             // ▶ 指着一份运行配置时，命令文本碰巧一样的这一行不算选中。
-            const active = !activeConfiguration && option.value === topRun.activeCommand
+            const active = !activeConfiguration && option.value === topRun.activeCommandKey
             return (
               <button
                 key={option.value}

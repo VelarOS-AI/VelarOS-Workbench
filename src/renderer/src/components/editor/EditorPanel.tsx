@@ -15,6 +15,7 @@ import {
 } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import type { WorkbenchRunSessionLaunchOptions } from '@renderer/models/commands/workbenchCommandLines'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import type { WorkbenchLanguageServiceWorkspaceEditRequest } from '@renderer/models/editor/workbenchCodeActions'
@@ -247,7 +248,7 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   /** 命令面板交给编辑器去做的代码动作（快速修复……）：每个请求只做一次。 */
   editorCommandRequest?: Nullable<WorkbenchEditorCommandRequest>
   packageManager: PackageManagerCommand
-  onRunPackageScript: (command: string) => void
+  onRunPackageScript: (command: string, launch?: WorkbenchRunSessionLaunchOptions) => void
   /** 右键「添加到聊天」（编辑器与标签页）：把文件作为引用挂到聊天输入框，只挂路径。 */
   onAddFilesToChat?: (paths: readonly string[]) => void
   onOpenQuickOpen: () => void

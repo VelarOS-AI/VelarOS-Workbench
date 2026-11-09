@@ -1,15 +1,15 @@
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
 import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 
 import { resolveWorkbenchNodeExecutable } from '../../src/main/conversation/WorkbenchNodeRuntime'
-import { CommandHelper } from '../../src/main/workspace/CommandHelper'
-import type {
-  WorkbenchDebugLauncher,
-  WorkbenchDebugProcessExit,
+import {
+  buildWorkbenchDebugLaunchPlan,
+  type WorkbenchDebugLauncher,
+  type WorkbenchDebugProcessExit,
 } from '../../src/main/workspace/debug/WorkbenchDebugLaunch'
 import { WorkbenchDebugSessions } from '../../src/main/workspace/debug/WorkbenchDebugSessions'
 import { PathResolver } from '../../src/main/workspace/PathResolver'
@@ -17,6 +17,7 @@ import {
   listWorkbenchProcessTree,
   signalWorkbenchProcesses,
 } from '../../src/main/workspace/terminal/WorkbenchProcessTree'
+import type { WorkbenchCliQuery } from '../../src/main/workspace/WorkbenchProcessLaunch'
 import type {
   WorkbenchDebuggerEvent,
   WorkbenchDebuggerFrame,
@@ -30,15 +31,46 @@ type DebuggerEventOf<TType extends WorkbenchDebuggerEvent['type']> = Extract<
   { type: TType }
 >
 
+/** 查询请求结束后仍保留资源，直到真实 closed；未关闭的查询让夹具清理明确失败。 */
+export function createDebugCliQueryOwner(): {
+  registerCliQuery(query: WorkbenchCliQuery): void
+  closeQueries(): Promise<void>
+} {
+  const queries = new Set<WorkbenchCliQuery>()
+  const registerCliQuery = (query: WorkbenchCliQuery): void => {
+    queries.add(query)
+    void query.closed.then(() => queries.delete(query))
+  }
+  const closeQueries = async (): Promise<void> => {
+    const errors: unknown[] = []
+    await Promise.all([...queries].map(async (query) => {
+      try {
+        query.stop()
+      } catch (error) {
+        errors.push(error)
+      }
+      await query.settled
+      if (queries.has(query)) {
+        errors.push(new Error(`Debug test CLI query remains open: ${JSON.stringify(query.diagnostics())}`))
+      }
+    }))
+    if (errors.length > 0) throw new AggregateError(errors, 'Failed to close debug test CLI queries')
+  }
+  return { registerCliQuery, closeQueries }
+}
+
 /**
- * 测试里起被调试程序的办法：直接起一个真的子进程（经 shell，与运行卡一样是一条命令行），输出攒在内存里。
+ * 测试里按真实调试启动计划起子进程，输出攒在内存里；生成参数不经 shell 重建。
  * 应用里它跑在伪终端上；node-pty 在 bun 下收不到数据，那条路由探针在 Electron 运行时里验。
  */
 export function createProcessDebugLauncher(): {
   launcher: WorkbenchDebugLauncher
+  closeQueries(): Promise<void>
   /** 每个起过的进程：命令行、输出、进程号。 */
   launched: Array<{
     command: string
+    file: string
+    argv: string[]
     cwd: string
     env: NodeJS.ProcessEnv
     pid: number
@@ -48,29 +80,33 @@ export function createProcessDebugLauncher(): {
   }>
 } {
   const launched: ReturnType<typeof createProcessDebugLauncher>['launched'] = []
+  const { registerCliQuery, closeQueries } = createDebugCliQueryOwner()
   let nextId = 1
 
   const launcher: WorkbenchDebugLauncher = async (options) => {
     // 被调试夹具不继承测试宿主的 --import/--require/检查器参数：它们会改变
     // --inspect-brk 的停顿位置与异常传播。场景明确指定的 NODE_OPTIONS 仍保留。
-    const env = { ...process.env, NODE_OPTIONS: '', ...options.env }
-    const helper = new CommandHelper()
-    // 登录 shell 会重排 PATH；测试必须调试产品锁定的 Node，而非运行机的另一版本。
-    const shellKind = currentPlatform.getShellKind(
-      currentPlatform.getPreferredShellPath(process.env)
-    )
-    const nodeExecutable = currentPlatform.quoteShellArg(resolveWorkbenchNodeExecutable(), {
-      kind: shellKind,
-    })
-    const nodeCommand =
-      shellKind === 'pwsh' || shellKind === 'powershell' ? `& ${nodeExecutable}` : nodeExecutable
-    const command = options.command.replace(/^node(?=\s|$)/u, () => nodeCommand)
-    const spec = helper.getShellSpec(command)
-    const child = spawn(spec.file, spec.args, {
+    // 夹具显式用 PATH 选择测试用 Node；生产解析器仍按实际上下文解析，不固定产品 Node。
+    const env = {
+      ...process.env,
+      PATH: `${dirname(resolveWorkbenchNodeExecutable())}${delimiter}${process.env.PATH ?? ''}`,
+      NODE_OPTIONS: '',
+      ...options.env,
+    }
+    const plan = await buildWorkbenchDebugLaunchPlan(options.target, {
+      projectRoot: options.projectRoot,
       cwd: options.cwd,
       env,
+      signal: options.signal,
+      pathResolver: new PathResolver(),
+      registerCliQuery,
+    }, options.port)
+    const spec = plan.process
+    const child = spawn(spec.file, spec.argv, {
+      cwd: options.cwd,
+      env: spec.env ?? env,
       // 独立的进程组：停止时连它派生的进程一起结束。
-      detached: helper.shouldDetachForegroundProcess(),
+      detached: currentPlatform.shouldUseDetachedProcessGroup(),
       windowsVerbatimArguments: spec.windowsVerbatimArguments,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -87,9 +123,11 @@ export function createProcessDebugLauncher(): {
       for (const listener of exitListeners.splice(0)) listener(exit)
     })
     launched.push({
-      command: options.command,
+      command: plan.command,
+      file: spec.file,
+      argv: [...spec.argv],
       cwd: options.cwd,
-      env,
+      env: spec.env ?? env,
       pid: child.pid!,
       output: () => output,
       isRunning: () => exit === null,
@@ -112,8 +150,11 @@ export function createProcessDebugLauncher(): {
     }
     return {
       terminalSessionId: `terminal-test-${nextId++}`,
+      projectRoot: options.projectRoot,
       shell: spec.file,
       cwd: options.cwd,
+      command: plan.command,
+      skipInitialPause: plan.skipInitialPause,
       onExit: (listener) => {
         if (exit) listener(exit)
         else exitListeners.push(listener)
@@ -147,7 +188,7 @@ export function createProcessDebugLauncher(): {
     }
   }
 
-  return { launcher, launched }
+  return { launcher, launched, closeQueries }
 }
 
 export interface DebugTestProject {
@@ -184,7 +225,7 @@ export async function createDebugTestProject(
     await writeFile(join(root, path), content)
   }
 
-  const { launcher, launched } = createProcessDebugLauncher()
+  const { launcher, launched, closeQueries } = createProcessDebugLauncher()
   const sessions = new WorkbenchDebugSessions(new PathResolver(), launcher, options.attachTimeoutMs)
   const events: WorkbenchDebuggerEvent[] = []
   let cursor = 0
@@ -227,8 +268,17 @@ export async function createDebugTestProject(
       (await waitForEvent(['paused', 'ended'], timeoutMs)) as
         DebuggerEventOf<'paused'> | DebuggerEventOf<'ended'>,
     dispose: async () => {
-      await sessions.closeAllSessions()
       const errors: unknown[] = []
+      try {
+        await sessions.closeAllSessions()
+      } catch (error) {
+        errors.push(error)
+      }
+      try {
+        await closeQueries()
+      } catch (error) {
+        errors.push(error)
+      }
       for (const item of launched) {
         // 退出事件已确认的子进程不再按旧进程组号发送信号，避免 macOS 对已回收组返回 EPERM。
         if (!item.isRunning()) continue

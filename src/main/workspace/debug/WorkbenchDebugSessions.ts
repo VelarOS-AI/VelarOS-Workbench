@@ -28,7 +28,6 @@ import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import type { PathResolver } from '../PathResolver'
 
 import {
-  buildWorkbenchDebugCommand,
   findFreeLoopbackPort,
   type WorkbenchDebugLauncher,
 } from './WorkbenchDebugLaunch'
@@ -104,17 +103,13 @@ class WorkbenchDebugSessions {
 
     signal.throwIfAborted()
     const port = await findFreeLoopbackPort()
-    const command = await buildWorkbenchDebugCommand(request.target, {
-      projectRoot,
-      cwd: cwd.realPath,
-      port,
-      pathResolver: this.pathResolver,
-    })
     signal.throwIfAborted()
     const process = await this.launcher({
       projectRoot,
       cwd: cwd.realPath,
-      command,
+      target: request.target,
+      port,
+      signal,
       env: request.env,
       cols: request.cols,
       rows: request.rows,
@@ -127,13 +122,13 @@ class WorkbenchDebugSessions {
       const sessionId = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const session = new WorkbenchDebugSession({
         sessionId,
-        projectRoot,
+        projectRoot: process.projectRoot,
         process,
         port,
         pathResolver: this.pathResolver,
         breakpoints: request.breakpoints,
         pauseOnUncaughtExceptions: request.pauseOnUncaughtExceptions,
-        skipInitialPause: request.target.kind === 'inspect-command',
+        skipInitialPause: process.skipInitialPause,
         attachTimeoutMs: this.attachTimeoutMs,
         emit: handlers.emit,
         onEnded: () => {
@@ -148,7 +143,7 @@ class WorkbenchDebugSessions {
       return {
         sessionId,
         terminalSessionId: process.terminalSessionId,
-        command,
+        command: process.command,
         cwd: process.cwd,
         shell: process.shell,
       }

@@ -3,6 +3,7 @@ import type { Extension } from '@codemirror/state'
 
 import { isString, toNullable } from '@velaros-ai/velaros/core'
 
+import type { WorkbenchRunSessionLaunchOptions } from '../commands/workbenchCommandLines'
 import {
   buildWorkbenchPackageScriptRunCommand,
   type PackageManagerCommand,
@@ -30,7 +31,7 @@ interface WorkbenchPackageScriptRunGutterOptions {
 
 interface WorkbenchPackageScriptRunExtensionOptions extends WorkbenchPackageScriptRunGutterOptions {
   disabled?: boolean
-  onRunScript: (command: string) => void
+  onRunScript: (command: string, launch?: WorkbenchRunSessionLaunchOptions) => void
 }
 
 function snapshotJsonTree(content: string): JsonNodeSnapshot {
@@ -153,7 +154,7 @@ export function buildWorkbenchPackageScriptRunActions({
     if (!name || value?.name !== 'String') continue
 
     actions.push({
-      command: buildWorkbenchPackageScriptRunCommand({
+      ...buildWorkbenchPackageScriptRunCommand({
         packageJsonPath,
         packageManager,
         scriptName: name,

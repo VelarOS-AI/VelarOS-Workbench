@@ -1,5 +1,6 @@
 import type { Extension } from '@codemirror/state'
 
+import type { WorkbenchRunSessionLaunchOptions } from '../commands/workbenchCommandLines'
 import type { PackageManagerCommand } from '../commands/workbenchPackageScriptCommand'
 import {
   buildWorkbenchVelarRunCommand,
@@ -19,7 +20,7 @@ interface WorkbenchVelarMainRunGutterOptions {
 
 interface WorkbenchVelarMainRunExtensionOptions extends WorkbenchVelarMainRunGutterOptions {
   disabled?: boolean
-  onRunMain: (command: string) => void
+  onRunMain: (command: string, launch?: WorkbenchRunSessionLaunchOptions) => void
 }
 
 const VELAR_MAIN_DECLARATION_PATTERN = /^\s*@main\s*:/u
@@ -38,7 +39,7 @@ export function buildWorkbenchVelarMainRunActions({
   const command = buildWorkbenchVelarRunCommand(path, packageManager)
   return content.split(/\r?\n/u).flatMap((line, index) =>
     VELAR_MAIN_DECLARATION_PATTERN.test(line)
-      ? [{ command, label: '@main', line: index + 1 }]
+      ? [{ ...command, label: '@main', line: index + 1 }]
       : []
   )
 }

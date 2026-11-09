@@ -301,6 +301,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     }).map((action) => ({
       command: action.command,
       label: action.label,
+      launch: action.launch,
     }))
   }, [
     workbench.editorContent,
@@ -325,8 +326,9 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     namedConfigurations: namedRunConfigurations.configurations,
     runningSessions: workbench.runSessions,
     configuredCommand: projectRunSettings.settings.command,
+    configuredLaunch: projectRunSettings.settings.launch,
     configuredConfigurationId: projectRunSettings.settings.configurationId,
-    lastLaunchedCommand: workbench.lastLaunchedCommand,
+    lastLaunchedRun: workbench.lastLaunchedRun,
     onLaunchCommand: (command, label, launch) =>
       // 调试也先存盘：程序跑的是磁盘上的文件，断点的行号要与它对得上。
       void (launch?.debug ? launchRunSessionFromEditor : workbench.launchRunSession)(
@@ -336,6 +338,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
       ),
     onRestartRunSession: (sessionId) => void workbench.restartRunSession(sessionId),
     onConfigureCommand: projectRunSettings.setCommand,
+    onSelectRunCommand: projectRunSettings.setRunCommand,
     onSelectConfiguration: projectRunSettings.setConfigurationId,
     onEditConfigurations: () => setRunConfigurationsOpen(true),
   })

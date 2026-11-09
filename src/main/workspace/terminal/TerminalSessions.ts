@@ -30,6 +30,12 @@ import {
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import type { CommandHelper } from '../CommandHelper'
 import type { PathResolver } from '../PathResolver'
+import {
+  resolveWorkbenchProcessLaunch,
+  type WorkbenchCliQuery,
+  type WorkbenchProcessContext,
+  type WorkbenchResolvedProcess,
+} from '../WorkbenchProcessLaunch'
 
 import { nodePtyFactory, type WorkbenchPtyFactory, type WorkbenchPtyProcess } from './WorkbenchPty'
 
@@ -84,27 +90,31 @@ export function buildTerminalEnvironment(
   platform: NodeJS.Platform = process.platform,
   overrides: Readonly<Record<string, string>> = {}
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...base,
+  const defaults: NodeJS.ProcessEnv = {
     TERM: TerminalName,
     COLORTERM: 'truecolor',
     TERM_PROGRAM: 'VelarOS-Workbench',
     VELAROS_WORKBENCH_TERMINAL: '1',
   }
+  const env: NodeJS.ProcessEnv = {}
+  const names = new Map<string, string>()
+  const setVariable = (name: string, value: NodeJS.ProcessEnv[string]): void => {
+    if (platform === 'win32') {
+      const identity = name.toUpperCase()
+      const previous = names.get(identity)
+      if (previous && previous !== name) delete env[previous]
+      names.set(identity, name)
+    }
+    env[name] = value
+  }
+  for (const [name, value] of Object.entries(base)) setVariable(name, value)
+  for (const [name, value] of Object.entries(defaults)) setVariable(name, value)
   // 从 Finder / Dock 启动的 Electron 没有 LANG：zsh 会按 C locale 处理输入，中文成了乱码或问号。
   if (platform !== 'win32' && !env.LANG && !env.LC_ALL && !env.LC_CTYPE)
     env.LANG = DefaultUtf8Locale
 
-  for (const [name, value] of Object.entries(overrides)) {
-    // Windows 的变量名不分大小写：`Path` 和 `PATH` 是同一个，留着两份进程拿到哪个说不准。
-    if (platform === 'win32') {
-      const upperName = name.toUpperCase()
-      for (const existing of Object.keys(env)) {
-        if (existing !== name && existing.toUpperCase() === upperName) delete env[existing]
-      }
-    }
-    env[name] = value
-  }
+  // 登录环境和用户覆盖都只保留一个 Windows 同名变量，CLI 解析与真实进程不会各拿到一份 PATH。
+  for (const [name, value] of Object.entries(overrides)) setVariable(name, value)
   return env
 }
 
@@ -125,12 +135,16 @@ export class TerminalSessions {
     { ownerId: Nullable<number>; completed: Promise<WorkbenchTerminalStartResult> }
   >()
   private readonly closingOwners = new Map<number, Promise<void>>()
+  private readonly closingController = new AbortController()
+  private readonly ownerControllers = new Map<number, AbortController>()
+  private readonly cliQueries = new Map<WorkbenchCliQuery, Nullable<number>>()
   private closing?: Promise<void>
 
   constructor(
     private readonly pathResolver: PathResolver,
     private readonly commandHelper: CommandHelper,
-    private readonly ptyFactory: WorkbenchPtyFactory = nodePtyFactory
+    private readonly ptyFactory: WorkbenchPtyFactory = nodePtyFactory,
+    private readonly loginEnvironment: () => Promise<NodeJS.ProcessEnv> = async () => ({ ...process.env })
   ) {}
 
   public startTerminalSession(
@@ -138,12 +152,107 @@ export class TerminalSessions {
     onOutput: (event: WorkbenchTerminalOutputEvent) => void,
     ownerId: Nullable<number> = null
   ): Promise<WorkbenchTerminalStartResult> {
+    return this.startSession(async (signal) => {
+      if (request.initialCommand !== undefined && request.initialProcess !== undefined)
+        throw new AppError('VALIDATION', workbenchMainText('process.invalidTarget'))
+      const context = await this.prepareProcessContext(request, signal, ownerId)
+      if (request.initialProcess) return {
+          context,
+          process: await resolveWorkbenchProcessLaunch(request.initialProcess, context),
+        }
+      const command = request.initialCommand?.trim()
+      const shellPath = currentPlatform.getPreferredShellPath(context.env)
+      const shell = command
+        ? currentPlatform.getShellCommandSpec(command, { shellPath, env: context.env })
+        : {
+            file: shellPath,
+            args: currentPlatform.getInteractiveShellArgs({ shellPath, env: context.env }),
+            windowsVerbatimArguments: false,
+          }
+      return {
+        context,
+        process: {
+          file: shell.file,
+          argv: shell.args,
+          windowsVerbatimArguments: shell.windowsVerbatimArguments,
+        },
+      }
+    }, onOutput, ownerId, request)
+  }
+
+  /** Main 调试启动复用同一份已解析上下文；不再将展示命令送回 shell。 */
+  public startResolvedProcessSession(
+    context: WorkbenchProcessContext,
+    spec: WorkbenchResolvedProcess,
+    onOutput: (event: WorkbenchTerminalOutputEvent) => void,
+    ownerId: Nullable<number> = null,
+    dimensions: Pick<WorkbenchTerminalStartRequest, 'cols' | 'rows'> = {}
+  ): Promise<WorkbenchTerminalStartResult> {
+    return this.startSession(async (signal) => ({
+      context: { ...context, signal: AbortSignal.any([context.signal, signal]) },
+      process: { ...spec, argv: [...spec.argv] },
+    }), onOutput, ownerId, dimensions)
+  }
+
+  /** CLI 解析与最终启动共用已校验目录和登录环境快照。 */
+  public async prepareProcessContext(
+    request: Pick<WorkbenchTerminalStartRequest, 'projectRoot' | 'cwd' | 'env'>,
+    callerSignal: AbortSignal,
+    ownerId: Nullable<number> = null
+  ): Promise<WorkbenchProcessContext> {
+    if (this.closing || (ownerId !== null && this.closingOwners.has(ownerId)))
+      throw new AppError('CLOSED', workbenchMainText('terminal.sessionEnded'))
+    let ownerController: Nullable<AbortController> = null
+    if (ownerId !== null) {
+      ownerController = this.ownerControllers.get(ownerId) ?? new AbortController()
+      this.ownerControllers.set(ownerId, ownerController)
+    }
+    const signal = AbortSignal.any([
+      callerSignal,
+      this.closingController.signal,
+      ...(ownerController ? [ownerController.signal] : []),
+    ])
+    signal.throwIfAborted()
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    signal.throwIfAborted()
+    const cwd = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
+    signal.throwIfAborted()
+    if (!(await stat(cwd.realPath)).isDirectory())
+      throw new AppError('VALIDATION', workbenchMainText('terminal.cwdNotFolder'))
+    signal.throwIfAborted()
+    const environment = await this.loginEnvironment()
+    signal.throwIfAborted()
+    return {
+      projectRoot,
+      cwd: cwd.realPath,
+      env: buildTerminalEnvironment(environment, process.platform, request.env),
+      signal,
+      pathResolver: this.pathResolver,
+      registerCliQuery: (query) => {
+        this.cliQueries.set(query, ownerId)
+        void query.closed.then(() => this.cliQueries.delete(query))
+      },
+    }
+  }
+
+  private startSession(
+    prepare: (signal: AbortSignal) => Promise<{
+      context: WorkbenchProcessContext
+      process: WorkbenchResolvedProcess
+    }>,
+    onOutput: (event: WorkbenchTerminalOutputEvent) => void,
+    ownerId: Nullable<number>,
+    dimensions: Pick<WorkbenchTerminalStartRequest, 'cols' | 'rows'>
+  ): Promise<WorkbenchTerminalStartResult> {
     if (this.closing || (ownerId !== null && this.closingOwners.has(ownerId)))
       return Promise.reject(new AppError('CLOSED', workbenchMainText('terminal.sessionEnded')))
     const controller = new AbortController()
-    const completed = Promise.resolve().then(() =>
-      this.createTerminalSession(request, onOutput, ownerId, controller.signal)
-    )
+    const completed = Promise.resolve().then(async () => {
+      const launch = await prepare(controller.signal)
+      controller.signal.throwIfAborted()
+      launch.context.signal.throwIfAborted()
+      return this.createTerminalSession(launch.context, launch.process, onOutput, ownerId, dimensions)
+    })
     this.pendingStarts.set(controller, { ownerId, completed })
     void completed
       .finally(() => this.pendingStarts.delete(controller))
@@ -151,45 +260,31 @@ export class TerminalSessions {
     return completed
   }
 
-  private async createTerminalSession(
-    request: WorkbenchTerminalStartRequest,
+  private createTerminalSession(
+    context: WorkbenchProcessContext,
+    spec: WorkbenchResolvedProcess,
     onOutput: (event: WorkbenchTerminalOutputEvent) => void,
     ownerId: Nullable<number>,
-    signal: AbortSignal
-  ): Promise<WorkbenchTerminalStartResult> {
-    signal.throwIfAborted()
-    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    signal.throwIfAborted()
-    const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
-    const cwdStats = await stat(cwdPath.realPath)
-    signal.throwIfAborted()
-    if (!cwdStats.isDirectory()) {
-      throw new AppError('VALIDATION', workbenchMainText('terminal.cwdNotFolder'))
-    }
-
-    const initialCommand = request.initialCommand?.trim()
-    const shellSpec = initialCommand
-      ? this.commandHelper.getShellSpec(initialCommand)
-      : {
-          file: currentPlatform.getPreferredShellPath(process.env),
-          args: currentPlatform.getInteractiveShellArgs(),
-          windowsVerbatimArguments: false,
-        }
-    const cols = clampTerminalDimension(request.cols, DefaultTerminalColumns, MaxTerminalColumns)
-    const rows = clampTerminalDimension(request.rows, DefaultTerminalRows, MaxTerminalRows)
+    dimensions: Pick<WorkbenchTerminalStartRequest, 'cols' | 'rows'>
+  ): WorkbenchTerminalStartResult {
+    context.signal.throwIfAborted()
+    const cols = clampTerminalDimension(dimensions.cols, DefaultTerminalColumns, MaxTerminalColumns)
+    const rows = clampTerminalDimension(dimensions.rows, DefaultTerminalRows, MaxTerminalRows)
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    const env = buildTerminalEnvironment(process.env, process.platform, request.env)
+    const env = spec.env ?? context.env
     let pty: WorkbenchPtyProcess
     try {
-      pty = this.ptyFactory.spawn(shellSpec.file, shellSpec.args, {
-        cwd: cwdPath.realPath,
-        windowsVerbatimArguments: shellSpec.windowsVerbatimArguments,
+      pty = this.ptyFactory.spawn(spec.file, spec.argv, {
+        cwd: context.cwd,
+        windowsVerbatimArguments: spec.windowsVerbatimArguments,
         env,
         cols,
         rows,
         // node-pty 拿这个名字去设进程的 TERM：运行配置里写了 TERM 的照它来，否则写了也到不了进程手里。
-        name: env.TERM || TerminalName,
+        name: (process.platform === 'win32'
+          ? Object.entries(env).find(([name]) => name.toUpperCase() === 'TERM')?.[1]
+          : env.TERM) || TerminalName,
       })
     } catch (error) {
       throw AppError.from(error, 'PLATFORM')
@@ -233,9 +328,9 @@ export class TerminalSessions {
 
     return {
       sessionId,
-      projectRoot,
-      cwd: cwdPath.realPath,
-      shell: shellSpec.file,
+      projectRoot: context.projectRoot,
+      cwd: context.cwd,
+      shell: spec.file,
       startedAt: Date.now(),
     }
   }
@@ -389,24 +484,49 @@ export class TerminalSessions {
     this.closingOwners.set(ownerId, completion.promise)
     void this.closeOwnedSessions(ownerId)
       .then(completion.resolve, completion.reject)
-      .finally(() => this.closingOwners.delete(ownerId))
+      .finally(() => {
+        this.closingOwners.delete(ownerId)
+        this.ownerControllers.delete(ownerId)
+      })
     return completion.promise
   }
 
   private async closeOwnedSessions(ownerId?: number): Promise<void> {
+    const reason = new AppError('CANCELLED', workbenchMainText('terminal.sessionEnded'))
+    if (ownerId === undefined) this.closingController.abort(reason)
+    else this.ownerControllers.get(ownerId)?.abort(reason)
     const pending = [...this.pendingStarts].filter(
       ([, start]) => ownerId === undefined || start.ownerId === ownerId
     )
     for (const [controller] of pending)
-      controller.abort(new AppError('CANCELLED', workbenchMainText('terminal.sessionEnded')))
+      controller.abort(reason)
+    const queries = [...this.cliQueries].filter(
+      ([, queryOwnerId]) => ownerId === undefined || queryOwnerId === ownerId
+    )
+    for (const [query] of queries) query.stop()
     // 被撤销的准备只能在 spawn 前失败；已有进程同时收束，请求错误仍由启动调用者接收。
     const closed = this.closeSessions(
       [...this.terminalSessions.entries()].filter(
         ([, session]) => ownerId === undefined || session.ownerId === ownerId
       )
     )
-    await Promise.allSettled([closed, ...pending.map(([, start]) => start.completed)])
-    await closed
+    const outcomes = await Promise.allSettled([
+      closed,
+      ...pending.map(([, start]) => start.completed),
+      ...queries.map(([query]) => query.settled),
+    ])
+    const errors: unknown[] = []
+    if (outcomes[0]?.status === 'rejected') errors.push(outcomes[0].reason)
+    for (const [query, queryOwnerId] of this.cliQueries) {
+      if (ownerId !== undefined && queryOwnerId !== ownerId) continue
+      errors.push(new AppError(
+        'UNAVAILABLE',
+        workbenchMainText('process.cliQueryFailed', { program: 'npm-prefix' }),
+        undefined,
+        { ownerId: queryOwnerId, query: query.diagnostics() }
+      ))
+    }
+    if (errors.length > 0) throw new AggregateError(errors, 'Failed to close terminal sessions')
   }
 
   /** 等会话的进程退出；强杀的延迟过后再多等一会儿，还没退也返回。 */

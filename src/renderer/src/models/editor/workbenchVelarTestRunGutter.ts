@@ -1,7 +1,11 @@
 import type { Extension } from '@codemirror/state'
 
+import {
+  buildWorkbenchProcessRunCommand,
+  type WorkbenchRunCommand,
+  type WorkbenchRunSessionLaunchOptions,
+} from '../commands/workbenchCommandLines'
 import type { PackageManagerCommand } from '../commands/workbenchPackageScriptCommand'
-import { quoteWorkbenchShellPath } from '../commands/workbenchPackageScriptCommand'
 import { getWorkbenchVelarExecutable } from '../commands/workbenchVelarFileCommand'
 import { isWorkbenchTestFilePath } from '../files/workbenchTestFile'
 
@@ -18,7 +22,7 @@ interface WorkbenchVelarTestRunGutterOptions {
 
 interface WorkbenchVelarTestRunExtensionOptions extends WorkbenchVelarTestRunGutterOptions {
   disabled?: boolean
-  onRunTest: (command: string) => void
+  onRunTest: (command: string, launch?: WorkbenchRunSessionLaunchOptions) => void
 }
 
 const VELAR_TEST_DECLARATION_PATTERN = /^\s*test\s+("(?:[^"\\]|\\.)*")\s*:/u
@@ -30,9 +34,13 @@ export function shouldShowWorkbenchVelarTestRunGutter(path: Nullable<string>): b
 export function buildWorkbenchVelarTestRunCommand(
   path: string,
   packageManager: PackageManagerCommand
-): string {
-  const browserFlag = path.toLowerCase().endsWith('.browser.test.vel') ? ' --browser' : ''
-  return `${getWorkbenchVelarExecutable(packageManager)} test ${quoteWorkbenchShellPath(path)}${browserFlag}`
+): WorkbenchRunCommand {
+  const process = getWorkbenchVelarExecutable(packageManager)
+  const browserFlag = path.toLowerCase().endsWith('.browser.test.vel') ? ['--browser'] : []
+  return buildWorkbenchProcessRunCommand({
+    ...process,
+    argv: [...process.argv, 'test', path, ...browserFlag],
+  })
 }
 
 export function buildWorkbenchVelarTestRunActions({
@@ -55,7 +63,7 @@ export function buildWorkbenchVelarTestRunActions({
     } catch {
       // Editing may temporarily leave an incomplete escape; keep the literal label usable.
     }
-    actions.push({ command, label, line: index + 1 })
+    actions.push({ ...command, label, line: index + 1 })
   }
   return actions
 }

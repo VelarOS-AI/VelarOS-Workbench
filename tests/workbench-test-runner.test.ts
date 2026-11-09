@@ -5,7 +5,6 @@ import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { describe, test } from 'bun:test'
 
-import { quoteWorkbenchShellArgument } from '../src/renderer/src/models/commands/workbenchShellQuote'
 import {
   buildWorkbenchTestDebugTarget,
   buildWorkbenchTestRunCommand,
@@ -390,54 +389,46 @@ void describe('test runner of a project', () => {
   void test('builds a one-shot command for the runner and the package manager', () => {
     const pattern = '^math \\(basic\\) (?:> )?adds 1 \\+ 2$'
 
-    assert.equal(
+    assert.deepEqual(
       buildWorkbenchTestRunCommand({
         project: project('vitest', 'npm'),
         filePath: 'src/math.test.ts',
         pattern,
-        windows: false,
-      }),
-      "npx --no-install vitest run src/math.test.ts -t '^math \\(basic\\) (?:> )?adds 1 \\+ 2$'"
+      }).launch?.process,
+      { kind: 'package-manager', program: 'npx', argv: ['--no-install', 'vitest', 'run', 'src/math.test.ts', '-t', pattern] }
     )
-    assert.equal(
+    assert.deepEqual(
       buildWorkbenchTestRunCommand({
         project: project('jest', 'pnpm', 'packages/core'),
         filePath: 'packages/core/src/my file.test.ts',
         pattern: "^it's here$",
-        windows: false,
-      }),
-      "pnpm exec jest --runTestsByPath 'src/my file.test.ts' -t '^it'\\''s here$'"
+      }).launch,
+      { cwd: 'packages/core', process: { kind: 'package-manager', program: 'pnpm', argv: ['exec', 'jest', '--runTestsByPath', 'src/my file.test.ts', '-t', "^it's here$"] } }
     )
     // 整个文件：不带 -t。
-    assert.equal(
+    assert.deepEqual(
       buildWorkbenchTestRunCommand({
         project: project('vitest', 'bun'),
         filePath: 'math.test.ts',
-        windows: false,
-      }),
-      'bunx --no-install vitest run math.test.ts'
+      }).launch?.process,
+      { kind: 'package-manager', program: 'bunx', argv: ['--no-install', 'vitest', 'run', 'math.test.ts'] }
     )
-    assert.equal(
+    assert.deepEqual(
       buildWorkbenchTestRunCommand({
         project: project('jest', 'yarn'),
         filePath: 'src/math.test.js',
-        windows: false,
-      }),
-      'yarn run jest --runTestsByPath src/math.test.js'
+      }).launch?.process,
+      { kind: 'package-manager', program: 'yarn', argv: ['run', 'jest', '--runTestsByPath', 'src/math.test.js'] }
     )
-    // Windows 的 cmd：双引号，里面的 " 和 % 换成正则里的任意字符。
-    assert.equal(
+    // 生成参数跨平台原样传递，不能把引号或百分号改成正则里的任意字符。
+    assert.deepEqual(
       buildWorkbenchTestRunCommand({
         project: project('vitest', 'npm'),
         filePath: 'src/math.test.ts',
-        pattern: '^says "hi" 100%$',
-        windows: true,
-      }),
-      'npx --no-install vitest run src/math.test.ts -t "^says .hi. 100.$"'
+        pattern: '^says "hi" 100% $(echo marker) `literal`$',
+      }).launch?.process,
+      { kind: 'package-manager', program: 'npx', argv: ['--no-install', 'vitest', 'run', 'src/math.test.ts', '-t', '^says "hi" 100% $(echo marker) `literal`$'] }
     )
-    assert.equal(quoteWorkbenchShellArgument('plain-path_1/a.b:c=d@e', false), 'plain-path_1/a.b:c=d@e')
-    assert.equal(quoteWorkbenchShellArgument('', false), "''")
-    assert.equal(quoteWorkbenchShellArgument('$(rm -rf ~); `x`', false), "'$(rm -rf ~); `x`'")
   })
 
   void test('starts the runner so that the test runs in one process the debugger can attach to', () => {
@@ -447,12 +438,10 @@ void describe('test runner of a project', () => {
         project: project('vitest', 'pnpm', 'packages/core'),
         filePath: 'packages/core/src/math.test.ts',
         pattern: '^math (?:> )?adds$',
-        windows: false,
       }),
       {
-        kind: 'inspect-command',
-        command:
-          "pnpm exec vitest run src/math.test.ts -t '^math (?:> )?adds$' --no-file-parallelism --testTimeout=0",
+        kind: 'inspect-process',
+        process: { kind: 'package-manager', program: 'pnpm', argv: ['exec', 'vitest', 'run', 'src/math.test.ts', '-t', '^math (?:> )?adds$', '--no-file-parallelism', '--testTimeout=0'] },
       }
     )
     // Jest 不认：由 node 带着检查器起它的可执行入口，--runInBand 让测试留在这个进程里。包管理器不参与。
@@ -461,12 +450,11 @@ void describe('test runner of a project', () => {
         project: project('jest', 'yarn'),
         filePath: 'src/my file.test.js',
         pattern: "^it's here$",
-        windows: false,
       }),
       {
         kind: 'node-package-bin',
         packageName: 'jest',
-        args: "--runInBand --runTestsByPath 'src/my file.test.js' -t '^it'\\''s here$' --testTimeout=100000000",
+        argv: ['--runInBand', '--runTestsByPath', 'src/my file.test.js', '-t', "^it's here$", '--testTimeout=100000000'],
       }
     )
     // 整个文件：不带 -t。
@@ -474,12 +462,11 @@ void describe('test runner of a project', () => {
       buildWorkbenchTestDebugTarget({
         project: project('jest', 'npm'),
         filePath: 'math.test.js',
-        windows: false,
       }),
       {
         kind: 'node-package-bin',
         packageName: 'jest',
-        args: '--runInBand --runTestsByPath math.test.js --testTimeout=100000000',
+        argv: ['--runInBand', '--runTestsByPath', 'math.test.js', '--testTimeout=100000000'],
       }
     )
   })

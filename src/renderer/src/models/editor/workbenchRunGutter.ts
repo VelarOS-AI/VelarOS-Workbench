@@ -1,8 +1,13 @@
 import { type Extension, RangeSetBuilder } from '@codemirror/state'
 import { gutter, GutterMarker } from '@codemirror/view'
 
-export interface WorkbenchRunGutterAction {
-  command: string
+import {
+  type WorkbenchRunCommand,
+  workbenchRunCommandKey,
+  type WorkbenchRunSessionLaunchOptions,
+} from '../commands/workbenchCommandLines'
+
+export interface WorkbenchRunGutterAction extends WorkbenchRunCommand {
   label: string
   line: number
 }
@@ -10,14 +15,14 @@ export interface WorkbenchRunGutterAction {
 interface WorkbenchRunGutterOptions {
   actions: readonly WorkbenchRunGutterAction[]
   disabled?: boolean
-  onRun: (command: string) => void
+  onRun: (command: string, launch?: WorkbenchRunSessionLaunchOptions) => void
 }
 
 class WorkbenchRunMarker extends GutterMarker {
   public constructor(
     private readonly action: WorkbenchRunGutterAction,
     private readonly disabled: boolean,
-    private readonly onRun: (command: string) => void
+    private readonly onRun: (command: string, launch?: WorkbenchRunSessionLaunchOptions) => void
   ) {
     super()
   }
@@ -26,6 +31,8 @@ class WorkbenchRunMarker extends GutterMarker {
     return (
       other instanceof WorkbenchRunMarker &&
       other.action.command === this.action.command &&
+      workbenchRunCommandKey(other.action.command, other.action.launch) ===
+        workbenchRunCommandKey(this.action.command, this.action.launch) &&
       other.action.label === this.action.label &&
       other.disabled === this.disabled
     )
@@ -45,7 +52,7 @@ class WorkbenchRunMarker extends GutterMarker {
     button.addEventListener('click', (event) => {
       event.preventDefault()
       event.stopPropagation()
-      if (!this.disabled) this.onRun(this.action.command)
+      if (!this.disabled) this.onRun(this.action.command, this.action.launch)
     })
 
     const icon = document.createElement('span')

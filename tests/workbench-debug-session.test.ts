@@ -162,7 +162,7 @@ function createHarness(options: { startResults?: Array<'ok' | 'fail' | 'hold'> }
     start: () =>
       session.start({
         projectRoot: Root,
-        target: { kind: 'node-script', script: 'src/main.js' },
+        target: { kind: 'node-script', script: 'src/main.js', argv: [] },
         cwd: 'packages/api',
         env: { PORT: '4100' },
       }),
@@ -188,7 +188,7 @@ void describe('debug session in the window', () => {
         'start',
         {
           projectRoot: Root,
-          target: { kind: 'node-script', script: 'src/main.js' },
+          target: { kind: 'node-script', script: 'src/main.js', argv: [] },
           cwd: 'packages/api',
           env: { PORT: '4100' },
           breakpoints: [{ path: 'src/a.ts', line: 3 }],

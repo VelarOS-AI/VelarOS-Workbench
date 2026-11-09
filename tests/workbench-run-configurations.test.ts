@@ -16,6 +16,7 @@ import {
   saveWorkbenchNamedRunConfigurations,
   type WorkbenchNamedRunConfiguration,
 } from '../src/renderer/src/models/commands/workbenchNamedRunConfigurations'
+import { buildWorkbenchPackageScriptRunCommand } from '../src/renderer/src/models/commands/workbenchPackageScriptCommand'
 import {
   buildWorkbenchRunConfigurationFromDraft,
   createWorkbenchRunConfigurationDraft,
@@ -26,7 +27,7 @@ import {
   uniqueWorkbenchRunConfigurationName,
   validateWorkbenchRunConfigurationDraft,
 } from '../src/renderer/src/models/commands/workbenchRunConfigurationDrafts'
-import { normalizeWorkbenchProjectRunSettings } from '../src/renderer/src/models/workbenchPreferences'
+import { normalizeWorkbenchProjectRunSettings, readWorkbenchProjectRunSettings, saveWorkbenchProjectRunSettings } from '../src/renderer/src/models/workbenchPreferences'
 import type { StorageLike } from '../src/renderer/src/support/localStorageJsonStore'
 import { readWorkbenchRunEnvironment } from '../src/shared/workbenchRunEnvironment'
 
@@ -306,24 +307,20 @@ void describe('named run configurations', () => {
 
   void test('a Node program runs as `node script args` and can be debugged', () => {
     // 命令在工作目录里跑：脚本写成相对工作目录的路径。
-    assert.equal(buildWorkbenchRunConfigurationCommand(Server, false), 'node src/server.js --port 4100')
+    assert.equal(buildWorkbenchRunConfigurationCommand(Server), 'node src/server.js --port 4100')
     assert.equal(
-      buildWorkbenchRunConfigurationCommand({ ...Server, cwd: '', args: '' }, false),
+      buildWorkbenchRunConfigurationCommand({ ...Server, cwd: '', args: '' }),
       'node packages/api/src/server.js'
     )
     assert.equal(
-      buildWorkbenchRunConfigurationCommand({ ...Server, cwd: 'packages/web/app' }, false),
+      buildWorkbenchRunConfigurationCommand({ ...Server, cwd: 'packages/web/app' }),
       'node ../../api/src/server.js --port 4100'
     )
     assert.equal(
-      buildWorkbenchRunConfigurationCommand({ ...Server, script: 'my scripts/run it.js', cwd: '' }, false),
-      "node 'my scripts/run it.js' --port 4100"
-    )
-    assert.equal(
-      buildWorkbenchRunConfigurationCommand({ ...Server, script: 'my scripts/run it.js', cwd: '' }, true),
+      buildWorkbenchRunConfigurationCommand({ ...Server, script: 'my scripts/run it.js', cwd: '' }),
       'node "my scripts/run it.js" --port 4100'
     )
-    assert.equal(buildWorkbenchRunConfigurationCommand(Dev, false), 'bun run dev')
+    assert.equal(buildWorkbenchRunConfigurationCommand(Dev), 'bun run dev')
 
     // 运行：一张普通的运行卡。调试：同样的目录与变量，另带着「调试哪个脚本」——脚本是项目里的路径，主进程自己
     // 按工作目录去拼命令。
@@ -331,6 +328,7 @@ void describe('named run configurations', () => {
       configurationId: Server.id,
       cwd: 'packages/api',
       env: { NODE_ENV: 'development' },
+      process: { kind: 'node-script', script: 'packages/api/src/server.js', args: '--port 4100' },
     })
     assert.deepEqual(buildWorkbenchRunConfigurationLaunch(Server, true), {
       configurationId: Server.id,
@@ -341,8 +339,13 @@ void describe('named run configurations', () => {
       },
     })
     assert.deepEqual(buildWorkbenchRunConfigurationLaunch({ ...Server, args: '' }, true).debug, {
-      target: { kind: 'node-script', script: 'packages/api/src/server.js' },
+      target: { kind: 'node-script', script: 'packages/api/src/server.js', args: '' },
     })
+    const rawArgs = '--value "$NAME" %PATH% $(echo marker)'
+    const script = 'src/a "quoted" 100%.js'
+    const raw = { ...Server, script, args: rawArgs }
+    assert.deepEqual(buildWorkbenchRunConfigurationLaunch(raw).process, { kind: 'node-script', script, args: rawArgs })
+    assert.deepEqual(buildWorkbenchRunConfigurationLaunch(raw, true).debug?.target, { kind: 'node-script', script, args: rawArgs })
   })
 
   void test('a running card belongs to the configuration that started it, not to its command', () => {
@@ -363,7 +366,7 @@ void describe('named run configurations', () => {
         id: 'debugging',
         command: 'node src/server.js',
         isRunning: true,
-        launch: { configurationId: Dev.id, debug: { target: { kind: 'node-script' as const, script: 'a.js' } } },
+        launch: { configurationId: Dev.id, debug: { target: { kind: 'node-script' as const, script: 'a.js', args: '' } } },
       },
     ]
     assert.equal(findLastRunningWorkbenchRunSession('bun run dev', debugging, Dev.id)?.id, 'configured')
@@ -384,6 +387,18 @@ void describe('named run configurations', () => {
       normalizeWorkbenchProjectRunSettings({ command: 7, configurationId: {} } as never),
       { command: '', configurationId: '' }
     )
+  })
+
+  void test('roundtrips generated startup targets without reinterpreting display text', () => {
+    const storage = createStorage()
+    const run = buildWorkbenchPackageScriptRunCommand({ packageJsonPath: 'packages/a %quoted/package.json', packageManager: 'npm', scriptName: 'dev "quoted" $(echo marker)' })
+    const settings = { command: run.command, configurationId: '', launch: { ...run.launch, env: { LITERAL: '"$HOME" %PATH%' } } }
+    saveWorkbenchProjectRunSettings('/workspace', settings, storage, { dispatchEvent: () => true } as unknown as Window)
+    const restored = readWorkbenchProjectRunSettings('/workspace', storage)
+    assert.deepEqual(restored, settings)
+    assert.notEqual(restored.launch?.process, settings.launch.process)
+    assert.deepEqual(normalizeWorkbenchProjectRunSettings({ command: run.command, configurationId: '' }), { command: run.command, configurationId: '' })
+    assert.deepEqual(normalizeWorkbenchProjectRunSettings({ ...settings, launch: { process: { kind: 'package-manager', program: 'npm', argv: [7] } } } as never), { command: '', configurationId: '' })
   })
 
   void test('the run menu lists them first, runs them with their settings and opens the editor', () => {
@@ -409,7 +424,7 @@ void describe('named run configurations', () => {
 
     const controller = readSource('src/renderer/src/hooks/useWorkbenchCommandController.ts')
     // 起卡与重启走同一个函数，它把工作目录和环境变量交给主进程（运行走终端，调试走调试器，两条路都交）。
-    assert.match(controller, /initialCommand: command,\n\s+cwd: launch\?\.cwd,\n\s+env: launch\?\.env,/u)
+    assert.match(controller, /\.\.\.\(launch\?\.process \? \{ initialProcess: launch\.process \} : \{ initialCommand: command \}\),\n\s+cwd: launch\?\.cwd,\n\s+env: launch\?\.env,/u)
     assert.match(controller, /target: launch\.debug\.target,\n\s+cwd: launch\.cwd,\n\s+env: launch\.env,/u)
     assert.equal(
       controller.match(/await startRunSessionProcess\(project, command, launch\)/gu)?.length,

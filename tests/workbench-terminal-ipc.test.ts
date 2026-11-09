@@ -52,6 +52,42 @@ async function registerTerminalIpc(): Promise<{
 }
 
 void describe('Workbench terminal IPC', () => {
+  void test('preserves literal process arguments and the selected manager entry', async () => {
+    const { start, started } = await registerTerminalIpc()
+    const argv = ['', 'src/100%.test.ts', '$HOME $(unchanged)', '`literal`', 'a"b', 'tail\\']
+    for (const initialProcess of [
+      { kind: 'node-script', script: 'src/main.js', argv },
+      { kind: 'python-script', script: 'script.py', argv },
+      { kind: 'package-manager', program: 'npx', argv: ['tsx', 'file.ts'] },
+      { kind: 'package-manager', program: 'npx', argv: ['--no-install', 'vitest', ...argv] },
+      { kind: 'node-script', script: 'src/main.js', args: ' "$VALUE" | cat ' },
+    ]) {
+      assert.equal((await start({ projectRoot: '/p', initialProcess })).ok, true)
+      assert.deepEqual(started.at(-1)?.request.initialProcess, initialProcess)
+      assert.equal(started.at(-1)?.request.initialCommand, undefined)
+    }
+  })
+
+  void test('rejects ambiguous or malformed process inputs without starting a shell', async () => {
+    const { start, started } = await registerTerminalIpc()
+    const process = { kind: 'node-script', script: 'main.js', argv: [] }
+    for (const request of [
+      { initialProcess: process, initialCommand: '' },
+      { initialProcess: process, initialCommand: 'node main.js' },
+      { initialProcess: null },
+      { initialProcess: { ...process, args: '' } },
+      { initialProcess: { ...process, argv: ['nul\0byte'] } },
+      { initialProcess: { ...process, argv: [1] } },
+      { initialProcess: { kind: 'node-script', script: 'main.js' } },
+      { initialProcess: { kind: 'package-manager', program: 'unknown', argv: [] } },
+    ]) {
+      const result = await start({ projectRoot: '/p', ...request })
+      assert.equal(result.ok, false)
+      assert.equal(result.code, 'VALIDATION')
+    }
+    assert.deepEqual(started, [])
+  })
+
   void test('passes the working directory and variables of a run configuration to the session', async () => {
     const { start, started } = await registerTerminalIpc()
 

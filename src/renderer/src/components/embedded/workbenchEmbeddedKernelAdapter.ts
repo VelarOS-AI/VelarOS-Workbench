@@ -158,10 +158,10 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         // 命令面板交给编辑器的代码动作：每一组都拿到，只有当前组的编辑器去做（见 EditorPanel）。
         editorCommandRequest: editorNavigation.editorCommandRequest,
         packageManager,
-        onRunPackageScript: (command) => {
+        onRunPackageScript: (command, launch) => {
           // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，
           // 让右侧 ▶ 记住并可右键切换；会话创建后由页面 model 自动打开运行面板。
-          void workbench.launchRunSession(command)
+          void workbench.launchRunSession(command, undefined, launch)
         },
         onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
         onOpenQuickOpen: model.surface.openQuickOpen,
@@ -228,10 +228,12 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
           void editorNavigation.selectFile(path)
         },
         onRunFile: (path) => {
-          void workbench.launchRunSession(buildWorkbenchVelarRunCommand(path, packageManager))
+          const command = buildWorkbenchVelarRunCommand(path, packageManager)
+          void workbench.launchRunSession(command.command, undefined, command.launch)
         },
         onBuildFile: (path) => {
-          void workbench.launchRunSession(buildWorkbenchVelarBuildCommand(path, packageManager))
+          const command = buildWorkbenchVelarBuildCommand(path, packageManager)
+          void workbench.launchRunSession(command.command, undefined, command.launch)
         },
         onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
         onCopyEntries: workbench.copyTreeEntries,

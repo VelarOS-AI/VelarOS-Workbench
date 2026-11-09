@@ -1,33 +1,39 @@
+import type { WorkbenchPackageManagerTarget } from '@shared/contracts/workbench'
+
+import { buildWorkbenchProcessRunCommand, type WorkbenchRunCommand } from './workbenchCommandLines'
 import type { PackageManagerCommand } from './workbenchPackageScriptCommand'
-import { quoteWorkbenchShellPath } from './workbenchPackageScriptCommand'
 
 export function isWorkbenchVelarFilePath(path: Nullable<string>): boolean {
   return !!path?.toLowerCase().endsWith('.vel')
 }
 
-export function getWorkbenchVelarExecutable(packageManager: PackageManagerCommand): string {
+export function getWorkbenchVelarExecutable(
+  packageManager: PackageManagerCommand
+): WorkbenchPackageManagerTarget {
   switch (packageManager) {
     case 'bun':
-      return 'bunx --no-install velar'
+      return { kind: 'package-manager', program: 'bunx', argv: ['--no-install', 'velar'] }
     case 'pnpm':
-      return 'pnpm exec velar'
+      return { kind: 'package-manager', program: 'pnpm', argv: ['exec', 'velar'] }
     case 'yarn':
-      return 'yarn exec velar'
+      return { kind: 'package-manager', program: 'yarn', argv: ['exec', 'velar'] }
     case 'npm':
-      return 'npx --no-install velar'
+      return { kind: 'package-manager', program: 'npx', argv: ['--no-install', 'velar'] }
   }
 }
 
 export function buildWorkbenchVelarRunCommand(
   path: string,
   packageManager: PackageManagerCommand
-): string {
-  return `${getWorkbenchVelarExecutable(packageManager)} run ${quoteWorkbenchShellPath(path)}`
+): WorkbenchRunCommand {
+  const process = getWorkbenchVelarExecutable(packageManager)
+  return buildWorkbenchProcessRunCommand({ ...process, argv: [...process.argv, 'run', path] })
 }
 
 export function buildWorkbenchVelarBuildCommand(
   path: string,
   packageManager: PackageManagerCommand
-): string {
-  return `${getWorkbenchVelarExecutable(packageManager)} build ${quoteWorkbenchShellPath(path)}`
+): WorkbenchRunCommand {
+  const process = getWorkbenchVelarExecutable(packageManager)
+  return buildWorkbenchProcessRunCommand({ ...process, argv: [...process.argv, 'build', path] })
 }

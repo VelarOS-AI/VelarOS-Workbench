@@ -2,16 +2,16 @@ import { isNonBlankString, isObject, isPlainObject, Log } from '@velaros-ai/vela
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
+import type { WorkbenchRunCommand } from './workbenchCommandLines'
 import {
-  formatWorkbenchPackageScriptName,
+  buildWorkbenchPackageScriptRunCommand,
   type PackageManagerCommand,
 } from './workbenchPackageScriptCommand'
 
 const COMMON_SCRIPT_PRIORITY = ['check', 'typecheck', 'test', 'lint', 'build', 'dev']
 const log = Log.tag('workbench-command-suggestions')
 
-export interface WorkbenchCommandSuggestion {
-  command: string
+export interface WorkbenchCommandSuggestion extends WorkbenchRunCommand {
   label: string
   source: string
 }
@@ -69,7 +69,11 @@ export function buildPackageScriptCommandSuggestions(
     .sort(compareScriptNames)
 
   return (limit === undefined ? scriptNames : scriptNames.slice(0, limit)).map((name) => ({
-    command: `${packageManager} run ${formatWorkbenchPackageScriptName(name)}`,
+    ...buildWorkbenchPackageScriptRunCommand({
+      packageJsonPath: 'package.json',
+      packageManager,
+      scriptName: name,
+    }),
     label: name,
     source: 'package.json',
   }))

@@ -38,10 +38,11 @@ void describe('debugging a Node.js program', () => {
     const project = await createDebugTestProject({ 'main.js': MainScript })
     try {
       const started = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [{ path: 'main.js', line: 2 }],
       })
-      assert.match(started.command, /^node --inspect-brk=127\.0\.0\.1:\d+ ['"]main\.js['"]$/u)
+      assert.match(project.launched[0]!.argv[0]!, /^--inspect-brk=127\.0\.0\.1:\d+$/u)
+      assert.deepEqual(project.launched[0]!.argv.slice(1), [join(project.root, 'main.js')])
       assert.equal(started.cwd, project.root)
       await project.next('attached')
 
@@ -160,7 +161,7 @@ void describe('debugging a Node.js program', () => {
       )
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [
           { path: 'main.js', line: 3 },
           { path: 'lib.js', line: 2 },
@@ -240,7 +241,7 @@ void describe('debugging a Node.js program', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         pauseOnUncaughtExceptions: false,
       })
       // 接住了的异常不停；先到的是 debugger 语句。
@@ -272,7 +273,7 @@ void describe('debugging a Node.js program', () => {
     // 没打开时，未捕获的异常不停，程序直接以非零码退出。
     const quiet = await createDebugTestProject({ 'main.js': "throw new Error('no pause')\n" })
     try {
-      await quiet.start({ target: { kind: 'node-script', script: 'main.js' } })
+      await quiet.start({ target: { kind: 'node-script', script: 'main.js', argv: [] } })
       assert.equal((await quiet.next('ended')).exitCode, 1)
       assert.equal(quiet.events.some((event) => event.type === 'paused'), false)
     } finally {
@@ -327,7 +328,7 @@ void describe('debugging TypeScript through source maps', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'dist/main.js' },
+        target: { kind: 'node-script', script: 'dist/main.js', argv: [] },
         breakpoints: [
           { path: 'src/main.ts', line: 11 },
           // 主脚本的第一句（顶层代码）：脚本一开始执行就到，断点必须在那之前下好。
@@ -405,7 +406,7 @@ void describe('debugging TypeScript through source maps', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'start.cjs' },
+        target: { kind: 'node-script', script: 'start.cjs', argv: [] },
         breakpoints: [
           // 被加载模块的顶层第一句：它不是主脚本，只能靠脚本开始执行前的那次停顿把断点下好。
           { path: 'app.ts', line: 6 },
@@ -525,7 +526,7 @@ void describe('debugging TypeScript through source maps', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.ts' },
+        target: { kind: 'node-script', script: 'main.ts', argv: [] },
         env: { NODE_OPTIONS: '--import ./register.mjs' },
         breakpoints: [
           { path: 'lib.ts', line: 2 },

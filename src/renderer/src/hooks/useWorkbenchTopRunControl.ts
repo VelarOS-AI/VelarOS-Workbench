@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
-import type { WorkbenchRunSessionLaunchOptions } from '@renderer/models/commands/workbenchCommandLines'
+import {
+  type WorkbenchRunCommand,
+  workbenchRunCommandKey,
+  type WorkbenchRunSessionLaunchOptions,
+} from '@renderer/models/commands/workbenchCommandLines'
 import {
   buildWorkbenchRunConfigurationCommand,
   buildWorkbenchRunConfigurationLaunch,
@@ -12,8 +16,7 @@ import { toNullable } from '@velaros-ai/velaros/core'
 
 import { useLatest } from '../support/genericHooks'
 
-interface WorkbenchRunConfigurationLike {
-  command: string
+interface WorkbenchRunConfigurationLike extends WorkbenchRunCommand {
   label: string
 }
 
@@ -25,7 +28,7 @@ export interface WorkbenchRunSessionLike {
   command?: string
   id: string
   isRunning: boolean
-  launch?: Pick<WorkbenchRunSessionLaunchOptions, 'configurationId' | 'debug'>
+  launch?: WorkbenchRunSessionLaunchOptions
 }
 
 interface UseWorkbenchTopRunControlOptions {
@@ -36,10 +39,11 @@ interface UseWorkbenchTopRunControlOptions {
   runningSessions: WorkbenchRunSessionLike[]
   /** 用户为当前项目手动配置的启动命令；为空则回退到自动探测。 */
   configuredCommand: string
+  configuredLaunch?: WorkbenchRunSessionLaunchOptions
   /** ▶ 指着的运行配置的 id；没指着、或那份配置已经删了，就看启动命令。 */
   configuredConfigurationId: string
   /** 最近一次运行过的命令（含从编辑器 gutter ▶ 触发的）；进入列表并作为默认项。 */
-  lastLaunchedCommand: string
+  lastLaunchedRun: Nullable<WorkbenchRunCommand>
   /** 启动一张新运行卡（WebStorm 式，每次新开）。 */
   onLaunchCommand: (
     command: string,
@@ -50,6 +54,7 @@ interface UseWorkbenchTopRunControlOptions {
   onRestartRunSession: (sessionId: string) => void
   /** 持久化启动命令；传入空串即清除配置，回退到自动探测。 */
   onConfigureCommand: (command: string) => void
+  onSelectRunCommand: (command: WorkbenchRunCommand) => void
   /** 把 ▶ 指到一份运行配置上。 */
   onSelectConfiguration: (configurationId: string) => void
   /** 打开「编辑运行配置」对话框。 */
@@ -58,6 +63,7 @@ interface UseWorkbenchTopRunControlOptions {
 
 export interface WorkbenchTopRunControl {
   activeCommand: string
+  activeCommandKey: string
   options: Array<SelectOption<string>>
   /** 当前生效的命令是否来自用户手动配置（而非自动探测）。 */
   isConfigured: boolean
@@ -74,6 +80,8 @@ export interface WorkbenchTopRunControl {
   restartActiveCommand: () => void
   /** 保存/覆盖手动配置的启动命令；空串清除回退自动探测。 */
   configureCommand: (command: string) => void
+  /** 选择已知菜单项，保存它的真实启动目标；不把显示文本重解释成 shell。 */
+  selectCommand: (key: string) => void
   /** 把 ▶ 指到一份运行配置上（记在项目设置里）。 */
   selectConfiguration: (configurationId: string) => void
   /** 直接跑一份运行配置，▶ 指着什么不变。 */
@@ -102,7 +110,8 @@ export function findLastRunningWorkbenchRunSession(
   activeCommand: string,
   sessions: readonly WorkbenchRunSessionLike[],
   configurationId?: string,
-  debug = false
+  debug = false,
+  launch?: WorkbenchRunSessionLaunchOptions
 ): WorkbenchRunSessionLike | undefined {
   for (let index = sessions.length - 1; index >= 0; index -= 1) {
     const session = sessions[index]
@@ -110,7 +119,9 @@ export function findLastRunningWorkbenchRunSession(
 
     const matches = configurationId
       ? session.launch?.configurationId === configurationId
-      : session.command === activeCommand && !session.launch?.configurationId
+      : !session.launch?.configurationId &&
+        workbenchRunCommandKey(session.command ?? '', session.launch) ===
+          workbenchRunCommandKey(activeCommand, launch)
     if (matches) return session
   }
   return undefined
@@ -122,11 +133,13 @@ export function useWorkbenchTopRunControl({
   namedConfigurations,
   runningSessions,
   configuredCommand,
+  configuredLaunch,
   configuredConfigurationId,
-  lastLaunchedCommand,
+  lastLaunchedRun,
   onLaunchCommand,
   onRestartRunSession,
   onConfigureCommand,
+  onSelectRunCommand,
   onSelectConfiguration,
   onEditConfigurations,
 }: UseWorkbenchTopRunControlOptions): WorkbenchTopRunControl {
@@ -139,7 +152,6 @@ export function useWorkbenchTopRunControl({
   const namedConfigurationsLatest = useLatest(namedConfigurations)
   const runningSessionsLatest = useLatest(runningSessions)
   const normalizedConfiguredCommand = configuredCommand.trim()
-  const normalizedLastLaunched = lastLaunchedCommand.trim()
   const activeConfiguration = useMemo(
     () =>
       toNullable(
@@ -148,68 +160,61 @@ export function useWorkbenchTopRunControl({
     [configuredConfigurationId, namedConfigurations]
   )
 
-  const options = useMemo<Array<SelectOption<string>>>(() => {
-    const nextOptions = new Map<string, SelectOption<string>>()
+  const configuredRun = useMemo<Nullable<WorkbenchRunCommand>>(
+    () => normalizedConfiguredCommand
+      ? { command: normalizedConfiguredCommand, launch: configuredLaunch }
+      : null,
+    [configuredLaunch, normalizedConfiguredCommand]
+  )
+  const options = useMemo<Array<SelectOption<string> & { run: WorkbenchRunCommand }>>(() => {
+    const nextOptions = new Map<string, SelectOption<string> & { run: WorkbenchRunCommand }>()
+    const add = (run: WorkbenchRunCommand, description: string): void => {
+      const key = workbenchRunCommandKey(run.command, run.launch)
+      if (nextOptions.has(key)) return
+      nextOptions.set(key, { value: key, label: run.label || run.command, description, run })
+    }
     if (normalizedConfiguredCommand) {
-      nextOptions.set(normalizedConfiguredCommand, {
-        value: normalizedConfiguredCommand,
-        label: normalizedConfiguredCommand,
-        description: t('workbench.runConfiguredCommand'),
-      })
+      add(
+        { command: normalizedConfiguredCommand, launch: configuredLaunch },
+        t('workbench.runConfiguredCommand')
+      )
     }
     // 最近运行过的命令进入列表（gutter ▶ 触发的也算），便于右键切换。
-    if (normalizedLastLaunched && !nextOptions.has(normalizedLastLaunched)) {
-      nextOptions.set(normalizedLastLaunched, {
-        value: normalizedLastLaunched,
-        label: normalizedLastLaunched,
-        description: t('workbench.recentCommands'),
-      })
-    }
+    if (lastLaunchedRun) add(lastLaunchedRun, t('workbench.recentCommands'))
     runConfigurations.forEach((configuration) => {
-      if (nextOptions.has(configuration.command)) return
-      nextOptions.set(configuration.command, {
-        value: configuration.command,
-        label: configuration.label,
-        description: configuration.command,
-      })
+      add(configuration, configuration.command)
     })
     commandHistory.slice(0, 4).forEach((item) => {
-      if (!nextOptions.has(item.command)) {
-        nextOptions.set(item.command, {
-          value: item.command,
-          label: item.command,
-          description: t('workbench.recentCommands'),
-        })
-      }
+      add({ command: item.command }, t('workbench.recentCommands'))
     })
     return [...nextOptions.values()]
-  }, [commandHistory, normalizedConfiguredCommand, normalizedLastLaunched, runConfigurations, t])
+  }, [commandHistory, configuredLaunch, lastLaunchedRun, normalizedConfiguredCommand, runConfigurations, t])
 
   // 生效命令：优先用户手动配置，否则自动挑一个“启动”类命令，再退回第一项。
-  const autoCommand = useMemo(() => {
+  const autoRun = useMemo(() => {
     const launchOption = options.find((option) =>
-      isLaunchCommand(`${option.label} ${option.value}`)
+      isLaunchCommand(`${option.label} ${option.run.command}`)
     )
-    return launchOption?.value ?? options[0]?.value ?? ''
+    return launchOption?.run ?? options[0]?.run ?? null
   }, [options])
   // 优先级：指着的运行配置 > 手动配置 > 最近运行 > 自动探测。让侧边栏 ▶ 记住上次跑过的命令。
   const activeConfigurationCommand = useMemo(
     () => (activeConfiguration ? buildWorkbenchRunConfigurationCommand(activeConfiguration) : ''),
     [activeConfiguration]
   )
-  const activeCommand =
-    activeConfigurationCommand ||
-    normalizedConfiguredCommand ||
-    normalizedLastLaunched ||
-    autoCommand
+  const activeRun = configuredRun ?? lastLaunchedRun ?? autoRun
+  const activeCommand = activeConfigurationCommand || activeRun?.command || ''
+  const activeCommandKey = activeRun ? workbenchRunCommandKey(activeRun.command, activeRun.launch) : ''
   const activeLabel = useMemo(
-    () => options.find((option) => option.value === activeCommand)?.label,
-    [activeCommand, options]
+    () => options.find((option) => option.value === activeCommandKey)?.label,
+    [activeCommandKey, options]
   )
   const activeCommandRunningSession = useMemo(
     () =>
-      findLastRunningWorkbenchRunSession(activeCommand, runningSessions, activeConfiguration?.id),
-    [activeCommand, activeConfiguration?.id, runningSessions]
+      findLastRunningWorkbenchRunSession(
+        activeCommand, runningSessions, activeConfiguration?.id, false, activeRun?.launch
+      ),
+    [activeCommand, activeConfiguration?.id, activeRun?.launch, runningSessions]
   )
 
   const launchConfiguration = useCallback(
@@ -232,8 +237,8 @@ export function useWorkbenchTopRunControl({
     }
     if (!activeCommand) return
 
-    onLaunchCommandLatest.current(activeCommand, activeLabel)
-  }, [activeCommand, activeConfiguration, activeLabel, launchConfiguration])
+    onLaunchCommandLatest.current(activeCommand, activeLabel, activeRun?.launch)
+  }, [activeCommand, activeConfiguration, activeLabel, activeRun?.launch, launchConfiguration])
 
   const restartActiveCommand = useCallback((): void => {
     if (activeCommandRunningSession) {
@@ -244,6 +249,11 @@ export function useWorkbenchTopRunControl({
   const configureCommand = useCallback((command: string): void => {
     onConfigureCommandLatest.current(command.trim())
   }, [])
+
+  const selectCommand = useCallback((key: string): void => {
+    const option = options.find((candidate) => candidate.value === key)
+    if (option) onSelectRunCommand(option.run)
+  }, [onSelectRunCommand, options])
 
   const selectConfiguration = useCallback((configurationId: string): void => {
     onSelectConfigurationLatest.current(configurationId)
@@ -289,6 +299,7 @@ export function useWorkbenchTopRunControl({
 
   return {
     activeCommand,
+    activeCommandKey,
     options,
     // 指着一份运行配置时，「手动配置的命令」这一栏不算生效。
     isConfigured: !activeConfiguration && !!normalizedConfiguredCommand,
@@ -299,6 +310,7 @@ export function useWorkbenchTopRunControl({
     run,
     restartActiveCommand,
     configureCommand,
+    selectCommand,
     selectConfiguration,
     runConfiguration,
     canDebugActiveConfiguration: activeConfiguration?.type === 'node',

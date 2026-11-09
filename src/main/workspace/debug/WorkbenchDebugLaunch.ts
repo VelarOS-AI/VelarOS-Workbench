@@ -1,14 +1,12 @@
 /**
- * 起一个带检查器的 Node 程序：挑端口、拼命令行、等检查器就绪。
+ * 准备调试进程、取得本机检查器端口并等待连接。
  *
  * 被调试的程序跑在一个终端会话里（界面上是一张运行卡）：输出、按键、尺寸、结束整棵进程树都沿用终端那一套，
  * 程序拿到的是真终端。检查器只听 127.0.0.1 上的一个端口；端口先向操作系统要一个空闲的，再写进
  * `--inspect-brk=127.0.0.1:端口`。测试里把「起进程」换成直接起子进程（node-pty 在 bun 下收不到数据）。
  */
-import { readFile, stat } from 'node:fs/promises'
 import { get as httpGet } from 'node:http'
 import { createServer } from 'node:net'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
@@ -17,14 +15,17 @@ import { type WorkbenchTerminalOutputEvent } from '@shared/contracts/workbench'
 
 import type { WorkbenchDebuggerLaunchTarget } from '../../../shared/workbenchDebugger'
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
-import type { PathResolver } from '../PathResolver'
 import type { TerminalSessions } from '../terminal/TerminalSessions'
+import {
+  resolveWorkbenchProcessLaunch,
+  type WorkbenchProcessContext,
+  type WorkbenchResolvedProcess,
+} from '../WorkbenchProcessLaunch'
 
 /** 检查器只听本机回环地址：别的机器连不上来。 */
 export const WorkbenchInspectorHost = '127.0.0.1'
 const InspectorPollIntervalMs = 80
 const InspectorRequestTimeoutMs = 1_000
-const PackageNamePattern = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/u
 
 export interface WorkbenchDebugProcessExit {
   exitCode: Nullable<number>
@@ -34,9 +35,14 @@ export interface WorkbenchDebugProcessExit {
 export interface WorkbenchDebugProcess {
   /** 承载它的终端会话（运行卡）。 */
   terminalSessionId: string
+  projectRoot: string
   shell: string
   /** 实际的工作目录（绝对路径）。 */
   cwd: string
+  /** 实际启动计划的展示文本，不参与后续执行。 */
+  command: string
+  /** 运行器自行发起的首个暂停不展示给用户。 */
+  skipInitialPause: boolean
   /** 程序退出时调一次；已经退出了就立刻调。 */
   onExit(listener: (exit: WorkbenchDebugProcessExit) => void): void
   /** 结束整棵进程树，等它真的退出（或强杀之后再等一会儿）。 */
@@ -47,7 +53,9 @@ export interface WorkbenchDebugLaunchOptions {
   projectRoot: string
   /** 工作目录：项目里的路径（相对项目根，或者它的绝对路径）。 */
   cwd: string
-  command: string
+  target: WorkbenchDebuggerLaunchTarget
+  port: number
+  signal: AbortSignal
   env?: Record<string, string>
   cols?: number
   rows?: number
@@ -65,28 +73,28 @@ export function createTerminalDebugLauncher(terminal: TerminalSessions): Workben
   return async (options) => {
     const exitListeners: Array<(exit: WorkbenchDebugProcessExit) => void> = []
     let exit: Nullable<WorkbenchDebugProcessExit> = null
-    const started = await terminal.startTerminalSession(
-      {
-        projectRoot: options.projectRoot,
-        cwd: options.cwd,
-        initialCommand: options.command,
-        env: options.env,
-        cols: options.cols,
-        rows: options.rows,
-      },
+    const context = await terminal.prepareProcessContext(options, options.signal, options.ownerId)
+    const plan = await buildWorkbenchDebugLaunchPlan(options.target, context, options.port)
+    const started = await terminal.startResolvedProcessSession(
+      context,
+      plan.process,
       (event) => {
         options.onOutput(event)
         if (!event.closed || exit) return
         exit = { exitCode: event.exitCode ?? null }
         for (const listener of exitListeners.splice(0)) listener(exit)
       },
-      options.ownerId
+      options.ownerId,
+      { cols: options.cols, rows: options.rows }
     )
 
     return {
       terminalSessionId: started.sessionId,
+      projectRoot: started.projectRoot,
       shell: started.shell,
       cwd: started.cwd,
+      command: plan.command,
+      skipInitialPause: plan.skipInitialPause,
       onExit: (listener) => {
         if (exit) listener(exit)
         else exitListeners.push(listener)
@@ -169,92 +177,48 @@ export async function waitForInspectorEndpoint(
   return null
 }
 
-/**
- * 依赖包里的可执行入口：从 `startDirectory` 起一层层往上找 `node_modules/<包>/package.json`，读它的 `bin`。
- * 包可能装在项目根之上（monorepo 把依赖提到了上层），所以不以项目根为界；找不到返回 null。
- */
-export async function resolveWorkbenchPackageBin(
-  startDirectory: string,
-  packageName: string,
-  binName: string
-): Promise<Nullable<string>> {
-  if (!PackageNamePattern.test(packageName)) return null
-
-  for (let directory = startDirectory; ; directory = dirname(directory)) {
-    const packageDirectory = join(directory, 'node_modules', packageName)
-    const manifest = await readFile(join(packageDirectory, 'package.json'), 'utf8').catch(
-      () => null
-    )
-    if (manifest !== null) {
-      try {
-        const { bin } = JSON.parse(manifest) as { bin?: unknown }
-        const entry =
-          typeof bin === 'string' ? bin : (bin as Record<string, unknown> | undefined)?.[binName]
-        if (typeof entry !== 'string') return null
-
-        const binPath = resolve(packageDirectory, entry)
-        // 入口得在包自己的目录里：清单里写着 `../../x` 的不认。
-        if (relative(packageDirectory, binPath).startsWith('..')) return null
-        return (await stat(binPath)).isFile() ? binPath : null
-      } catch {
-        // arch-guard:silent-catch-ok 清单坏了或入口文件不在：这个包起不来，按没找到处理。
-        return null
-      }
-    }
-    if (dirname(directory) === directory) return null
-  }
+export interface WorkbenchDebugLaunchPlan {
+  process: WorkbenchResolvedProcess
+  command: string
+  skipInitialPause: boolean
 }
 
-function quoteArgument(value: string): string {
-  return systemPlatformCompatibility.quoteShellArg(value, { env: process.env })
-}
-
-/** 脚本在命令行里怎么写：在工作目录里的写相对路径（短，也好认），否则写绝对路径。 */
-function displayScriptPath(scriptPath: string, cwd: string): string {
-  const relativePath = relative(cwd, scriptPath)
-  return relativePath && !relativePath.startsWith('..') && !isAbsolute(relativePath)
-    ? relativePath
-    : scriptPath
-}
-
-/**
- * 拼出带检查器开关的命令行（交给 shell 执行）。`cwd` 是工作目录的真实绝对路径。脚本不在项目里、不是文件，
- * 或者找不到依赖包的入口，都在这里报错——程序还没起。
- */
-export async function buildWorkbenchDebugCommand(
+/** 最终 cwd/env 决定实际程序；Node 前缀与运行器参数始终属于各自的参数位置。 */
+export async function buildWorkbenchDebugLaunchPlan(
   target: WorkbenchDebuggerLaunchTarget,
-  context: { projectRoot: string; cwd: string; port: number; pathResolver: PathResolver }
-): Promise<string> {
-  const inspect = `--inspect-brk=${WorkbenchInspectorHost}:${context.port}`
+  context: WorkbenchProcessContext,
+  port: number
+): Promise<WorkbenchDebugLaunchPlan> {
+  context.signal.throwIfAborted()
+  const inspect = `--inspect-brk=${WorkbenchInspectorHost}:${port}`
   if (target.kind === 'inspect-command') {
-    const command = target.command.trim()
-    if (!command) throw new AppError('VALIDATION', workbenchMainText('commands.empty'))
-    return `${command} ${inspect}`
+    if (!target.command.trim() || target.command.includes('\0'))
+      throw new AppError('VALIDATION', workbenchMainText('commands.empty'))
+    const command = `${target.command} ${inspect}`
+    const spec = systemPlatformCompatibility.getShellCommandSpec(command, { env: context.env })
+    return {
+      process: {
+        file: spec.file,
+        argv: spec.args,
+        windowsVerbatimArguments: spec.windowsVerbatimArguments,
+      },
+      command,
+      skipInitialPause: true,
+    }
   }
-
-  let program: string
-  if (target.kind === 'node-script') {
-    const script = await context.pathResolver.resolveInsideProject(
-      context.projectRoot,
-      target.script
-    )
-    if (!(await stat(script.realPath)).isFile())
-      throw new AppError(
-        'VALIDATION',
-        workbenchMainText('debug.scriptNotFile', { path: target.script })
+  const skipInitialPause = target.kind === 'inspect-process'
+  const process = await (target.kind === 'inspect-process'
+    ? resolveWorkbenchProcessLaunch(
+        { ...target.process, argv: [...target.process.argv, inspect] },
+        context
       )
-    program = displayScriptPath(script.realPath, context.cwd)
-  } else {
-    const binName = target.binName ?? target.packageName
-    const bin = await resolveWorkbenchPackageBin(context.cwd, target.packageName, binName)
-    if (!bin)
-      throw new AppError(
-        'NOT_FOUND',
-        workbenchMainText('debug.packageBinMissing', { package: target.packageName })
-      )
-    program = displayScriptPath(bin, context.cwd)
+    : resolveWorkbenchProcessLaunch(target, context, { nodeArgvPrefix: [inspect] }))
+  context.signal.throwIfAborted()
+  return {
+    process,
+    command: [process.file, ...process.argv]
+      .map((argument) => /^[\w./:=@+-]+$/u.test(argument) ? argument : JSON.stringify(argument))
+      .join(' '),
+    skipInitialPause,
   }
-
-  const args = target.args?.trim()
-  return ['node', inspect, quoteArgument(program), ...(args ? [args] : [])].join(' ')
 }

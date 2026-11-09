@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import path, { join } from 'node:path'
+import path, { dirname, join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { resolveWorkbenchNodeExecutable } from '../src/main/conversation/WorkbenchNodeRuntime'
 import { CommandHelper } from '../src/main/workspace/CommandHelper'
 import { PathResolver } from '../src/main/workspace/PathResolver'
 import {
@@ -123,6 +124,117 @@ async function settle(ms = 30): Promise<void> {
 }
 
 void describe('terminal sessions on a pseudo-terminal', () => {
+  void test('a generated Node target reaches PTY with literal argv and one environment snapshot', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-argv-')))
+    const script = ' 100% literal.js'
+    await writeFile(join(projectRoot, script), '')
+    const executable = resolveWorkbenchNodeExecutable()
+    const { factory, spawned } = createFakeFactory()
+    let environmentReads = 0
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory, async () => {
+      environmentReads += 1
+      return { ...process.env, WORKBENCH_LOGIN_FIXTURE: 'login-value' }
+    })
+    const argv = ['', '$HOME $(literal)', '`literal`', 'a"b', 'tail\\']
+    try {
+      const started = await terminal.startTerminalSession({
+        projectRoot,
+        initialProcess: { kind: 'node-script', script, argv },
+        env: { PATH: dirname(executable), WORKBENCH_LOGIN_FIXTURE: 'explicit-value' },
+      }, () => undefined, 7)
+      assert.equal(environmentReads, 1)
+      assert.equal(await realpath(spawned[0]!.file), await realpath(executable))
+      assert.deepEqual(spawned[0]!.args, [join(projectRoot, script), ...argv])
+      assert.equal(spawned[0]!.options.cwd, projectRoot)
+      assert.equal(spawned[0]!.options.env.WORKBENCH_LOGIN_FIXTURE, 'explicit-value')
+      assert.equal(started.shell, spawned[0]!.file)
+      assert.deepEqual(argv, ['', '$HOME $(literal)', '`literal`', 'a"b', 'tail\\'])
+      spawned[0]!.exit(0)
+    } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('a resolved process still obeys terminal owner admission and caller cancellation', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-resolved-')))
+    const { factory, spawned } = createFakeFactory()
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
+    const controller = new AbortController()
+    try {
+      const context = await terminal.prepareProcessContext({ projectRoot }, controller.signal)
+      controller.abort()
+      await assert.rejects(terminal.startResolvedProcessSession(
+        context, { file: 'fixture', argv: ['literal'] }, () => undefined, 7
+      ))
+      assert.deepEqual(spawned, [])
+      await terminal.closeAllSessions()
+      await assert.rejects(terminal.startResolvedProcessSession(
+        context, { file: 'fixture', argv: [] }, () => undefined, 7
+      ), /已结束/u)
+    } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('an unconfirmed CLI query fails owner close and remains owned until actual close', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-query-')))
+    const { factory } = createFakeFactory()
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
+    const settled = Promise.withResolvers<void>()
+    const closed = Promise.withResolvers<void>()
+    let stops = 0
+    try {
+      const context = await terminal.prepareProcessContext({ projectRoot }, new AbortController().signal, 7)
+      context.registerCliQuery({
+        settled: settled.promise,
+        closed: closed.promise,
+        stop: () => {
+          stops += 1
+          settled.resolve()
+        },
+        diagnostics: () => ({ pid: 123, closed: false, terminationPending: true }),
+      })
+      await terminal.closeSessionsForOwner(8)
+      assert.equal(stops, 0)
+      await assert.rejects(terminal.closeSessionsForOwner(7), (error: unknown) => {
+        assert.ok(error instanceof AggregateError)
+        assert.equal(error.errors[0].context.ownerId, 7)
+        assert.equal(error.errors[0].context.query.pid, 123)
+        return true
+      })
+      assert.equal(stops, 1)
+      closed.resolve()
+      await closed.promise
+      await terminal.closeSessionsForOwner(7)
+    } finally {
+      settled.resolve()
+      closed.resolve()
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('a resolved launcher environment is passed unchanged to the PTY', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-launcher-env-')))
+    const { factory, spawned } = createFakeFactory()
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
+    try {
+      const context = await terminal.prepareProcessContext({ projectRoot }, new AbortController().signal, 7)
+      const env = { ...context.env, PATHEXT: '.COM;.EXE;.BAT;.CMD', TERM: 'fixture-term' }
+      await terminal.startResolvedProcessSession(context, {
+        file: 'fixture', argv: ['literal'], env,
+      }, () => undefined, 7)
+      assert.equal(spawned[0]!.options.env, env)
+      assert.equal(spawned[0]!.options.name, 'fixture-term')
+      spawned[0]!.exit(0)
+    } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('closing an owner during startup prevents its pending terminal from spawning', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-')))
     const entered = Promise.withResolvers<void>()
@@ -569,6 +681,11 @@ void describe('terminal sessions on a pseudo-terminal', () => {
         buildTerminalEnvironment({ Path: 'C:\\old' }, 'win32', { PATH: 'C:\\new' })
       ).filter(([name]) => name.toUpperCase() === 'PATH'),
       [['PATH', 'C:\\new']]
+    )
+    assert.deepEqual(
+      Object.entries(buildTerminalEnvironment({ PATH: 'first', Path: 'selected' }, 'win32'))
+        .filter(([name]) => name.toUpperCase() === 'PATH'),
+      [['Path', 'selected']]
     )
     assert.deepEqual(
       Object.entries(buildTerminalEnvironment({ Path: '/old' }, 'linux', { PATH: '/new' })).filter(

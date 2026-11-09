@@ -74,9 +74,9 @@ void describe('Workbench test affordances', () => {
         { label: 'restores "quoted" state', line: 6 },
       ]
     )
-    assert.equal(
-      actions[0]?.command,
-      "npx --no-install velar test 'packages/world runtime/tests/world-runtime.test.vel'"
+    assert.deepEqual(
+      actions[0]?.launch?.process,
+      { kind: 'package-manager', program: 'npx', argv: ['--no-install', 'velar', 'test', 'packages/world runtime/tests/world-runtime.test.vel'] }
     )
     assert.equal(actions[1]?.command, actions[0]?.command)
   })
@@ -84,13 +84,13 @@ void describe('Workbench test affordances', () => {
   void test('adds the browser host only for explicit Velar browser test files', () => {
     assert.equal(shouldShowWorkbenchVelarTestRunGutter('tests/app.browser.test.vel'), true)
     assert.equal(shouldShowWorkbenchVelarTestRunGutter('src/app.vel'), false)
-    assert.equal(
-      buildWorkbenchVelarTestRunCommand('tests/app.browser.test.vel', 'pnpm'),
-      'pnpm exec velar test tests/app.browser.test.vel --browser'
+    assert.deepEqual(
+      buildWorkbenchVelarTestRunCommand('tests/app.browser.test.vel', 'pnpm').launch?.process,
+      { kind: 'package-manager', program: 'pnpm', argv: ['exec', 'velar', 'test', 'tests/app.browser.test.vel', '--browser'] }
     )
-    assert.equal(
-      buildWorkbenchVelarTestRunCommand('tests/app.test.vel', 'bun'),
-      'bunx --no-install velar test tests/app.test.vel'
+    assert.deepEqual(
+      buildWorkbenchVelarTestRunCommand('tests/app.test.vel', 'bun').launch?.process,
+      { kind: 'package-manager', program: 'bunx', argv: ['--no-install', 'velar', 'test', 'tests/app.test.vel'] }
     )
   })
 })

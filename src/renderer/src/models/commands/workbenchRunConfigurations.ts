@@ -1,12 +1,12 @@
 import type { WorkbenchCommandHistoryItem } from './workbenchCommandHistory'
+import { type WorkbenchRunCommand, workbenchRunCommandKey } from './workbenchCommandLines'
 import type { WorkbenchCommandSuggestion } from './workbenchCommandSuggestions'
 
 export type WorkbenchRunConfigurationKind = 'build' | 'check' | 'dev' | 'lint' | 'test' | 'task'
 
-export interface WorkbenchRunConfiguration {
+export interface WorkbenchRunConfiguration extends WorkbenchRunCommand {
   id: string
   label: string
-  command: string
   source: string
   kind: WorkbenchRunConfigurationKind
 }
@@ -60,14 +60,16 @@ export function buildWorkbenchRunConfigurations({
 
   for (const suggestion of suggestions) {
     const command = suggestion.command.trim()
-    if (!command || byCommand.has(command)) {
+    const key = workbenchRunCommandKey(command, suggestion.launch)
+    if (!command || byCommand.has(key)) {
       continue
     }
 
-    byCommand.set(command, {
-      id: `suggestion:${command}`,
+    byCommand.set(key, {
+      id: `suggestion:${key}`,
       label: suggestion.label,
       command,
+      launch: suggestion.launch,
       source: suggestion.source,
       kind: inferRunConfigurationKind(suggestion.label, command),
     })
@@ -75,12 +77,13 @@ export function buildWorkbenchRunConfigurations({
 
   for (const item of history) {
     const command = item.command.trim()
-    if (!command || byCommand.has(command)) {
+    const key = workbenchRunCommandKey(command)
+    if (!command || byCommand.has(key)) {
       continue
     }
 
-    byCommand.set(command, {
-      id: `history:${command}`,
+    byCommand.set(key, {
+      id: `history:${key}`,
       label: command,
       command,
       source: 'history',

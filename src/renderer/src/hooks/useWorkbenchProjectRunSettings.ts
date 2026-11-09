@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import type { WorkbenchRunCommand } from '../models/commands/workbenchCommandLines'
 import {
   PROJECT_RUN_SETTINGS_STORAGE_KEY,
   readWorkbenchProjectRunSettings,
@@ -12,6 +13,7 @@ export interface WorkbenchProjectRunSettingsController {
   settings: WorkbenchProjectRunSettings
   /** 保存启动命令（▶ 不再指着运行配置）；传入空串（或纯空白）即清除，回退到自动探测。 */
   setCommand: (command: string) => void
+  setRunCommand: (command: WorkbenchRunCommand) => void
   /** 把 ▶ 指到用户建的一份运行配置上。 */
   setConfigurationId: (configurationId: string) => void
 }
@@ -67,9 +69,22 @@ export function useWorkbenchProjectRunSettings(
     [save]
   )
 
+  const setRunCommand = useCallback(
+    (run: WorkbenchRunCommand): void => {
+      const settings: WorkbenchProjectRunSettings = {
+        command: run.command.trim(),
+        configurationId: '',
+      }
+      if (run.launch) settings.launch = structuredClone(run.launch)
+      save(settings)
+    },
+    [save]
+  )
+
   return {
     settings,
     setCommand,
+    setRunCommand,
     setConfigurationId,
   }
 }

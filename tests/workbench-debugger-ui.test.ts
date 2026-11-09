@@ -234,7 +234,7 @@ void describe('debug panel', () => {
 
   void test('while the program runs it can be paused or stopped', async () => {
     const { session } = createSession()
-    await session.start({ projectRoot: '/p', target: { kind: 'node-script', script: 'a.js' } })
+    await session.start({ projectRoot: '/p', target: { kind: 'node-script', script: 'a.js', argv: [] } })
     const html = renderPanel(session)
     assert.match(html, /workbench\.debuggerRunning</u)
     assert.match(html, /workbench\.debuggerRunningHint/u)
@@ -247,7 +247,7 @@ void describe('debug panel', () => {
 
   void test('while paused it lists the call stack, the scopes of the selected frame and what stopped it', async () => {
     const { session, emit } = createSession()
-    await session.start({ projectRoot: '/p', target: { kind: 'node-script', script: 'a.js' } })
+    await session.start({ projectRoot: '/p', target: { kind: 'node-script', script: 'a.js', argv: [] } })
     emit({
       type: 'paused',
       sessionId: 'debug-1',

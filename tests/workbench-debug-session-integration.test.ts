@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
 
@@ -106,11 +107,12 @@ void describe('debugging a real program from the window', () => {
     }
 
     try {
-      const started = await session.start({
+      await session.start({
         projectRoot: project.root,
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
       })
-      assert.match(started.command, /^node --inspect-brk=127\.0\.0\.1:\d+ ['"]main\.js['"]$/u)
+      assert.match(project.launched[0]!.argv[0]!, /^--inspect-brk=127\.0\.0\.1:\d+$/u)
+      assert.deepEqual(project.launched[0]!.argv.slice(1), [join(project.root, 'main.js')])
 
       // 停在断点上：编辑器要高亮的就是这一行，页面把它带到眼前。
       const atBreakpoint = await until(
@@ -250,14 +252,14 @@ void describe('debugging a real program from the window', () => {
       await assert.rejects(
         session.start({
           projectRoot: project.root,
-          target: { kind: 'node-script', script: 'missing.js' },
+          target: { kind: 'node-script', script: 'missing.js', argv: [] },
         })
       )
       assert.equal(session.getSnapshot().session, null)
 
       await session.start({
         projectRoot: project.root,
-        target: { kind: 'node-script', script: 'loop.js' },
+        target: { kind: 'node-script', script: 'loop.js', argv: [] },
       })
       assert.ok(session.getSnapshot().session)
       await session.stop()

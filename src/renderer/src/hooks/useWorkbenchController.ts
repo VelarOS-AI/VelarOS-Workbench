@@ -355,7 +355,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions) {
     activeTerminalSessionId: commandState.terminal.activeTerminalSessionId,
     runSessions: commandState.run.runSessions,
     activeRunSessionId: commandState.run.activeRunSessionId,
-    lastLaunchedCommand: commandState.command.lastLaunchedCommand,
+    lastLaunchedRun: commandState.command.lastLaunchedRun,
     projectIndexResult: projectIndex.projectIndexResult,
     projectContextIndex,
     languageServiceInsights,

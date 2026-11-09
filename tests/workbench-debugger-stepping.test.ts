@@ -90,7 +90,7 @@ void describe('stepping out of the program’s own code', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [{ path: 'main.js', line: 2 }],
       })
       assert.equal(describeStop(await project.nextStop()), 'breakpoint add@main.js:2')
@@ -116,7 +116,7 @@ void describe('stepping out of the program’s own code', () => {
     const project = await createDebugTestProject(RequireFiles)
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [{ path: 'helper.js', line: 1 }],
       })
       assert.equal(describeStop(await project.nextStop()), 'breakpoint (anonymous)@helper.js:1')
@@ -143,7 +143,7 @@ void describe('stepping out of the program’s own code', () => {
     const project = await createDebugTestProject(RequireFiles)
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [{ path: 'main.js', line: 1 }],
       })
       assert.equal(describeStop(await project.nextStop()), 'breakpoint (anonymous)@main.js:1')
@@ -169,7 +169,7 @@ void describe('stepping out of the program’s own code', () => {
     const project = await createDebugTestProject(RequireFiles)
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         // helper.js 里有断点：调试器会在它开始执行前自己停一下（把断点落好），那一下不能算这次单步的终点。
         breakpoints: [
           { path: 'main.js', line: 1 },
@@ -214,7 +214,7 @@ void describe('stepping out of the program’s own code', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [
           { path: 'main.js', line: 2 },
           { path: 'helper.js', line: 2 },
@@ -259,7 +259,7 @@ void describe('stepping out of the program’s own code', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'emit.js' },
+        target: { kind: 'node-script', script: 'emit.js', argv: [] },
         breakpoints: [{ path: 'emit.js', line: 8 }],
       })
       assert.equal(describeStop(await project.nextStop()), 'breakpoint (anonymous)@emit.js:8')
@@ -364,7 +364,7 @@ void describe('stepping out of the program’s own code', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'loops.js' },
+        target: { kind: 'node-script', script: 'loops.js', argv: [] },
         breakpoints: [{ path: 'loops.js', line: 4 }],
       })
       // 监听函数一共被调四次，每次都步出：回到的是调用它的那个函数的循环头（在调用那一行的上面）。
@@ -402,7 +402,7 @@ void describe('stepping out of the program’s own code', () => {
     })
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'timers.js' },
+        target: { kind: 'node-script', script: 'timers.js', argv: [] },
         breakpoints: [
           { path: 'timers.js', line: 2 },
           { path: 'timers.js', line: 5 },
@@ -454,7 +454,7 @@ void describe('stepping and code in node_modules', () => {
     const project = await createDebugTestProject(DependencyFiles)
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [{ path: 'main.js', line: 5 }],
       })
       assert.equal(describeStop(await project.nextStop()), 'breakpoint (anonymous)@main.js:5')
@@ -484,7 +484,7 @@ void describe('stepping and code in node_modules', () => {
     const project = await createDebugTestProject(DependencyFiles)
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'main.js' },
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
         breakpoints: [{ path: 'node_modules/dep/index.js', line: 3 }],
       })
       assert.equal(
@@ -544,7 +544,7 @@ void describe('stepping across modules a loader compiles in place', () => {
     const project = await createDebugTestProject(LoaderFiles)
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'start.cjs' },
+        target: { kind: 'node-script', script: 'start.cjs', argv: [] },
         breakpoints: [
           { path: 'app.ts', line: 1 },
           { path: 'util.ts', line: 3 },
@@ -586,7 +586,7 @@ void describe('stepping across modules a loader compiles in place', () => {
     const project = await createDebugTestProject(LoaderFiles)
     try {
       const { sessionId } = await project.start({
-        target: { kind: 'node-script', script: 'start.cjs' },
+        target: { kind: 'node-script', script: 'start.cjs', argv: [] },
         breakpoints: [{ path: 'app.ts', line: 1 }],
       })
       assert.equal(describeStop(await project.nextStop()), 'breakpoint (anonymous)@app.ts:1')

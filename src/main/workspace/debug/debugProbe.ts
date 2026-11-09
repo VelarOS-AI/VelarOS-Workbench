@@ -141,7 +141,7 @@ try {
 
   // 一个不会自己结束的程序：停在断点上、读变量、继续，然后结束调试。
   const long = await start(
-    { target: { kind: 'node-script', script: 'long.js' }, breakpoints: [{ path: 'long.js', line: 5 }] },
+    { target: { kind: 'node-script', script: 'long.js', argv: [] }, breakpoints: [{ path: 'long.js', line: 5 }] },
     101
   )
   check(long.terminalSessionId.startsWith('terminal-'), '被调试的程序必须跑在一个终端会话里（运行卡）')
@@ -186,7 +186,7 @@ try {
   // 一个自己跑完的程序：环境变量到得了它手里；跑完之后调试器自己断开，进程正常退出（否则 Node 会一直
   // 等着调试器断开，卡片永远不结束）。
   const short = await start(
-    { target: { kind: 'node-script', script: 'short.js' }, env: { PROBE_LABEL: '标签 with spaces' }, breakpoints: [] },
+    { target: { kind: 'node-script', script: 'short.js', argv: [] }, env: { PROBE_LABEL: '标签 with spaces' }, breakpoints: [] },
     101
   )
   await waitFor(() => short.ended() !== undefined, '程序跑完后调试会话必须结束')
@@ -198,11 +198,11 @@ try {
 
   // 窗口关掉：它的调试会话断开，程序随它的终端会话一起结束；别的窗口的不受影响。
   const mine = await start(
-    { target: { kind: 'node-script', script: 'long.js' }, breakpoints: [{ path: 'long.js', line: 5 }] },
+    { target: { kind: 'node-script', script: 'long.js', argv: [] }, breakpoints: [{ path: 'long.js', line: 5 }] },
     101
   )
   const theirs = await start(
-    { target: { kind: 'node-script', script: 'long.js' }, breakpoints: [{ path: 'long.js', line: 5 }] },
+    { target: { kind: 'node-script', script: 'long.js', argv: [] }, breakpoints: [{ path: 'long.js', line: 5 }] },
     202
   )
   await waitFor(() => mine.paused().length === 1 && theirs.paused().length === 1, '两个窗口的程序都必须停在断点上')

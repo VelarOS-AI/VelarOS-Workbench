@@ -81,6 +81,11 @@ import {
 import { type WorkbenchHostRuntime } from '@renderer/host/WorkbenchHost'
 import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import {
+  buildWorkbenchProcessRunCommand,
+  type WorkbenchRunCommand,
+  type WorkbenchRunSessionLaunchOptions,
+} from '@renderer/models/commands/workbenchCommandLines'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import {
   buildWorkbenchVelarBuildCommand,
@@ -386,7 +391,7 @@ interface CodeMirrorEditorProps {
   ) => void
   /** 快速修复动到了别的文件、要新建文件：交给页面去落（当前文件的那部分页面会回头让编辑器自己套）。 */
   onApplyLanguageServiceEdit?: (request: WorkbenchLanguageServiceWorkspaceEditRequest) => void
-  onRunPackageScript?: (command: string) => void
+  onRunPackageScript?: (command: string, launch?: WorkbenchRunSessionLaunchOptions) => void
   onOpenFileHistory?: (mode: 'local' | 'git') => void
   /** 右键「添加到聊天」：把当前文件作为引用挂到聊天输入框（只挂路径）。 */
   onAddToChat?: () => void
@@ -1058,16 +1063,25 @@ function isRunnableEditorPath(path: Nullable<string>): boolean {
 }
 
 /** 「运行」：TypeScript 走 tsx，Python 走 python3，JS 按 Node 直接执行。 */
-function buildWorkbenchRunFileCommand(path: string, packageManager: PackageManagerCommand): string {
+function buildWorkbenchRunFileCommand(
+  path: string,
+  packageManager: PackageManagerCommand
+): WorkbenchRunCommand {
   if (isWorkbenchVelarFilePath(path)) return buildWorkbenchVelarRunCommand(path, packageManager)
-  if (isTypeScriptEditorPath(path)) return `npx tsx "${path}"`
-  if (['py', 'pyw'].includes(editorPathExtension(path))) return `python3 "${path}"`
-  return `node "${path}"`
+  if (isTypeScriptEditorPath(path))
+    return buildWorkbenchProcessRunCommand({ kind: 'package-manager', program: 'npx', argv: ['tsx', path] })
+  if (['py', 'pyw'].includes(editorPathExtension(path)))
+    return buildWorkbenchProcessRunCommand({ kind: 'python-script', script: path, argv: [] })
+  return buildWorkbenchProcessRunCommand({ kind: 'node-script', script: path, argv: [] })
 }
 
 /** 「编译」：把 TypeScript 就地编译成同目录下的 .js。 */
-function buildWorkbenchCompileFileCommand(path: string): string {
-  return `npx tsc "${path}" --target es2022 --module esnext`
+function buildWorkbenchCompileFileCommand(path: string): WorkbenchRunCommand {
+  return buildWorkbenchProcessRunCommand({
+    kind: 'package-manager',
+    program: 'npx',
+    argv: ['tsc', path, '--target', 'es2022', '--module', 'esnext'],
+  })
 }
 
 /** 重命名符号时的内嵌输入浮层（替代 Electron 不支持的 window.prompt）。 */
@@ -1476,7 +1490,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         createWorkbenchPackageScriptRunGutterExtension({
           content: packageScriptRunContent,
           disabled: disabled || !callbacksRef.current.onRunPackageScript,
-          onRunScript: (command) => callbacksRef.current.onRunPackageScript?.(command),
+          onRunScript: (command, launch) => callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
           path: onRunPackageScript ? path : null,
         }),
@@ -1489,7 +1503,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         createWorkbenchVelarMainRunGutterExtension({
           content: velarMainRunContent,
           disabled: disabled || !callbacksRef.current.onRunPackageScript,
-          onRunMain: (command) => callbacksRef.current.onRunPackageScript?.(command),
+          onRunMain: (command, launch) => callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
           path: onRunPackageScript ? path : null,
         }),
@@ -1500,7 +1514,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         createWorkbenchVelarTestRunGutterExtension({
           content: velarTestRunContent,
           disabled: disabled || !callbacksRef.current.onRunPackageScript,
-          onRunTest: (command) => callbacksRef.current.onRunPackageScript?.(command),
+          onRunTest: (command, launch) => callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
           path: onRunPackageScript ? path : null,
         }),
@@ -1958,7 +1972,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (!currentPath || !runScript) return
 
       setContextMenu(null)
-      runScript(buildWorkbenchRunFileCommand(currentPath, packageManager))
+      const command = buildWorkbenchRunFileCommand(currentPath, packageManager)
+      runScript(command.command, command.launch)
     }
 
     const buildCurrentFile = (): void => {
@@ -1968,9 +1983,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       setContextMenu(null)
       if (isWorkbenchVelarFilePath(currentPath)) {
-        runScript(buildWorkbenchVelarBuildCommand(currentPath, packageManager))
+        const command = buildWorkbenchVelarBuildCommand(currentPath, packageManager)
+        runScript(command.command, command.launch)
       } else if (isTypeScriptEditorPath(currentPath)) {
-        runScript(buildWorkbenchCompileFileCommand(currentPath))
+        const command = buildWorkbenchCompileFileCommand(currentPath)
+        runScript(command.command, command.launch)
       }
     }
 

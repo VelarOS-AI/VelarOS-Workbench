@@ -50,7 +50,7 @@ export function createDefaultWorkbenchMainCapabilityProviders(
   loginEnvironment: () => Promise<NodeJS.ProcessEnv>
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
-  const parts = createWorkbenchAppParts(dataRootDir, dependencies)
+  const parts = createWorkbenchAppParts(dataRootDir, { ...dependencies, loginEnvironment })
   const chatCheckpoints = new WorkbenchChatCheckpointService(
     () => parts.storagePaths.getChatCheckpointIndexesDir(),
     loginEnvironment

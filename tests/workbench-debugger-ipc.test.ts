@@ -102,7 +102,7 @@ void describe('Workbench debugger IPC', () => {
 
     const started = await ipc.invoke(Channels.start, {
       projectRoot: '/p',
-      target: { kind: 'node-script', script: 'src/main.js', args: '--port 1', extra: 'dropped' },
+      target: { kind: 'node-script', script: 'src/main.js', args: '--port 1' },
       cwd: 'packages/api',
       env: { PORT: '4100' },
       breakpoints: [{ path: 'src/main.js', line: 3, condition: 'dropped' }],
@@ -150,7 +150,10 @@ void describe('Workbench debugger IPC', () => {
     ipc.calls.length = 0
     for (const target of [
       { kind: 'node-package-bin', packageName: 'jest', binName: 'jest', args: '--runInBand' },
-      { kind: 'node-package-bin', packageName: 'jest' },
+      { kind: 'node-package-bin', packageName: 'jest', argv: [] },
+      { kind: 'node-script', script: 'src/main.js', argv: ['', 'two words', '$HOME; literal'] },
+      { kind: 'node-script', script: 'src/main.js', args: '  --name "$LABEL"  ' },
+      { kind: 'inspect-process', process: { kind: 'package-manager', program: 'pnpm', argv: ['exec', 'vitest', 'run', 'a b.test.ts'] } },
       { kind: 'inspect-command', command: 'npx vitest run a.test.ts' },
     ]) {
       assert.equal((await ipc.invoke(Channels.start, { projectRoot: '/p', target, breakpoints: [] }, 9)).ok, true)
@@ -159,7 +162,10 @@ void describe('Workbench debugger IPC', () => {
       ipc.calls.map((call) => [call.ownerId, call.request]),
       [
         { kind: 'node-package-bin', packageName: 'jest', binName: 'jest', args: '--runInBand' },
-        { kind: 'node-package-bin', packageName: 'jest' },
+        { kind: 'node-package-bin', packageName: 'jest', argv: [] },
+        { kind: 'node-script', script: 'src/main.js', argv: ['', 'two words', '$HOME; literal'] },
+        { kind: 'node-script', script: 'src/main.js', args: '  --name "$LABEL"  ' },
+        { kind: 'inspect-process', process: { kind: 'package-manager', program: 'pnpm', argv: ['exec', 'vitest', 'run', 'a b.test.ts'] } },
         { kind: 'inspect-command', command: 'npx vitest run a.test.ts' },
       ].map((target) => [9, { projectRoot: '/p', target, breakpoints: [], pauseOnUncaughtExceptions: false }])
     )
@@ -170,7 +176,7 @@ void describe('Workbench debugger IPC', () => {
     const ipc = await registerDebugIpc()
     const valid = {
       projectRoot: '/p',
-      target: { kind: 'node-script', script: 'main.js' },
+      target: { kind: 'node-script', script: 'main.js', argv: [] },
       breakpoints: [{ path: 'main.js', line: 1 }],
     }
     const invalidRequests: unknown[] = [
@@ -180,8 +186,23 @@ void describe('Workbench debugger IPC', () => {
       { ...valid, target: undefined },
       { ...valid, target: { kind: 'python-script', script: 'main.py' } },
       { ...valid, target: { kind: 'node-script' } },
+      { ...valid, target: { kind: 'node-script', script: 'main.js' } },
+      { ...valid, target: { kind: 'node-script', script: 'main.js', argv: [], extra: 'rejected' } },
+      { ...valid, target: { kind: 'node-script', script: 'main.js', argv: [], args: '' } },
+      { ...valid, target: { kind: 'node-script', script: 'main.js', argv: '--flag' } },
+      { ...valid, target: { kind: 'node-script', script: 'main.js', argv: [1] } },
+      { ...valid, target: { kind: 'node-script', script: 'main.js', argv: ['bad\0argument'] } },
+      { ...valid, target: { kind: 'node-script', script: 'main\0.js', argv: [] } },
+      { ...valid, target: { kind: 'node-script', script: 'main.js', args: 'bad\0argument' } },
       { ...valid, target: { kind: 'node-package-bin', packageName: 7 } },
+      { ...valid, target: { kind: 'node-package-bin', packageName: 'jest', argv: [], args: '' } },
+      { ...valid, target: { kind: 'node-package-bin', packageName: 'jest\0', argv: [] } },
+      { ...valid, target: { kind: 'node-package-bin', packageName: 'jest', binName: 'jest\0', argv: [] } },
       { ...valid, target: { kind: 'inspect-command' } },
+      { ...valid, target: { kind: 'inspect-command', command: 'node\0bad' } },
+      { ...valid, target: { kind: 'inspect-process', process: { kind: 'node-script', script: 'main.js', argv: [] } } },
+      { ...valid, target: { kind: 'inspect-process', process: { kind: 'package-manager', program: 'unknown', argv: [] } } },
+      { ...valid, target: { kind: 'inspect-process', process: { kind: 'package-manager', program: 'pnpm', argv: ['bad\0'] } } },
       { ...valid, breakpoints: undefined },
       { ...valid, breakpoints: [{ path: 'main.js', line: 0 }] },
       { ...valid, breakpoints: [{ path: 'main.js', line: 1.5 }] },

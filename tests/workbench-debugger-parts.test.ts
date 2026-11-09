@@ -2,14 +2,15 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { describe, test } from 'bun:test'
 
+import { resolveWorkbenchNodeExecutable } from '../src/main/conversation/WorkbenchNodeRuntime'
 import {
+  buildWorkbenchDebugLaunchPlan,
   findFreeLoopbackPort,
-  resolveWorkbenchPackageBin,
   waitForInspectorEndpoint,
 } from '../src/main/workspace/debug/WorkbenchDebugLaunch'
 import { buildWorkbenchScriptUrlPattern } from '../src/main/workspace/debug/WorkbenchDebugSession'
@@ -18,11 +19,56 @@ import {
   toWorkbenchDebuggerVariable,
 } from '../src/main/workspace/debug/WorkbenchDebugValues'
 import { decodeInlineSourceMap, WorkbenchSourceMap } from '../src/main/workspace/debug/WorkbenchSourceMap'
+import { PathResolver } from '../src/main/workspace/PathResolver'
+import { resolveWorkbenchPackageBin } from '../src/main/workspace/WorkbenchProcessLaunch'
+
+import { createDebugCliQueryOwner } from './helpers/debugSessions'
 
 /**
  * 调试器里不需要起程序就能验的几块：source map 的换算、脚本地址的匹配、值怎么写成一行文字、
  * 找依赖包的入口、等检查器就绪。
  */
+
+void describe('debugger launch arguments', () => {
+  void test('keeps Node and runner inspector arguments separate without mutating restart targets', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'workbench-debug-launch-')))
+    const queries = createDebugCliQueryOwner()
+    try {
+      await writeFile(join(root, 'main file.cjs'), '')
+      const context = {
+        projectRoot: root,
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: [dirname(resolveWorkbenchNodeExecutable()), dirname(process.execPath), process.env.PATH ?? ''].join(delimiter),
+        },
+        signal: new AbortController().signal,
+        pathResolver: new PathResolver(),
+        registerCliQuery: queries.registerCliQuery,
+      }
+      const argv = ['', 'two words', '"quoted"', '$HOME; $(literal) & %NAME%']
+      Object.freeze(argv)
+      const nodeTarget = { kind: 'node-script' as const, script: 'main file.cjs', argv }
+      const first = await buildWorkbenchDebugLaunchPlan(nodeTarget, context, 9230)
+      assert.deepEqual(first.process.argv, ['--inspect-brk=127.0.0.1:9230', join(root, 'main file.cjs'), ...argv])
+      assert.equal(first.skipInitialPause, false)
+      const next = await buildWorkbenchDebugLaunchPlan(nodeTarget, context, 9231)
+      assert.deepEqual(next.process.argv, ['--inspect-brk=127.0.0.1:9231', join(root, 'main file.cjs'), ...argv])
+
+      const runnerArgv = ['x', '--no-install', 'vitest', 'run', 'test file.ts', '-t', '^literal $(name)$', '--no-file-parallelism', '--testTimeout=0']
+      Object.freeze(runnerArgv)
+      const runner = await buildWorkbenchDebugLaunchPlan({
+        kind: 'inspect-process',
+        process: { kind: 'package-manager', program: 'bun', argv: runnerArgv },
+      }, context, 9232)
+      assert.deepEqual(runner.process.argv, [...runnerArgv, '--inspect-brk=127.0.0.1:9232'])
+      assert.equal(runner.skipInitialPause, true)
+    } finally {
+      await queries.closeQueries()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
 
 void describe('debugger source maps', () => {
   // 手写的一份映射（行列从 0 起）：
@@ -320,7 +366,7 @@ void describe('debugger launch helpers', () => {
       await writeFile(join(root, path), content)
     }
     try {
-      await write('node_modules/single/package.json', JSON.stringify({ bin: 'cli.js' }))
+      await write('node_modules/single/package.json', JSON.stringify({ name: 'single', bin: 'cli.js' }))
       await write('node_modules/single/cli.js', '')
       await write(
         'node_modules/@scope/tool/package.json',
@@ -337,8 +383,9 @@ void describe('debugger launch helpers', () => {
 
       const find = (from: string, packageName: string, binName = packageName): Promise<Nullable<string>> =>
         resolveWorkbenchPackageBin(join(root, from), packageName, binName)
-      // `bin` 写成一个字符串：不管叫什么名字都是它。
+      // 字符串 bin 只声明包名对应的入口，不能用未声明的名称启动。
       assert.equal(await find('.', 'single'), join(root, 'node_modules/single/cli.js'))
+      assert.equal(await find('.', 'single', 'other'), null)
       assert.equal(await find('packages/app/src', 'single'), join(root, 'packages/app/node_modules/single/own.js'))
       assert.equal(await find('packages/app/src', '@scope/tool', 'tool'), join(root, 'node_modules/@scope/tool/dist/tool.js'))
       // 没有这个入口名、入口文件不在、入口指到包外面、清单坏了、包没有可执行入口、没装、名字不像包名。

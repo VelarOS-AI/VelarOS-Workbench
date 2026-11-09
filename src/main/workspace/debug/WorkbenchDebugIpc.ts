@@ -24,6 +24,7 @@ import {
   optionalNumber,
   optionalString,
 } from '../ipcBoundary'
+import { readWorkbenchProcessTarget } from '../WorkbenchProcessLaunch'
 
 import type { WorkbenchDebugSessions } from './WorkbenchDebugSessions'
 
@@ -175,20 +176,16 @@ function parseTarget(input: unknown): Nullable<WorkbenchDebuggerLaunchTarget> {
 
   switch (input['kind']) {
     case 'node-script':
-      return hasStringFields(input, ['script'])
-        ? { kind: 'node-script', script: input['script'] as string, ...optionalString(input, 'args') }
-        : null
-    case 'node-package-bin':
-      return hasStringFields(input, ['packageName'])
-        ? {
-            kind: 'node-package-bin',
-            packageName: input['packageName'] as string,
-            ...optionalString(input, 'binName'),
-            ...optionalString(input, 'args'),
-          }
-        : null
+    case 'node-package-bin': {
+      const target = readWorkbenchProcessTarget(input)
+      return target?.kind === 'node-script' || target?.kind === 'node-package-bin' ? target : null
+    }
+    case 'inspect-process': {
+      const process = readWorkbenchProcessTarget(input['process'])
+      return process?.kind === 'package-manager' ? { kind: 'inspect-process', process } : null
+    }
     case 'inspect-command':
-      return hasStringFields(input, ['command'])
+      return hasStringFields(input, ['command']) && !(input['command'] as string).includes('\0')
         ? { kind: 'inspect-command', command: input['command'] as string }
         : null
     default:

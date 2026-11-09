@@ -7,6 +7,11 @@
  *
  * 行号、列号在这里都从 1 起，与编辑器一致。错误信封复用 `WorkbenchFsCallResult`。
  */
+import type {
+  WorkbenchNodePackageBinTarget,
+  WorkbenchNodeScriptTarget,
+  WorkbenchPackageManagerTarget,
+} from './contracts/workbench'
 import type { WorkbenchFsCallResult } from './workbenchFs'
 
 export const WorkbenchDebuggerChannels = {
@@ -35,18 +40,20 @@ export interface WorkbenchDebuggerBreakpointStatus extends WorkbenchDebuggerBrea
 }
 
 /**
- * 要调试的东西，三种起法：
+ * 调试目标的启动方式：
  * - `node-script`：项目里的一个脚本，`node --inspect-brk=… <脚本> <参数>`；
  * - `node-package-bin`：依赖包里的可执行入口（从工作目录起往上找 `node_modules/<包>`），同样由 node 直接带着
  *   检查器起——Jest 这类自己不认检查器开关的工具；
- * - `inspect-command`：一条自己认 `--inspect-brk=主机:端口` 的命令（Vitest），开关追加在命令末尾。这类工具
+ * - `inspect-process`：自己识别检查器参数的运行器（Vitest），开关作为独立 argv 追加；
+ * - `inspect-command`：用户填写、自己识别 `--inspect-brk=主机:端口` 的 shell 命令，开关追加在命令末尾。这类工具
  *   连上之后会自己先停一下，那一下不算数，直接放行。
  *
- * `args` 与 `command` 是 shell 里的原文，由 shell 去拆。
+ * `argv` 逐项传递，不经过 shell；`args` 与 `command` 是用户填写的 shell 原文，不拆分重建。
  */
 export type WorkbenchDebuggerLaunchTarget =
-  | { kind: 'node-script'; script: string; args?: string }
-  | { kind: 'node-package-bin'; packageName: string; binName?: string; args?: string }
+  | WorkbenchNodeScriptTarget
+  | WorkbenchNodePackageBinTarget
+  | { kind: 'inspect-process'; process: WorkbenchPackageManagerTarget }
   | { kind: 'inspect-command'; command: string }
 
 export interface WorkbenchDebuggerStartRequest {

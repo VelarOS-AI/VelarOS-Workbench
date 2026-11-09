@@ -20,8 +20,10 @@ import {
 
 import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
-import type { WorkbenchRunSessionLaunchOptions } from './workbenchCommandLines'
-import { isWorkbenchWindowsHost, quoteWorkbenchShellArgument } from './workbenchShellQuote'
+import {
+  describeWorkbenchProcessTarget,
+  type WorkbenchRunSessionLaunchOptions,
+} from './workbenchCommandLines'
 
 type WorkbenchRunSessionDebugTarget = Extract<
   WorkbenchDebuggerLaunchTarget,
@@ -195,20 +197,19 @@ function relativeToDirectory(path: string, directory: string): string {
 }
 
 /**
- * 这份配置跑起来执行的命令行：命令型就是它的命令；Node 程序是 `node <脚本> <参数>`，脚本写成相对工作目录的
- * 路径（命令是在工作目录里跑的）。
+ * 这份配置显示的命令行：命令型就是用户原文；Node 程序的脚本显示成相对工作目录的路径。
+ * Node 的真实脚本与 raw args 由 launch 单独交给主进程，不执行这段显示文本。
  */
 export function buildWorkbenchRunConfigurationCommand(
-  configuration: WorkbenchNamedRunConfiguration,
-  windows: boolean = isWorkbenchWindowsHost()
+  configuration: WorkbenchNamedRunConfiguration
 ): string {
   if (configuration.type !== 'node') return configuration.command
 
-  const script = quoteWorkbenchShellArgument(
-    relativeToDirectory(configuration.script, configuration.cwd),
-    windows
-  )
-  return configuration.args ? `node ${script} ${configuration.args}` : `node ${script}`
+  return describeWorkbenchProcessTarget({
+    kind: 'node-script',
+    script: relativeToDirectory(configuration.script, configuration.cwd),
+    args: configuration.args,
+  })
 }
 
 /** 菜单里名字下面的那行小字：命令，不在项目根跑的再带上目录。 */
@@ -230,13 +231,14 @@ export function buildWorkbenchRunConfigurationLaunch(
   const launch: WorkbenchRunSessionLaunchOptions = { configurationId: configuration.id }
   if (configuration.cwd) launch.cwd = configuration.cwd
   if (Object.keys(configuration.env).length > 0) launch.env = configuration.env
-  if (debug && configuration.type === 'node') {
+  if (configuration.type === 'node') {
     const target: WorkbenchRunSessionDebugTarget = {
       kind: 'node-script',
       script: configuration.script,
+      args: configuration.args,
     }
-    if (configuration.args) target.args = configuration.args
-    launch.debug = { target }
+    if (debug) launch.debug = { target }
+    else launch.process = target
   }
   return launch
 }

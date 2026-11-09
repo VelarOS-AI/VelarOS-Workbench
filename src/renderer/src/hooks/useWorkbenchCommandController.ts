@@ -10,6 +10,7 @@ import {
 import {
   createRunOutputLine,
   formatRunDuration,
+  type WorkbenchRunCommand,
   type WorkbenchRunOutputLine,
   type WorkbenchRunSessionLaunchOptions,
   type WorkbenchTerminalSessionView,
@@ -96,7 +97,9 @@ export function useWorkbenchCommandController({
   const terminalSessionsRef = useLatest(terminalSessions)
   const [runSessions, setRunSessions] = useState<WorkbenchTerminalSessionView[]>([])
   const [activeRunSessionId, setActiveRunSessionId] = useState<Nullable<string>>(null)
-  const [lastLaunchedCommand, setLastLaunchedCommand] = useState('')
+  const [lastLaunchedRun, setLastLaunchedRun] = useState<
+    Nullable<WorkbenchRunCommand & { projectId: string }>
+  >(null)
   const runSessionsRef = useLatest(runSessions)
   const activeProjectRef = useLatest(activeProject)
   const resourceOwnerRef = useRef<Nullable<WorkbenchCommandResourceOwner>>(null)
@@ -397,7 +400,7 @@ export function useWorkbenchCommandController({
     return Result.unwrap(
       await workbenchHost.kernel.project.startWorkbenchTerminalSession({
         projectRoot: project.rootPath,
-        initialCommand: command,
+        ...(launch?.process ? { initialProcess: launch.process } : { initialCommand: command }),
         cwd: launch?.cwd,
         env: launch?.env,
       })
@@ -445,7 +448,7 @@ export function useWorkbenchCommandController({
     async (
       commandInput: string,
       label?: string,
-      launch?: WorkbenchRunSessionLaunchOptions
+      launchInput?: WorkbenchRunSessionLaunchOptions
     ): Promise<string | null> => {
       const project = activeProjectRef.current
       const owner = resourceOwnerRef.current
@@ -461,7 +464,9 @@ export function useWorkbenchCommandController({
 
       // 记住最近一次运行的命令：侧边栏 ▶ 默认指向它，并进入右键切换列表。运行配置起的不算——同一条命令换了
       // 目录、变量就是另一回事，它们在菜单里有自己的一行。调试也不算：▶ 是运行。
-      if (!launch?.configurationId && !launch?.debug) setLastLaunchedCommand(command)
+      const launch = launchInput ? structuredClone(launchInput) : undefined
+      if (!launch?.configurationId && !launch?.debug)
+        setLastLaunchedRun({ projectId: project.id, command, label, launch })
 
       try {
         return await startRunSessionForProject(project, command, label?.trim() || command, launch)
@@ -590,7 +595,7 @@ export function useWorkbenchCommandController({
         isRunningCommand,
         hasActiveRunCommand: isPresent(activeRunId),
         isValidationStale,
-        lastLaunchedCommand,
+        lastLaunchedRun: lastLaunchedRun?.projectId === activeProjectId ? lastLaunchedRun : null,
       },
       terminal: {
         terminalSessions,

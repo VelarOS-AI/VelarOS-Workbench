@@ -38,6 +38,8 @@ interface WorkbenchAppParts {
 interface WorkbenchAppPartsDependencies {
   /** 删除时把条目移到系统废纸篓：应用里是 Electron 的 `shell.trashItem`，测试换成假的。 */
   moveToTrash: WorkbenchMoveToTrash
+  /** 与 Git、Agent 共用的登录环境；终端与 CLI 解析在同一份快照上工作。 */
+  loginEnvironment?: () => Promise<NodeJS.ProcessEnv>
   /**
    * 内容搜索 worker（跑用户正则的地方，见 ContentSearchWorkerHost）：默认起构建产物里的
    * `workbench-search-worker.js`；测试从源码起 worker，也可以把判定卡住的时限调短。
@@ -62,7 +64,7 @@ function createWorkbenchAppParts(
 
   const files = new FileOperations(paths, entries, gitNewFileTracker, localHistoryStore, deleteUndo)
   const openSearchSession = createWorkbenchContentSearchSessionOpener(dependencies.searchWorker)
-  const terminal = new TerminalSessions(paths, commandHelper)
+  const terminal = new TerminalSessions(paths, commandHelper, undefined, dependencies.loginEnvironment)
 
   return {
     files,

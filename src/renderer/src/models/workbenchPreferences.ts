@@ -11,6 +11,11 @@ import {
 
 import { createLocalStorageJsonStore, type StorageLike } from '../support/localStorageJsonStore'
 
+import {
+  readWorkbenchGeneratedRunLaunch,
+  type WorkbenchRunSessionLaunchOptions,
+} from './commands/workbenchCommandLines'
+
 const log = Log.tag('workbench-preferences')
 
 export type WorkbenchThemeId = 'light-modern' | 'dark-modern' | 'warm-paper' | 'midnight-blue'
@@ -120,12 +125,14 @@ export const DEFAULT_WORKBENCH_PROJECT_GIT_SETTINGS: WorkbenchProjectGitSettings
 }
 
 /**
- * ▶ 在某个项目里指着什么：用户建的一份运行配置（`configurationId`），或者手动写的一条命令（`command`）。
+ * ▶ 在某个项目里指着什么：用户建的一份运行配置（`configurationId`）、手写命令，或带真实 launch 的生成项。
  * 两个都为空则回退到包管理器自动探测；两个都有时以运行配置为准（它已经不在了就看命令）。
  */
 export interface WorkbenchProjectRunSettings {
   command: string
   configurationId: string
+  /** 选择程序生成项时保存真实目标；旧的字符串项仍是用户 shell 原文。 */
+  launch?: WorkbenchRunSessionLaunchOptions
 }
 
 export const DEFAULT_WORKBENCH_PROJECT_RUN_SETTINGS: WorkbenchProjectRunSettings = {
@@ -467,10 +474,16 @@ export function saveWorkbenchProjectGitSettings(
 export function normalizeWorkbenchProjectRunSettings(
   settings: Partial<WorkbenchProjectRunSettings> | undefined
 ): WorkbenchProjectRunSettings {
-  return {
-    command: isString(settings?.command) ? settings.command.trim() : '',
+  const command = isString(settings?.command) ? settings.command.trim() : ''
+  const launch = settings?.launch === undefined
+    ? undefined
+    : readWorkbenchGeneratedRunLaunch(settings.launch)
+  const normalized: WorkbenchProjectRunSettings = {
+    command: launch === null ? '' : command,
     configurationId: isString(settings?.configurationId) ? settings.configurationId.trim() : '',
   }
+  if (command && launch) normalized.launch = launch
+  return normalized
 }
 
 const workbenchProjectRunSettingsStore = createLocalStorageJsonStore<

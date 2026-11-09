@@ -4,7 +4,9 @@ import { readFile } from 'node:fs/promises'
 import { describe, test } from 'bun:test'
 
 import { findLastRunningWorkbenchRunSession } from '../src/renderer/src/hooks/useWorkbenchTopRunControl'
+import { workbenchRunCommandKey } from '../src/renderer/src/models/commands/workbenchCommandLines'
 import { buildPackageScriptCommandSuggestions } from '../src/renderer/src/models/commands/workbenchCommandSuggestions'
+import { buildWorkbenchPackageScriptRunCommand } from '../src/renderer/src/models/commands/workbenchPackageScriptCommand'
 import { buildWorkbenchRunConfigurations } from '../src/renderer/src/models/commands/workbenchRunConfigurations'
 
 void describe('Workbench run button menu', () => {
@@ -32,6 +34,28 @@ void describe('Workbench run button menu', () => {
       buildWorkbenchRunConfigurations({ suggestions, history: [], limit: 1 }).length,
       1
     )
+  })
+
+  void test('retains literal generated targets through menus and distinguishes shell text', () => {
+    const name = 'task "quoted" 100% $(echo marker) `literal`'
+    const suggestions = buildPackageScriptCommandSuggestions(JSON.stringify({ scripts: { [name]: 'echo ok' } }), 'npm')
+    const generated = suggestions[0]!
+    const configurations = buildWorkbenchRunConfigurations({
+      suggestions,
+      history: [{ command: generated.command, lastRunAt: 1, lastSuccess: true, durationMs: 0, exitCode: 0 }],
+    })
+    assert.equal(configurations.length, 2)
+    assert.deepEqual(configurations.find((configuration) => configuration.source === 'package.json')?.launch?.process, { kind: 'package-manager', program: 'npm', argv: ['run', name] })
+    assert.notEqual(workbenchRunCommandKey(generated.command, generated.launch), workbenchRunCommandKey(generated.command))
+    const nested = buildWorkbenchPackageScriptRunCommand({ packageJsonPath: 'packages/a $quoted/package.json', packageManager: 'pnpm', scriptName: name })
+    assert.deepEqual(nested.launch, { cwd: 'packages/a $quoted', process: { kind: 'package-manager', program: 'pnpm', argv: ['run', name] } })
+    const sessions = [
+      { id: 'generated', command: generated.command, launch: generated.launch, isRunning: true },
+      { id: 'shell', command: generated.command, isRunning: true },
+    ]
+    assert.equal(findLastRunningWorkbenchRunSession(generated.command, sessions)?.id, 'shell')
+    assert.equal(findLastRunningWorkbenchRunSession(generated.command, sessions, undefined, false, generated.launch)?.id, 'generated')
+    assert.equal(findLastRunningWorkbenchRunSession(generated.command, sessions, undefined, false, { ...generated.launch, cwd: 'another-package' }), undefined)
   })
 
   void test('detects the latest still-running session for the selected command only', () => {

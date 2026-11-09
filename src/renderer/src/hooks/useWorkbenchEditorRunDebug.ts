@@ -11,7 +11,6 @@ import { type WorkbenchHostRuntime } from '../host/WorkbenchHost'
 import { useWorkbenchI18n } from '../i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchRunSessionLaunchOptions } from '../models/commands/workbenchCommandLines'
 import { launchWorkbenchRunSession } from '../models/commands/workbenchRunSessionBridge'
-import { isWorkbenchWindowsHost } from '../models/commands/workbenchShellQuote'
 import {
   buildWorkbenchTestDebugTarget,
   buildWorkbenchTestRunCommand,
@@ -205,15 +204,14 @@ function useWorkbenchTestRunExtension({
         project: { ...detection, runner },
         filePath: path,
         pattern: target.pattern,
-        windows: isWorkbenchWindowsHost(),
       }
       const name = target.title || fileNameOf(path)
-      const options: WorkbenchRunSessionLaunchOptions = {}
-      if (detection.packageDir) options.cwd = detection.packageDir
+      const command = buildWorkbenchTestRunCommand(test)
+      const options: WorkbenchRunSessionLaunchOptions = { ...command.launch }
       if (debug) options.debug = { target: buildWorkbenchTestDebugTarget(test) }
       void launchWorkbenchRunSession(
         // 调试时这条命令只是卡片上写的那一行：真正执行的由调试器带着检查器去起。
-        buildWorkbenchTestRunCommand(test),
+        command.command,
         debug ? t('workbench.debuggerRunCardTitle', { name }) : name,
         options
       ).then((sessionId) => {

@@ -1,3 +1,5 @@
+import { buildWorkbenchProcessRunCommand, type WorkbenchRunCommand } from './workbenchCommandLines'
+
 export type PackageManagerCommand = 'bun' | 'npm' | 'pnpm' | 'yarn'
 
 interface WorkbenchPackageFileLike {
@@ -26,14 +28,6 @@ export function getWorkbenchPackageJsonDirectory(path: string): string {
   return slashIndex >= 0 ? normalized.slice(0, slashIndex) : '.'
 }
 
-export function quoteWorkbenchShellPath(path: string): string {
-  return /^[\w./:-]+$/.test(path) ? path : `'${path.replace(/'/g, `'\\''`)}'`
-}
-
-export function formatWorkbenchPackageScriptName(scriptName: string): string {
-  return /^[\w:-]+$/.test(scriptName) ? scriptName : JSON.stringify(scriptName)
-}
-
 export function buildWorkbenchPackageScriptRunCommand({
   packageJsonPath,
   packageManager,
@@ -42,12 +36,12 @@ export function buildWorkbenchPackageScriptRunCommand({
   packageJsonPath: string
   packageManager: PackageManagerCommand
   scriptName: string
-}): string {
-  const runCommand = `${packageManager} run ${formatWorkbenchPackageScriptName(scriptName)}`
+}): WorkbenchRunCommand {
   const directory = getWorkbenchPackageJsonDirectory(packageJsonPath)
-  return directory === '.'
-    ? runCommand
-    : `cd ${quoteWorkbenchShellPath(directory)} && ${runCommand}`
+  return buildWorkbenchProcessRunCommand(
+    { kind: 'package-manager', program: packageManager, argv: ['run', scriptName] },
+    directory === '.' ? {} : { cwd: directory }
+  )
 }
 
 export function inferWorkbenchPackageManagerForPackageJsonPath(

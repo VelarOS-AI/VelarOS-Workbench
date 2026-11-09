@@ -1071,11 +1071,43 @@ export interface WorkbenchRunCommandOutputEvent {
   signal?: LooseOptional<string>
 }
 
+/** 生成参数逐项传递；用户填写的 Node 参数仍是完整 shell 原文，两种含义必须明确区分。 */
+export type WorkbenchNodeArguments =
+  | { argv: string[]; args?: never }
+  | { args: string; argv?: never }
+
+export type WorkbenchNodeScriptTarget = {
+  kind: 'node-script'
+  /** 相对项目根的脚本路径；工作目录另由请求声明。 */
+  script: string
+} & WorkbenchNodeArguments
+
+export type WorkbenchNodePackageBinTarget = {
+  kind: 'node-package-bin'
+  packageName: string
+  binName?: string
+} & WorkbenchNodeArguments
+
+export interface WorkbenchPackageManagerTarget {
+  kind: 'package-manager'
+  /** 保留实际选择的入口，包括 bunx/npx；argv 显式包含 run/exec 及安装策略参数。 */
+  program: 'bun' | 'bunx' | 'npm' | 'npx' | 'pnpm' | 'yarn'
+  argv: string[]
+}
+
+export type WorkbenchProcessTarget =
+  | WorkbenchNodeScriptTarget
+  | WorkbenchNodePackageBinTarget
+  | WorkbenchPackageManagerTarget
+  | { kind: 'python-script'; script: string; argv: string[] }
+
 export interface WorkbenchTerminalStartRequest {
   projectRoot: string
   cwd?: string
   /** 以一次性 shell 进程执行的命令（运行卡用，例如 `bun run dev`）；命令退出即关闭会话。 */
   initialCommand?: string
+  /** 明确的程序目标；与 initialCommand 互斥。生成参数不经过 shell 字符串重建。 */
+  initialProcess?: WorkbenchProcessTarget
   /**
    * 额外的环境变量（运行配置里写的）：盖在终端环境之上，同名的以这里为准。名字与值的规则见
    * `workbenchRunEnvironment.ts`；不合规的整份请求按无效处理。
