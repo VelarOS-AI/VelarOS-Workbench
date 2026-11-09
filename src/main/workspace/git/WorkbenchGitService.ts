@@ -72,6 +72,7 @@ import {
   workbenchMainTextIn,
 } from '../../i18n/workbenchMainMessages'
 import { getRelativePathInsideRoot, toPortableRelativePath } from '../PathContainmentHelper'
+import { listWorkbenchProcessTree, signalWorkbenchProcesses } from '../terminal/WorkbenchProcessTree'
 import { decodeWorkbenchTextContent, encodeWorkbenchText } from '../TextCodec'
 
 import type {
@@ -1890,14 +1891,17 @@ export class WorkbenchGitService {
     const readStopReason = stoppable
       ? this.watchGitProcess(subprocess, ownProcessGroup, options)
       : null
-    const result = await subprocess
+    const result = await subprocess.catch(async (error: unknown) => {
+      await readStopReason?.()
+      throw error
+    })
+    const stopped = (await readStopReason?.()) ?? null
     const output: GitRunResult = {
       stdout: result.stdout,
       stderr: result.stderr,
       failed: result.failed,
       truncated: result.isMaxBuffer,
     }
-    const stopped = readStopReason?.() ?? null
     if (stopped === 'cancelled') throw this.cancelledError(args)
     if (stopped === 'inactive')
       throw new AppError(
@@ -1930,14 +1934,18 @@ export class WorkbenchGitService {
     subprocess: StoppableGitProcess,
     ownProcessGroup: boolean,
     options: Pick<GitRunOptions, 'inactivityTimeoutMs' | 'signal'>
-  ): () => Nullable<GitStopReason> {
+  ): () => Promise<Nullable<GitStopReason>> {
     const { inactivityTimeoutMs, signal } = options
     let stopped: Nullable<GitStopReason> = null
     let inactivityTimer: Nullable<ReturnType<typeof setTimeout>> = null
+    let termination: Promise<void> | null = null
+    const terminationErrors: unknown[] = []
     const stop = (reason: GitStopReason): void => {
       if (stopped) return
       stopped = reason
-      this.terminateGitProcess(subprocess, ownProcessGroup)
+      termination = this.terminateGitProcess(subprocess, ownProcessGroup).catch((error: unknown) => {
+        terminationErrors.push(error)
+      })
     }
     const armInactivityTimer = (): void => {
       if (inactivityTimer) clearTimeout(inactivityTimer)
@@ -1954,20 +1962,43 @@ export class WorkbenchGitService {
     if (signal?.aborted) cancel()
     else signal?.addEventListener('abort', cancel, { once: true })
 
-    return () => {
+    return async () => {
       if (inactivityTimer) clearTimeout(inactivityTimer)
       signal?.removeEventListener('abort', cancel)
+      subprocess.stdout?.removeListener('data', armInactivityTimer)
+      subprocess.stderr?.removeListener('data', armInactivityTimer)
+      await termination
+      if (terminationErrors.length > 0)
+        throw new AggregateError(terminationErrors, 'Failed to terminate Git process tree')
       return stopped
     }
   }
 
   /**
    * 结束 git 进程：先 SIGTERM，git 收到会删掉自己的锁文件再退出；它退出了、或者过了 GitTerminateGraceMs
-   * 还没退出，再强杀整个进程组，把 git 起的 ssh 一并带走。
+   * 还没退出，再强杀整个进程组，把 git 起的 ssh 一并带走。Windows 复用系统进程树清理并等待完成。
    */
-  private terminateGitProcess(subprocess: StoppableGitProcess, ownProcessGroup: boolean): void {
+  private async terminateGitProcess(
+    subprocess: StoppableGitProcess,
+    ownProcessGroup: boolean
+  ): Promise<void> {
     const { pid } = subprocess
     if (!pid) return
+    if (process.platform === 'win32') {
+      // Git/SSH 不是 Windows 进程组；根仍活着时取树，等待系统终止它的全部子孙。
+      const tree = await listWorkbenchProcessTree(pid)
+      try {
+        await signalWorkbenchProcesses(tree, 'SIGTERM')
+      } catch (error) {
+        try {
+          subprocess.kill('SIGKILL')
+        } catch (killError) {
+          throw new AggregateError([error, killError], 'Git process tree and root termination failed')
+        }
+        throw error
+      }
+      return
+    }
     const send = (signal: NodeJS.Signals): void => {
       try {
         if (ownProcessGroup) process.kill(-pid, signal)

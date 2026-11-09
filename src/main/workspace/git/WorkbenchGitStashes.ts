@@ -36,12 +36,19 @@ const NameListingMaxBytes = 32 * 1024 * 1024
 /** 挡着取回的文件最多点名这么多个。 */
 const BlockingNamesShown = 5
 const StashDiffArgs = ['diff', '--no-ext-diff', '--no-color', '--no-textconv', '--find-renames']
+const DroppedStashPattern = /^Dropped .+ \(([0-9a-f]{40}|[0-9a-f]{64})\)$/mu
+
+interface StashRecord {
+  stash: WorkspaceGitStash
+  /** 原始 reflog 说明，恢复并发删除的对象时保留。 */
+  subject: string
+}
 
 /**
  * 贮藏（`git stash`）：把没提交的改动收起来、列出来、取回、删掉。
  *
- * - 贮藏凭贮藏提交的对象名认，不凭 `stash@{n}`：每来一条新贮藏，旧的序号都往后挪，界面上列着的序号
- *   转眼就可能指向另一条；动手之前按对象名重新找它此刻的序号。
+ * - 应用始终使用提交对象名；删除前重新定位并核对 reflog 序号。Git CLI 不提供按对象删除的原子比较，
+ *   删除结果若显示外部并发改动了目标，恢复实际删除的对象并报冲突，不重试删除。
  * - 项目是仓库里的子目录时只贮藏项目里的改动（`-- .`）；贮藏列表是整个仓库的。
  * - 取回时 git 不覆盖工作区里没提交的改动，也不覆盖同名的未跟踪文件：那时它什么都不动（或只取回一部分），
  *   把它的说明原样转告。与已提交的内容冲突时文件里留下冲突标记，走合并冲突的那套流程，贮藏不删。
@@ -101,28 +108,54 @@ export class WorkbenchGitStashes {
   ): Promise<SystemWorkspaceGitStashActionResult> {
     const rootPath = await this.git.resolveRoot(workspaceRoot)
     const repository = await this.git.openRepository(rootPath)
-    const stash = await this.requireStash(rootPath, sha)
+    const record = await this.requireStash(rootPath, sha)
+    const { stash } = record
     if (action !== 'drop') {
       await this.assertWorkingTreeSettled(repository)
       await this.assertNothingInTheWay(rootPath, stash)
     }
 
-    const args = ['stash', action, `stash@{${stash.index}}`]
-    const result = await this.git.run(rootPath, args, { allowFailure: true })
     let conflicts: string[] = []
-    if (result.failed) {
-      if (action === 'drop') this.git.fail(args, result)
-      // 取回时与已提交的内容冲突了：文件里留着冲突标记，不当失败，交给合并冲突的流程。
-      conflicts = (await this.git.getStatus(repository)).entries
-        .filter((entry) => isWorkspaceGitConflictEntry(entry))
-        .map((entry) => entry.path)
-      if (conflicts.length === 0)
-        throw new AppError(
-          'VALIDATION',
-          workbenchMainText('git.stashApplyRefused', {
-            output: this.git.readOutput(result).slice(0, RefusalOutputMaxChars),
-          })
-        )
+    if (action === 'drop') {
+      await this.dropByIdentity(rootPath, sha)
+    } else {
+      const result = await this.git.run(rootPath, ['stash', 'apply', sha], { allowFailure: true })
+      if (result.failed) {
+        // 取回时与已提交的内容冲突了：文件里留着冲突标记，不当失败，交给合并冲突的流程。
+        conflicts = (await this.git.getStatus(repository)).entries
+          .filter((entry) => isWorkspaceGitConflictEntry(entry))
+          .map((entry) => entry.path)
+        if (conflicts.length === 0)
+          throw new AppError(
+            'VALIDATION',
+            workbenchMainText('git.stashApplyRefused', {
+              output: this.git.readOutput(result).slice(0, RefusalOutputMaxChars),
+            })
+          )
+      } else if (action === 'pop') {
+        try {
+          await this.dropByIdentity(rootPath, sha)
+        } catch (error) {
+          // 应用已经完成：删除失败时确保目标仍可再次找到，并明确告诉用户不要重复应用。
+          try {
+            if (!(await this.readStashes(rootPath)).some((candidate) => candidate.sha === sha))
+              await this.storeStash(rootPath, sha, record.subject)
+          } catch (restoreError) {
+            throw new AggregateError(
+              [error, restoreError],
+              `Stash ${sha} was applied; retaining it failed`
+            )
+          }
+          throw new AppError(
+            error instanceof AppError ? error.code : 'PLATFORM',
+            workbenchMainText('git.stashPopDeleteChanged', {
+              expected: sha,
+              detail: AppError.getMessage(error),
+            }),
+            error
+          )
+        }
+      }
     }
 
     const stashes = await this.readStashes(rootPath)
@@ -148,7 +181,7 @@ export class WorkbenchGitStashes {
     sha: string,
     pathspecs: readonly string[]
   ): Promise<string> {
-    const stash = await this.requireStash(rootPath, sha)
+    const { stash } = await this.requireStash(rootPath, sha)
     const limit = pathspecs.length > 0 ? ['--', ...pathspecs] : []
     const tracked = (await this.git.run(rootPath, [...StashDiffArgs, `${sha}^1`, sha, ...limit]))
       .stdout
@@ -236,16 +269,78 @@ export class WorkbenchGitStashes {
     )
   }
 
-  /** 按对象名找到这条贮藏此刻的序号；不在了（取回过、删过）就说明白，不去碰别的贮藏。 */
-  private async requireStash(rootPath: string, sha: string): Promise<WorkspaceGitStash> {
-    const stash = ObjectNamePattern.test(sha)
-      ? (await this.readStashes(rootPath)).find((candidate) => candidate.sha === sha)
+  /** 按对象名找到这条贮藏；序号只表示这次读取时的位置。 */
+  private async requireStash(rootPath: string, sha: string): Promise<StashRecord> {
+    const record = ObjectNamePattern.test(sha)
+      ? (await this.readStashRecords(rootPath)).find((candidate) => candidate.stash.sha === sha)
       : undefined
-    if (!stash) throw new AppError('VALIDATION', workbenchMainText('git.stashMissing'))
-    return stash
+    if (!record) throw new AppError('VALIDATION', workbenchMainText('git.stashMissing'))
+    return record
   }
 
   private async readStashes(rootPath: string): Promise<WorkspaceGitStash[]> {
+    return (await this.readStashRecords(rootPath)).map((record) => record.stash)
+  }
+
+  /** 删除前后都核对象；外部进程仍可能在核对与 Git 自己加锁之间改变 reflog。 */
+  private async dropByIdentity(rootPath: string, sha: string): Promise<void> {
+    const records = await this.readStashRecords(rootPath)
+    const current = records.find((record) => record.stash.sha === sha)
+    if (!current) throw new AppError('CONFLICT', workbenchMainText('git.stashMissing'))
+    const selector = `stash@{${current.stash.index}}`
+    const verified = await this.git.run(rootPath, ['rev-parse', '--verify', selector], {
+      allowFailure: true,
+    })
+    if (verified.failed || verified.stdout.trim() !== sha)
+      throw new AppError(
+        'CONFLICT',
+        workbenchMainText('git.stashDeleteUnverified', {
+          expected: sha,
+          output: this.git.readOutput(verified).slice(0, RefusalOutputMaxChars),
+        })
+      )
+
+    const args = ['stash', 'drop', selector]
+    const result = await this.git.run(rootPath, args, { allowFailure: true })
+    if (result.failed) this.git.fail(args, result)
+    const actual = DroppedStashPattern.exec(result.stdout)?.[1]
+    if (actual === sha) return
+    if (!actual)
+      throw new AppError(
+        'CONFLICT',
+        workbenchMainText('git.stashDeleteUnverified', {
+          expected: sha,
+          output: result.stdout.slice(0, RefusalOutputMaxChars),
+        })
+      )
+
+    const conflict = new AppError(
+      'CONFLICT',
+      workbenchMainText('git.stashDeleteChanged', { expected: sha, actual }),
+      new Error(result.stdout)
+    )
+    try {
+      await this.storeStash(
+        rootPath,
+        actual,
+        records.find((record) => record.stash.sha === actual)?.subject
+      )
+    } catch (restoreError) {
+      throw new AggregateError(
+        [new Error(result.stdout), restoreError],
+        `Stash ${actual} was dropped instead of ${sha}; recovery failed`
+      )
+    }
+    throw conflict
+  }
+
+  private async storeStash(rootPath: string, sha: string, subject?: string): Promise<void> {
+    const message =
+      subject ?? (await this.git.run(rootPath, ['show', '-s', '--format=%s', sha])).stdout
+    await this.git.run(rootPath, ['stash', 'store', '--message', message, sha])
+  }
+
+  private async readStashRecords(rootPath: string): Promise<StashRecord[]> {
     const output = (await this.git.run(rootPath, ['stash', 'list', StashListFormat])).stdout
     return output
       .split('\x1e')
@@ -256,13 +351,16 @@ export class WorkbenchGitStashes {
         const [, kind = '', branch = '', message = subject] =
           StashSubjectPattern.exec(subject) ?? []
         return {
-          sha,
-          index,
-          message,
-          autoMessage: kind !== 'On',
-          branch: branch && branch !== NoBranchLabel ? branch : null,
-          createdAt: Number(timestamp) * 1000 || 0,
-          includesUntracked: parents.split(' ').filter(Boolean).length > 2,
+          subject,
+          stash: {
+            sha,
+            index,
+            message,
+            autoMessage: kind !== 'On',
+            branch: branch && branch !== NoBranchLabel ? branch : null,
+            createdAt: Number(timestamp) * 1000 || 0,
+            includesUntracked: parents.split(' ').filter(Boolean).length > 2,
+          },
         }
       })
   }

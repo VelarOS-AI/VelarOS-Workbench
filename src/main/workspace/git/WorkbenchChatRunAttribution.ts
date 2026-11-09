@@ -69,28 +69,6 @@ export interface WorkbenchUserWriteSink {
   recordUserWrites(request: { workspaceRoot: string; paths: readonly string[] }): void
 }
 
-/** 一次写入（Project 内核事务、写文件工具）结果里报告改过的路径（相对项目根）；没有就是空清单。 */
-export function readReportedChangedFiles(result: unknown): string[] {
-  if (!result || typeof result !== 'object') return []
-  const changedFiles = (result as { changedFiles?: unknown }).changedFiles
-  return Array.isArray(changedFiles)
-    ? changedFiles.filter((path): path is string => typeof path === 'string')
-    : []
-}
-
-/** 从工具上下文里取这一轮的上报口；形状不对当作没有。 */
-export function readWorkbenchAgentProjectActivity(
-  toolContext: unknown
-): WorkbenchAgentProjectActivityPort | undefined {
-  if (!toolContext || typeof toolContext !== 'object') return undefined
-  const port = (toolContext as { projectActivity?: unknown }).projectActivity
-  if (!port || typeof port !== 'object') return undefined
-  const candidate = port as Partial<WorkbenchAgentProjectActivityPort>
-  return typeof candidate.beginFileWrite === 'function' && typeof candidate.beginCommand === 'function'
-    ? (port as WorkbenchAgentProjectActivityPort)
-    : undefined
-}
-
 /**
  * 一轮的归属结论。`watcher` 为 `unavailable`：这一轮的文件监听没起来或中途出错。改动时刻照样补判得出来，
  * 只是一个文件先后被两边改过的经过看不全，「混改」只认得出明确报过的那些（见 {@link RunAttributionLedger}）。

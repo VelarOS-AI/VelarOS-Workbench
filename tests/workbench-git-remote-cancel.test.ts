@@ -2,13 +2,14 @@ import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { randomInt } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path, { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 
 import { describe, test } from 'bun:test'
 
+import { signalWorkbenchProcesses } from '../src/main/workspace/terminal/WorkbenchProcessTree'
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 import {
   beginWorkbenchGitRemoteOperation,
@@ -159,6 +160,60 @@ void describe.skipIf(process.platform === 'win32')('Workbench Git remote actions
     })
   })
 })
+
+test.skipIf(process.platform !== 'win32')(
+  'Windows cancellation waits for the fake SSH process and its child to exit',
+  async () => {
+    await withSshRemote(async (root) => {
+      const pidFile = join(root, 'ssh-pids.json')
+      const script = join(root, 'fake-ssh.cjs')
+      await writeFile(
+        script,
+        `const { spawn } = require('node:child_process');
+const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', windowsHide: true });
+require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, child.pid]));
+setInterval(() => {}, 1000);
+`
+      )
+      const quote = (value: string): string =>
+        `'${value.replaceAll('\\', '/').replaceAll("'", "'\\''")}'`
+      const service = createGitService({
+        GIT_SSH_VARIANT: 'ssh',
+        GIT_SSH_COMMAND: `${quote(process.execPath)} ${quote(script)}`,
+      })
+      const running = service.performRemoteAction(root, 'fetch', { operationId: 'windows-cancel' })
+      const settled = assert.rejects(running, isAppError('CANCELLED', /已取消 git fetch/))
+      let pids: number[] = []
+      try {
+        for (let waited = 0; pids.length === 0; waited += 50) {
+          assert.ok(waited < 5_000, 'the fake SSH process did not start')
+          const text = await readFile(pidFile, 'utf8').catch(() => '')
+          if (text) pids = JSON.parse(text) as number[]
+          else await delay(50)
+        }
+        assert.equal(service.cancelRemoteAction('windows-cancel'), true)
+        const timeout = new AbortController()
+        try {
+          await Promise.race([
+            settled,
+            delay(5_000, undefined, { signal: timeout.signal }).then(() => {
+              throw new Error('the cancelled Git process did not finish')
+            }),
+          ])
+        } finally {
+          timeout.abort()
+        }
+        for (const pid of pids)
+          assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' })
+      } finally {
+        service.cancelRemoteAction('windows-cancel')
+        await signalWorkbenchProcesses(pids, 'SIGKILL')
+        await settled
+      }
+    })
+  },
+  20_000
+)
 
 void describe('Workbench Git remote actions: what the interface tracks', () => {
   void test('one running remote action per project, visible to every control and cancellable', () => {

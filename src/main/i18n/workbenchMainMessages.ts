@@ -335,6 +335,12 @@ const zhCN = {
   'git.stashDuringOperation':
     '正在{operation}，现在不能贮藏或取回贮藏：贮藏会把这次{operation}丢掉。请先完成或放弃它。',
   'git.stashMissing': '这条贮藏已经不在了（可能已被取回或删除）。请刷新贮藏列表。',
+  'git.stashDeleteChanged':
+    '删除贮藏时发生并发变化；已恢复实际删除的对象 {actual}，目标 {expected} 未删除。',
+  'git.stashPopDeleteChanged':
+    '目标 {expected} 已应用到工作区，其贮藏仍保留，请勿重复应用。删除未完成：{detail}',
+  'git.stashDeleteUnverified':
+    '贮藏身份发生变化或删除结果无法核实，无法确认目标 {expected} 已删除：{output}',
   'git.stashWouldOverwrite':
     '这条贮藏要改的文件在工作区里还有没提交的改动：{files}。取回不会覆盖它们：请先提交、贮藏或回滚这些改动，再取回。',
   'git.stashUntrackedCollision':
@@ -777,6 +783,12 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
     'This stash contains untracked files that already exist in the working tree: {files}. They will not be overwritten: move or rename those files, then apply the stash again.',
   'git.listEllipsis': ', …',
   'git.stashApplyRefused': 'Git could not apply this stash (it is kept): {output}',
+  'git.stashDeleteChanged':
+    'The stash changed concurrently. Deleted object {actual} was restored; target {expected} was not deleted.',
+  'git.stashPopDeleteChanged':
+    'Target {expected} was applied and its stash is retained. Do not apply it again. Deletion failed: {detail}',
+  'git.stashDeleteUnverified':
+    'The stash identity changed or the deletion could not be verified. Deletion of {expected} is unconfirmed: {output}',
   'git.invalidPath': 'Invalid Git file path.',
   'git.pathOutsideProject': 'The Git file path is outside the project.',
   'git.invalidRef': 'Invalid Git reference name.',

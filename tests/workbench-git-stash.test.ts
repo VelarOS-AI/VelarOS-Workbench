@@ -5,6 +5,8 @@ import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
 
+import type { WorkbenchGitAccess } from '../src/main/workspace/git/WorkbenchGitAccess'
+import { WorkbenchGitStashes } from '../src/main/workspace/git/WorkbenchGitStashes'
 import { parseWorkbenchGitCommitDiff } from '../src/renderer/src/models/git/changesPanel.model'
 
 import {
@@ -192,6 +194,43 @@ void describe('Workbench Git stash', () => {
       const resolved = await service.performFileAction(root, ['tracked.txt'], 'resolve')
       assert.equal(resolved.fileAction.status.conflictedFiles, 0)
       assert.deepEqual((await service.performStashAction(root, stash.sha, 'drop')).stashes, [])
+    })
+  })
+
+  void test('a concurrent stash insertion during pop restores the dropped object and reports the applied target', async () => {
+    await withBaseRepository(async (root) => {
+      const service = createGitService()
+      await writeFile(join(root, 'tracked.txt'), 'target\n')
+      const target = (await service.stash(root, { message: 'target' })).stash
+      await writeFile(join(root, 'other.txt'), 'concurrent\n')
+      const concurrent = (await service.stash(root, { message: 'concurrent' })).stash
+      await git(root, ['stash', 'drop', 'stash@{0}'])
+
+      const { access } = service as unknown as { access: WorkbenchGitAccess }
+      let inserted = false
+      const stashes = new WorkbenchGitStashes({
+        ...access,
+        run: async (rootPath, args, options) => {
+          if (!inserted && args[0] === 'stash' && (args[1] === 'pop' || args[1] === 'drop')) {
+            inserted = true
+            await git(root, ['stash', 'store', '--message', 'On main: concurrent', concurrent.sha])
+          }
+          return access.run(rootPath, args, options)
+        },
+      })
+
+      await assert.rejects(
+        stashes.performAction(root, target.sha, 'pop'),
+        isAppError('CONFLICT', /已应用|applied/u)
+      )
+      assert.equal(await readFile(join(root, 'tracked.txt'), 'utf8'), 'target\n')
+      assert.equal(await readFile(join(root, 'other.txt'), 'utf8'), 'base\n')
+      const retained = (await service.listStashes(root)).stashes
+      assert.deepEqual(
+        new Set(retained.map((stash) => stash.sha)),
+        new Set([target.sha, concurrent.sha])
+      )
+      assert.equal(retained.find((stash) => stash.sha === concurrent.sha)?.message, 'concurrent')
     })
   })
 
