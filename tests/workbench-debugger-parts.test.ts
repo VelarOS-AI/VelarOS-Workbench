@@ -118,11 +118,12 @@ void describe('debugger source maps', () => {
   })
 
   void test('reads a map embedded in the sourceMappingURL comment', () => {
-    const json = JSON.stringify({ version: 3, sources: ['源.ts'], mappings: 'AAAA' })
+    const json = JSON.stringify({ version: 3, sources: ['源🧭.ts'], mappings: 'AAAA' })
     const base64 = Buffer.from(json, 'utf8').toString('base64')
     assert.equal(decodeInlineSourceMap(`data:application/json;base64,${base64}`), json)
     assert.equal(decodeInlineSourceMap(`data:application/json;charset=utf-8;base64,${base64}`), json)
     assert.equal(decodeInlineSourceMap(`data:application/json,${encodeURIComponent(json)}`), json)
+    assert.equal(decodeInlineSourceMap(`data:application/json,${json}`), json)
     // 不是内联的（一个文件路径、一个网址）：由调用方去读。
     assert.equal(decodeInlineSourceMap('main.js.map'), null)
     assert.equal(decodeInlineSourceMap('https://example.test/main.js.map'), null)

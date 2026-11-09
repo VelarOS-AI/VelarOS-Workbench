@@ -33,6 +33,8 @@ const VlqContinuationBit = 32
 const DataUrlPattern = /^data:application\/json[^,]*?(;base64)?,/iu
 /** 地址开头的协议名。至少两个字符：Windows 的盘符（`C:\…`）不是协议。 */
 const UrlSchemePattern = /^[a-z][a-z\d+.-]+:/iu
+/** 文件和内联映射共用解码前的字节上限。 */
+export const MaxWorkbenchSourceMapBytes = 32 * 1024 * 1024
 
 /** 解一行映射里逗号隔开的各段；每段是 1、4 或 5 个相对值（Base64 VLQ）。 */
 function decodeSegmentFields(segment: string): number[] {
@@ -226,9 +228,35 @@ export function decodeInlineSourceMap(sourceMapUrl: string): Nullable<string> {
   const match = DataUrlPattern.exec(sourceMapUrl)
   if (!match) return null
 
-  const payload = sourceMapUrl.slice(match[0].length)
+  const offset = match[0].length
   try {
-    return match[1] ? Buffer.from(payload, 'base64').toString('utf8') : decodeURIComponent(payload)
+    if (match[1]) {
+      if (sourceMapUrl.length - offset > Math.ceil(MaxWorkbenchSourceMapBytes / 3) * 4) return null
+      const payload = sourceMapUrl.slice(offset)
+      if (Buffer.byteLength(payload, 'base64') > MaxWorkbenchSourceMapBytes) return null
+      return Buffer.from(payload, 'base64').toString('utf8')
+    }
+
+    // 百分号三字符只占一个解码字节；直接写在地址里的 Unicode 仍按 UTF-8 字节计。
+    let bytes = 0
+    for (let index = offset; index < sourceMapUrl.length; index += 1) {
+      const code = sourceMapUrl.charCodeAt(index)
+      if (code === 0x25) {
+        bytes += 1
+        index += 2
+      } else if (code < 0x80) bytes += 1
+      else if (code < 0x800) bytes += 2
+      else if (
+        code >= 0xd800 && code <= 0xdbff &&
+        sourceMapUrl.charCodeAt(index + 1) >= 0xdc00 &&
+        sourceMapUrl.charCodeAt(index + 1) <= 0xdfff
+      ) {
+        bytes += 4
+        index += 1
+      } else bytes += 3
+      if (bytes > MaxWorkbenchSourceMapBytes) return null
+    }
+    return decodeURIComponent(sourceMapUrl.slice(offset))
   } catch {
     // arch-guard:silent-catch-ok 编码坏掉的内联映射：按没有映射处理。
     return null

@@ -18,7 +18,7 @@
  *
  * 检查器的事件按到达顺序一件件处理（处理中可以等 source map 读完），界面来的命令也排在同一条队里。
  */
-import { readFile } from 'node:fs/promises'
+import { open } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -54,7 +54,11 @@ import {
   WorkbenchInspectorConnection,
   type WorkbenchInspectorEvent,
 } from './WorkbenchInspectorConnection'
-import { decodeInlineSourceMap, WorkbenchSourceMap } from './WorkbenchSourceMap'
+import {
+  decodeInlineSourceMap,
+  MaxWorkbenchSourceMapBytes,
+  WorkbenchSourceMap,
+} from './WorkbenchSourceMap'
 
 const log = Log.tag('WorkbenchDebugSession')
 const InspectorConnectTimeoutMs = 5_000
@@ -62,8 +66,6 @@ const InspectorConnectTimeoutMs = 5_000
 const MaxVariables = 500
 /** 调用栈最多给这么多帧（失控的递归有上万帧）。 */
 const MaxFrames = 200
-/** 超过这么大的 source map 不读（压缩过的整包产物）：不值得为它卡住启动。 */
-const MaxSourceMapBytes = 32 * 1024 * 1024
 /** Node 自己的内部代码（`node:internal/…`、`node:fs`）：脚本地址以 `node:` 开头。 */
 const NodeInternalScriptPattern = '^node:'
 /** Node 加载模块的那部分内部代码（`require`、`import()` 都从这里过）。 */
@@ -1197,9 +1199,23 @@ async function loadSourceMap(
     const mapPath = sourceMapUrl.startsWith('file://')
       ? fileURLToPath(sourceMapUrl)
       : resolve(directory, decodeURIComponent(sourceMapUrl))
-    const content = await readFile(mapPath)
-    if (content.byteLength > MaxSourceMapBytes) return null
-    return WorkbenchSourceMap.parse(content.toString('utf8'), dirname(mapPath))
+    const file = await open(mapPath, 'r')
+    try {
+      const stats = await file.stat()
+      if (!stats.isFile() || stats.size > MaxWorkbenchSourceMapBytes) return null
+      // 多读一个字节以拒绝读取期间增长的文件；永远不追着增长分配或读完整份文件。
+      const content = Buffer.alloc(stats.size + 1)
+      let length = 0
+      while (length < content.length) {
+        const { bytesRead } = await file.read(content, length, content.length - length, length)
+        if (bytesRead === 0) break
+        length += bytesRead
+      }
+      if (length > stats.size) return null
+      return WorkbenchSourceMap.parse(content.toString('utf8', 0, length), dirname(mapPath))
+    } finally {
+      await file.close()
+    }
   } catch {
     // arch-guard:silent-catch-ok 映射文件不在（只发了 JS 没发 .map）或读不了：按没有映射处理。
     return null
