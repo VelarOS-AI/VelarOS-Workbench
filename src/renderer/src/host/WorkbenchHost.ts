@@ -3,8 +3,6 @@ import { AppError } from '@velaros-ai/velaros/core/error'
 import type { Result } from '@velaros-ai/velaros/core/result'
 
 import {
-  type SystemLocalAttachmentFileWriteRequest,
-  type SystemLocalAttachmentFileWriteResult,
   type SystemOpenPathOptions,
   type SystemOpenPathResult,
   type SystemWorkspaceGitActionRequest,
@@ -277,13 +275,6 @@ export interface WorkbenchProjectKernelPort {
   acknowledgeWorkbenchTerminalOutput(request: WorkbenchTerminalAcknowledgeRequest): void
 }
 
-/** Workbench 使用的 Kernel 会话与附件能力。 */
-export interface WorkbenchSessionKernelPort {
-  writeLocalAttachmentFile(
-    request: SystemLocalAttachmentFileWriteRequest
-  ): Promise<Result<SystemLocalAttachmentFileWriteResult>>
-}
-
 /** Workbench 使用的共享 workspace 与 Git Kernel 能力。 */
 export interface WorkbenchWorkspaceKernelPort {
   openPath(
@@ -387,7 +378,6 @@ export interface WorkbenchWorkspaceKernelPort {
 
 export interface WorkbenchKernelPort {
   project: WorkbenchProjectKernelPort
-  sessions: WorkbenchSessionKernelPort
   workspace: WorkbenchWorkspaceKernelPort
 }
 

@@ -180,29 +180,6 @@ export interface SystemWorkspaceGitActionResult {
   summary: SystemWorkspaceGitSummary
 }
 
-export interface SystemLocalAttachmentFileResult {
-  path: string
-  name: string
-  mediaType: string
-  size: number
-  lastModified: number
-  data: Uint8Array
-}
-
-export interface SystemLocalAttachmentFileWriteRequest {
-  sessionId: string
-  path: string
-  content: string
-  expectedSize?: number
-  expectedLastModified?: number
-}
-
-export interface SystemLocalAttachmentFileWriteResult {
-  path: string
-  size: number
-  lastModified: number
-}
-
 export interface SystemOpenPathOptions {
   editor?: SystemDefaultEditorId
 }

@@ -908,8 +908,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     try {
       const saved = await saveLightEditorTab(tab, {
         saveWorkbenchFile: (request) => workbenchHost.kernel.project.saveWorkbenchFile(request),
-        writeLocalAttachmentFile: (request) =>
-          workbenchHost.kernel.sessions.writeLocalAttachmentFile(request),
       })
       editorNavigation.patchLightTabMetadata(saved)
       translate.messageLatest.current.success({

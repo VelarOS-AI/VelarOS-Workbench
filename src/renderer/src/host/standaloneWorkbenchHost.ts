@@ -26,8 +26,7 @@ import type {
  * 重命名 / hover / 引用 / 签名帮助 / 格式化 / 文档符号 / 文档高亮 / inlay，由 main 的语言服务
  * worker 托管 tsserver）+ Git + 持久终端会话 + 文件监听 + 按需语法。
  *
- * 可选能力也必须返回稳定结果：没有补全建议时返回空结果；会话附件走受项目根
- * 约束的文件 IPC；项目选择和系统打开走 ProjectHub main 端口。
+ * 没有补全建议时返回空结果；项目选择和系统打开走 ProjectHub main 端口。
  */
 
 /** main 侧错误信封 → 产品端口 Result：跨进程边界的一次性升格点（保留 AppError 语义码）。 */
@@ -35,12 +34,6 @@ function toHostResult<T>(envelope: WorkbenchFsCallResult<T>): ResultType<T> {
   return envelope.ok
     ? Result.ok(envelope.value)
     : Result.fail(new AppError(envelope.code ?? 'UNKNOWN', envelope.message))
-}
-
-function invalidSession<T>(): ResultType<T> {
-  return Result.fail(
-    new AppError('VALIDATION', 'The Workbench session is not linked to an active project root.')
-  )
 }
 
 interface WorkspaceFileEntry {
@@ -136,17 +129,6 @@ function isWorkspaceFileEntry(value: unknown): value is WorkspaceFileEntry {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   return typeof record.path === 'string' && (record.type === 'file' || record.type === 'directory')
-}
-
-function projectRootFromSessionId(sessionId: string): string | null {
-  const prefix = 'workbench-chat:'
-  if (!sessionId.startsWith(prefix)) return null
-  try {
-    const root = decodeURIComponent(sessionId.slice(prefix.length)).trim()
-    return root || null
-  } catch {
-    return null
-  }
 }
 
 const standaloneWorkbenchHost: WorkbenchHost = {
@@ -271,27 +253,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       onWorkbenchTerminalOutput: (listener) => window.velarosWorkbenchTerminal.onOutput(listener),
       acknowledgeWorkbenchTerminalOutput: (request) =>
         window.velarosWorkbenchTerminal.acknowledgeOutput(request),
-    },
-    sessions: {
-      writeLocalAttachmentFile: async (request) => {
-        const projectRoot = projectRootFromSessionId(request.sessionId)
-        if (!projectRoot) return invalidSession()
-        const result = toHostResult(
-          await window.velarosWorkbenchFs.saveFile({
-            projectRoot,
-            path: request.path,
-            content: request.content,
-            expectedModifiedAt: request.expectedLastModified,
-            expectedSize: request.expectedSize,
-          })
-        )
-        if (!result.ok) return result
-        return Result.ok({
-          path: result.data.path,
-          size: result.data.size,
-          lastModified: result.data.modifiedAt,
-        })
-      },
     },
     workspace: {
       openPath: async (_sessionId, path, options) => {

@@ -1,10 +1,7 @@
 import { lazy, type ReactElement, Suspense } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchEditorVimHostCommand } from '@renderer/models/editor/workbenchEditorVim'
-import {
-  EMPTY_LIGHT_EDITOR_PROJECT_CONTEXT_INDEX,
-  resolveLightEditorLanguagePath,
-} from '@renderer/models/lightEditorModel'
+import { EMPTY_LIGHT_EDITOR_PROJECT_CONTEXT_INDEX } from '@renderer/models/lightEditorModel'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
@@ -50,18 +47,7 @@ export function WorkbenchLightFilePanel({
       </section>
     )
 
-  // Office 预览按裁决归 desktop 查看器拓展面（WorkbenchOfficeFilePanel 不随迁独立宿主）；
-  // 命中 office 附件时降级为不可编辑提示。
-  if (tab.officePreview)
-    return (
-      <section className={styles.lightEditorPanel}>
-        <div className={styles.officePreviewLoading} role="status">
-          <Text tone="secondary">{t('workbench.previewTruncated')}</Text>
-        </div>
-      </section>
-    )
-
-  const languagePath = resolveLightEditorLanguagePath(tab)
+  const languagePath = tab.path
   const language = fileLanguage(languagePath)
 
   return (

@@ -31,13 +31,6 @@ export interface WorkbenchOpenEditorTab {
   externalChange?: WorkbenchOpenEditorExternalChange
 }
 
-export type WorkbenchOfficePreviewKind = 'docx' | 'pptx' | 'xlsx'
-
-export interface WorkbenchOfficePreview {
-  kind: WorkbenchOfficePreviewKind
-  buffer: ArrayBuffer
-}
-
 export interface WorkbenchLightEditorTab {
   id: string
   projectRoot: string
@@ -52,8 +45,6 @@ export interface WorkbenchLightEditorTab {
   eol?: LooseOptional<WorkbenchTextEol>
   /** 磁盘字节写不回原样：只读。 */
   textIssue?: LooseOptional<WorkbenchTextIssue>
-  sourceLabel?: LooseOptional<string>
-  officePreview?: LooseOptional<WorkbenchOfficePreview>
   imagePreview?: LooseOptional<WorkbenchImagePreview>
 }
 

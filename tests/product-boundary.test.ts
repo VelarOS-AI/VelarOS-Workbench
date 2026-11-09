@@ -2,8 +2,6 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { type SystemLocalAttachmentFileResult } from '@shared/contracts/system'
-
 import { WorkbenchRuntime } from '../src/renderer/src/composition/WorkbenchRuntime'
 import {
   installWorkbenchHost,
@@ -21,11 +19,7 @@ import {
   buildWorkbenchKeymapConflicts,
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
 } from '../src/renderer/src/models/layout/workbenchKeyboardShortcuts'
-import {
-  buildLightEditorTab,
-  resolveOfficePreviewKind,
-  saveLightEditorTab,
-} from '../src/renderer/src/models/lightEditorModel'
+import { saveLightEditorTab } from '../src/renderer/src/models/lightEditorModel'
 import {
   normalizeWorkbenchProjectRootPath,
   readWorkbenchProjects,
@@ -35,12 +29,12 @@ import {
   createLocalStorageJsonStore,
   type StorageLike,
 } from '../src/renderer/src/support/localStorageJsonStore'
+import type { WorkbenchLightEditorTab } from '../src/renderer/src/types/workbenchTypes'
 
 function createHost(marker: string): WorkbenchHost {
   return {
     kernel: {
       project: { marker },
-      sessions: {},
       workspace: {},
     },
   } as unknown as WorkbenchHost
@@ -56,21 +50,6 @@ function createMemoryStorage(): StorageLike {
     setItem: (key, value) => {
       values.set(key, value)
     },
-  }
-}
-
-function createLocalFile(
-  path: string,
-  data: Uint8Array,
-  mediaType = 'application/octet-stream'
-): SystemLocalAttachmentFileResult {
-  return {
-    path,
-    name: path.split('/').at(-1) ?? path,
-    mediaType,
-    size: data.byteLength,
-    lastModified: 123,
-    data,
   }
 }
 
@@ -250,48 +229,24 @@ void describe('Workbench product boundary', () => {
     )
   })
 
-  void test('Office files remain read-only binary previews', async () => {
-    const bytes = Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0, 255])
-    const tab = buildLightEditorTab(createLocalFile('/tmp/sample.pptx', bytes))
-
-    assert.equal(resolveOfficePreviewKind('/tmp/sample.pptx'), 'pptx')
-    assert.equal(tab.content, '')
-    assert.equal(tab.officePreview?.kind, 'pptx')
-
-    let invoked = false
-    await assert.rejects(
-      saveLightEditorTab(tab, {
-        saveWorkbenchFile: async () => {
-          invoked = true
-          throw new Error('unexpected save')
-        },
-        writeLocalAttachmentFile: async () => {
-          invoked = true
-          throw new Error('unexpected save')
-        },
-      }),
-      // 测试环境里读不到界面语言（没有 localStorage、navigator.language），按英文出。
-      /read-only preview cannot be saved as plain text|只读预览不能作为纯文本保存/
-    )
-    assert.equal(invoked, false)
-  })
-
-  void test('image attachments remain read-only binary previews', async () => {
+  void test('project image previews remain read-only', async () => {
     const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    const tab = buildLightEditorTab(createLocalFile('/tmp/sample.png', bytes))
-
-    assert.equal(tab.content, '')
-    assert.equal(tab.imagePreview?.mediaType, 'image/png')
-    assert.deepEqual(tab.imagePreview?.data, bytes)
+    const tab: WorkbenchLightEditorTab = {
+      id: '/project\0sample.png',
+      projectRoot: '/project',
+      path: 'sample.png',
+      content: '',
+      size: bytes.length,
+      modifiedAt: 123,
+      totalLines: 1,
+      truncated: false,
+      imagePreview: { mediaType: 'image/png', data: bytes },
+    }
 
     let invoked = false
     await assert.rejects(
       saveLightEditorTab(tab, {
         saveWorkbenchFile: async () => {
-          invoked = true
-          throw new Error('unexpected save')
-        },
-        writeLocalAttachmentFile: async () => {
           invoked = true
           throw new Error('unexpected save')
         },
