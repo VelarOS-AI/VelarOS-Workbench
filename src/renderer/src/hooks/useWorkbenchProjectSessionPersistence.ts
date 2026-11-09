@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect } from 'react'
 import type { WorkbenchEditorGroupsLayout } from '@renderer/models/editor/workbenchEditorGroups'
 import {
   type PersistedWorkbenchEditorCursor,
@@ -21,7 +21,7 @@ interface UseWorkbenchProjectSessionPersistenceOptions {
   /** 当前文件：光标位置记在它名下。 */
   selectedFilePath: Nullable<string>
   cursorPosition: WorkbenchEditorCursorSnapshot
-  cursorByPathRef?: React.MutableRefObject<Record<string, PersistedWorkbenchEditorCursor>>
+  cursorByPathRef: React.MutableRefObject<Record<string, PersistedWorkbenchEditorCursor>>
 }
 
 export function useWorkbenchProjectSessionPersistence({
@@ -32,24 +32,16 @@ export function useWorkbenchProjectSessionPersistence({
   editorLayout,
   selectedFilePath,
   cursorPosition,
-  cursorByPathRef: externalCursorByPathRef,
+  cursorByPathRef,
 }: UseWorkbenchProjectSessionPersistenceOptions): void {
   const timers = useTimerScope('useWorkbenchProjectSessionPersistence')
-  const internalCursorByPathRef = useRef<Record<string, PersistedWorkbenchEditorCursor>>({})
-  const cursorByPathRef = externalCursorByPathRef ?? internalCursorByPathRef
   const snapshotRef = useLatest({
     enabled,
     projectId,
     expandedPaths,
     selectedEntryPath,
     editorLayout,
-    cursorPosition,
   })
-
-  const expandedPathList = useMemo(
-    () => [...expandedPaths].sort((left, right) => left.localeCompare(right)),
-    [expandedPaths]
-  )
 
   useEffect(() => {
     if (!enabled || !selectedFilePath) return
@@ -58,7 +50,7 @@ export function useWorkbenchProjectSessionPersistence({
       line: cursorPosition.line,
       column: cursorPosition.column,
     }
-  }, [cursorPosition.column, cursorPosition.line, enabled, selectedFilePath])
+  }, [cursorByPathRef, cursorPosition.column, cursorPosition.line, enabled, selectedFilePath])
 
   useEffect(() => {
     if (!enabled || !projectId) return undefined
@@ -83,11 +75,12 @@ export function useWorkbenchProjectSessionPersistence({
       lease.cancel()
     }
   }, [
-    expandedPathList,
+    expandedPaths,
     enabled,
     editorLayout,
     projectId,
     selectedEntryPath,
+    cursorByPathRef,
     cursorPosition.column,
     cursorPosition.line,
     snapshotRef,

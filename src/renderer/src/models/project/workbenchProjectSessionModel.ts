@@ -111,17 +111,9 @@ export function normalizeWorkbenchProjectSession(value: unknown): PersistedWorkb
 export function buildWorkbenchProjectSessionSnapshot(
   snapshot: WorkbenchProjectSessionSnapshot
 ): PersistedWorkbenchProjectSession {
-  const expandedPaths = normalizeStringList(
-    [...snapshot.expandedPaths],
-    MAX_PERSISTED_EXPANDED_PATHS
-  )
-
   return normalizeWorkbenchProjectSession({
-    version: 1,
-    expandedPaths: expandedPaths.length > 0 ? expandedPaths : [ROOT_PATH],
-    selectedEntryPath: snapshot.selectedEntryPath,
-    editorLayout: snapshot.editorLayout,
-    cursorByPath: snapshot.cursorByPath,
+    ...snapshot,
+    expandedPaths: [...snapshot.expandedPaths],
   })
 }
 
@@ -163,28 +155,19 @@ export function readWorkbenchProjectSession(
   return session ?? null
 }
 
-export function saveWorkbenchProjectSession(
-  projectId: string,
-  session: PersistedWorkbenchProjectSession,
-  storage?: StorageLike
-): void {
-  const id = projectId.trim()
-  if (!id) return
-
-  const map = workbenchProjectSessionStore.read(storage)
-  workbenchProjectSessionStore.write(
-    {
-      ...map,
-      [id]: normalizeWorkbenchProjectSession(session),
-    },
-    storage
-  )
-}
-
 export function saveWorkbenchProjectSessionSnapshot(
   projectId: string,
   snapshot: WorkbenchProjectSessionSnapshot,
   storage?: StorageLike
 ): void {
-  saveWorkbenchProjectSession(projectId, buildWorkbenchProjectSessionSnapshot(snapshot), storage)
+  const id = projectId.trim()
+  if (!id) return
+
+  workbenchProjectSessionStore.update(
+    (map) => ({
+      ...map,
+      [id]: buildWorkbenchProjectSessionSnapshot(snapshot),
+    }),
+    storage
+  )
 }

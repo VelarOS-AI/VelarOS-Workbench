@@ -85,9 +85,7 @@ function lineColumnFromOffset(content: string, offset: number): { line: number; 
   }
 }
 
-function extractSymbolsFromOpenFile(
-  file: WorkbenchOpenFileSnapshot
-): WorkbenchProjectContextSymbol[] {
+function extractFileSymbols(file: WorkbenchOpenFileSnapshot): WorkbenchProjectContextSymbol[] {
   const counts = new Map<
     string,
     {
@@ -153,20 +151,10 @@ function extractSymbolsFromOpenFile(
     }))
 }
 
-function uniqueSortedSymbols(
+function sortContextSymbols(
   symbols: WorkbenchProjectContextSymbol[]
 ): WorkbenchProjectContextSymbol[] {
-  const bySymbol = new Map<string, WorkbenchProjectContextSymbol>()
-
-  for (const symbol of symbols) {
-    const key = `${symbol.path}:${symbol.label}`
-    const current = bySymbol.get(key)
-    if (!current || symbol.count >= current.count) {
-      bySymbol.set(key, symbol)
-    }
-  }
-
-  return [...bySymbol.values()]
+  return symbols
     .sort(
       (left, right) =>
         +(right.kind === 'declaration') - +(left.kind === 'declaration') ||
@@ -193,11 +181,13 @@ export function buildWorkbenchProjectContextIndex({
       language: file.language,
     })),
   ]
-  const textFiles = [...indexedFiles, ...openFiles]
+  // 打开的文件以当前编辑正文为准：不能让磁盘旧符号或旧计数盖过草稿。
+  const textFiles = new Map(indexedFiles.map((file) => [file.path, file]))
+  for (const file of openFiles) textFiles.set(file.path, file)
 
   return {
     files: uniqueSortedFiles(fileContexts),
-    symbols: uniqueSortedSymbols(textFiles.flatMap(extractSymbolsFromOpenFile)),
+    symbols: sortContextSymbols([...textFiles.values()].flatMap(extractFileSymbols)),
     loadedDirectoryCount: childrenByPath.size,
     indexedFileCount: indexedFiles.length,
   }

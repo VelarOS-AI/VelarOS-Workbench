@@ -47,9 +47,12 @@ import {
   formatWorkbenchShortcutHint,
   getWorkbenchKeyboardShortcut,
 } from '../src/renderer/src/models/layout/workbenchKeyboardShortcuts'
+import { buildWorkbenchProjectContextIndex } from '../src/renderer/src/models/project/workbenchProjectContextIndex'
 import {
   buildWorkbenchProjectSessionSnapshot,
   normalizeWorkbenchProjectSession,
+  readWorkbenchProjectSession,
+  saveWorkbenchProjectSessionSnapshot,
 } from '../src/renderer/src/models/project/workbenchProjectSessionModel'
 import type { WorkbenchOpenEditorTab } from '../src/renderer/src/types/workbenchTypes'
 
@@ -1050,7 +1053,100 @@ void describe('split editor wiring', () => {
   })
 })
 
+void describe('project context from editor files', () => {
+  void test('open drafts replace disk symbols, positions and counts without dropping other indexed files', () => {
+    const index = buildWorkbenchProjectContextIndex({
+      childrenByPath: new Map(),
+      indexedFiles: [
+        {
+          path: 'src/edited.ts',
+          language: 'TypeScript',
+          content: 'const removedName = 1\nconst sharedName = removedName\nsharedName\nsharedName\n',
+        },
+        {
+          path: 'src/closed.ts',
+          language: 'TypeScript',
+          content: 'export const retainedName = 1\n',
+        },
+      ],
+      openFiles: [
+        {
+          path: 'src/edited.ts',
+          language: 'TypeScript',
+          content: '\n\nconst sharedName = 2\nconst addedName = sharedName\n',
+        },
+      ],
+    })
+
+    assert.equal(index.symbols.some((symbol) => symbol.label === 'removedName'), false)
+    assert.deepEqual(index.symbols.find((symbol) => symbol.label === 'sharedName'), {
+      label: 'sharedName',
+      path: 'src/edited.ts',
+      language: 'TypeScript',
+      count: 3,
+      kind: 'declaration',
+      line: 3,
+      column: 7,
+    })
+    assert.deepEqual(index.symbols.find((symbol) => symbol.label === 'addedName'), {
+      label: 'addedName',
+      path: 'src/edited.ts',
+      language: 'TypeScript',
+      count: 2,
+      kind: 'declaration',
+      line: 4,
+      column: 7,
+    })
+    assert.equal(
+      index.symbols.find((symbol) => symbol.label === 'retainedName')?.path,
+      'src/closed.ts'
+    )
+    assert.equal(index.indexedFileCount, 2)
+  })
+})
+
 void describe('saved editor tab layout', () => {
+  void test('saving one project preserves the other project layout and cursor round-trip', () => {
+    const values = new Map<string, string>()
+    const storage = {
+      getItem: (key: string): string | null => values.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        values.set(key, value)
+      },
+      removeItem: (key: string): void => {
+        values.delete(key)
+      },
+    }
+    const first = {
+      expandedPaths: new Set(['.', 'src']),
+      selectedEntryPath: 'src/b.ts',
+      editorLayout: toRight(pin(open(empty, 'src/a.ts', 'src/b.ts'), 'src/a.ts'), 'src/b.ts'),
+      cursorByPath: { 'src/b.ts': { line: 3, column: 7 } },
+    }
+    const second = {
+      expandedPaths: ['.', 'docs'],
+      selectedEntryPath: 'docs/README.md',
+      editorLayout: preview(open(empty, 'other.ts'), 'docs/README.md'),
+      cursorByPath: { 'docs/README.md': { line: 8, column: 2 } },
+    }
+
+    saveWorkbenchProjectSessionSnapshot('project-a', first, storage)
+    saveWorkbenchProjectSessionSnapshot('project-b', second, storage)
+    assert.deepEqual(readWorkbenchProjectSession('project-a', storage), {
+      ...first,
+      version: 1,
+      expandedPaths: ['.', 'src'],
+    })
+    saveWorkbenchProjectSessionSnapshot('project-a', {
+      ...first,
+      cursorByPath: { 'src/b.ts': { line: 9, column: 4 } },
+    }, storage)
+    assert.deepEqual(readWorkbenchProjectSession('project-a', storage)?.cursorByPath, {
+      'src/b.ts': { line: 9, column: 4 },
+    })
+    assert.deepEqual(readWorkbenchProjectSession('project-b', storage), { ...second, version: 1 })
+  })
+
   void test('a saved layout round-trips through the project session', () => {
     const layout = preview(pin(open(empty, 'a', 'b', 'c', 'b'), 'c'), 'd')
     const session = buildWorkbenchProjectSessionSnapshot({
