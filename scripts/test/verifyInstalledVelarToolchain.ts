@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -9,6 +8,8 @@ import { ExternalLspProcessHost } from '../../src/main/workspace/language/Extern
 import { WorkbenchLanguageServices } from '../../src/main/workspace/language/LanguageServices'
 import { VelarWorkbenchLanguageService } from '../../src/shared/contributions/velar/service'
 import { registerWorkbenchLanguageService } from '../../src/shared/workbenchLanguageServices'
+
+import { InstalledToolchainSession } from './InstalledToolchainSession'
 
 const languagePathResolver = {
   async resolveProjectRoot(input: string): Promise<string> {
@@ -125,8 +126,21 @@ for (const package_ of manifest.packages) {
 
 const temporary = await mkdtemp(join(tmpdir(), 'workbench-velar-installed-'))
 const projectRoot = join(temporary, 'app')
+const session = new InstalledToolchainSession(temporary)
+const run = session.run.bind(session)
 let removeService: (() => void) | null = null
 let services: WorkbenchLanguageServices | null = null
+let failed = false
+let failure: unknown
+const onInterrupt = (signal: NodeJS.Signals): void => {
+  session.abort(new Error(`Installed toolchain acceptance interrupted by ${signal}`))
+  // dispose 幂等；最终清理仍 await 同一结果并报告失败，不能只在信号回调里丢掉错误。
+  void services?.dispose().catch(() => {})
+}
+const onSigint = (): void => onInterrupt('SIGINT')
+const onSigterm = (): void => onInterrupt('SIGTERM')
+process.on('SIGINT', onSigint)
+process.on('SIGTERM', onSigterm)
 try {
   await writeFile(join(temporary, 'package.json'), '{"private":true}\n', 'utf8')
   await runNpm([
@@ -322,6 +336,7 @@ try {
     'dist',
     'cli.js'
   )
+  session.signal.throwIfAborted()
   removeService = registerWorkbenchLanguageService({
     ...VelarWorkbenchLanguageService,
     packageName: undefined,
@@ -339,8 +354,8 @@ try {
   assert.equal(resolved.service?.runtime, 'lsp-server')
 
   const diagnostics = await services.getDiagnostics({ projectRoot, path: 'src/main.vel', content: source })
-  assert.ok(diagnostics.diagnostics.some((item) => item.code?.startsWith('VEL4')))
-  assert.ok(!diagnostics.diagnostics.some((item) => item.code?.startsWith('VEL2')))
+  assert.ok(diagnostics.diagnostics.some((item) => typeof item.code === 'string' && item.code.startsWith('VEL4')))
+  assert.ok(!diagnostics.diagnostics.some((item) => typeof item.code === 'string' && item.code.startsWith('VEL2')))
   assert.ok(!diagnostics.diagnostics.some((item) => item.code === 'VEL5029'))
   const semanticTokens = await services.getSemanticTokens({
     projectRoot,
@@ -1114,9 +1129,8 @@ try {
   })
   assert.match(limitHover.hover?.displayText ?? '', /number/u)
 
-  // Desktop remains one VelarScript source
-  // graph. Workbench must resolve its compiler/host extension through the same
-  // project-local LSP path instead of treating it as an Electron integration.
+  // Desktop remains one VelarScript source graph, served by the installed CLI.
+  // The explicit Node launch here does not exercise project-local bin discovery.
   const desktopProjectRoot = join(projectRoot, 'desktop-app')
   await mkdir(join(desktopProjectRoot, 'src'), { recursive: true })
   await writeFile(join(desktopProjectRoot, 'package.json'), JSON.stringify({
@@ -1214,32 +1228,25 @@ try {
     assert.equal(typeof smokeReport.runtime, 'string')
     assert.equal((smokeReport.runtime as string).endsWith('/Contents/MacOS/node'), true)
   }
-  process.stdout.write('Workbench installed Velar toolchain acceptance passed\n')
+} catch (error) {
+  failed = true
+  failure = error
 } finally {
-  await services?.dispose()
-  removeService?.()
-  await rm(temporary, { recursive: true, force: true })
+  try {
+    await session.finish({
+      failed,
+      failure,
+      disposeLanguageServices: async () => { await services?.dispose() },
+      unregister: () => removeService?.(),
+    })
+  } finally {
+    process.off('SIGINT', onSigint)
+    process.off('SIGTERM', onSigterm)
+  }
 }
+process.stdout.write('Workbench installed Velar toolchain acceptance passed\n')
 
 async function runNpm(arguments_: readonly string[], cwd: string): Promise<void> {
   await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', arguments_, cwd)
 }
 
-async function run(
-  command: string,
-  arguments_: readonly string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv = process.env
-): Promise<{ stdout: string; stderr: string }> {
-  const child = spawn(command, arguments_, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8') })
-  child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8') })
-  const code = await new Promise<number | null>((resolvePromise, reject) => {
-    child.once('error', reject)
-    child.once('exit', resolvePromise)
-  })
-  if (code !== 0) throw new Error(`${command} ${arguments_.join(' ')} failed (${code})\n${stdout}\n${stderr}`)
-  return { stdout, stderr }
-}
