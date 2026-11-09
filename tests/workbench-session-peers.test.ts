@@ -8,10 +8,10 @@ import { test } from 'bun:test'
 import type { SessionAnswer } from '@velaros-ai/capabilities/sessions/contracts'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
+import type { WorkbenchConversationDispatcherApi } from '../src/main/conversation/WorkbenchConversationDispatcher'
 import type {
   WorkbenchConversationRef,
   WorkbenchConversationRunOutcome,
-  WorkbenchConversationRuntimeApi,
 } from '../src/main/conversation/WorkbenchConversationRuntime'
 import { WorkbenchSessionPeers } from '../src/main/conversation/WorkbenchSessionPeers'
 import type { WorkbenchConversationSendRequest } from '../src/shared/workbenchConversation'
@@ -50,7 +50,7 @@ async function fixture(
     for (const listener of settled) listener(request)
   }
   const runtime: Pick<
-    WorkbenchConversationRuntimeApi,
+    WorkbenchConversationDispatcherApi,
     'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit' | 'guidance'
   > = {
     isRunning: (ref) => running.has(ref.sessionId),
@@ -66,11 +66,21 @@ async function fixture(
         outcomes.delete(listener)
       }
     },
-    submit: (_sink, request) => {
-      assert(!running.has(request.sessionId))
-      sent.push(request)
-      running.add(request.sessionId)
-      return { accepted: Promise.resolve(), completed: Promise.resolve() }
+    submit: (sink, request, signal = new AbortController().signal) => {
+      const accepted = (async () => {
+        assert(!running.has(request.sessionId))
+        const prepared = typeof sink === 'function' ? await sink(signal) : undefined
+        let started = false
+        try {
+          signal.throwIfAborted()
+          sent.push(request)
+          running.add(request.sessionId)
+          started = true
+        } finally {
+          await prepared?.finish({ started, reason: signal.reason })
+        }
+      })()
+      return { accepted, completed: accepted }
     },
     guidance: (ref, input) => {
       if (!running.has(ref.sessionId))
@@ -85,7 +95,10 @@ async function fixture(
     prepare: async (task) => {
       prepared.push(task)
       if (task.newSession) members.push({ sessionId: task.sessionId, title: null })
-      return { notice: () => undefined, state: () => undefined }
+      return {
+        sink: { notice: () => undefined, state: () => undefined },
+        finish: async () => {},
+      }
     },
     prepareGuidance: async (task, signal) => {
       guidancePreparations.push(task)

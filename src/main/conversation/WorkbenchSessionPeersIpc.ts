@@ -14,8 +14,12 @@ import {
 } from '../../shared/workbenchSessionPeers'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
 
-import { createWindowSink, type WorkbenchConversationWindows } from './WorkbenchConversationIpc'
-import type { WorkbenchConversationRuntimeApi } from './WorkbenchConversationRuntime'
+import type { WorkbenchConversationDispatcherApi } from './WorkbenchConversationDispatcher'
+import {
+  prepareWindowConversation,
+  type WorkbenchConversationWindows,
+} from './WorkbenchConversationIpc'
+import type { WorkbenchConversationRecovery } from './WorkbenchConversationRecovery'
 import { WorkbenchSessionPeers } from './WorkbenchSessionPeers'
 
 const Ref = z.object({
@@ -25,7 +29,8 @@ const Ref = z.object({
 
 /** 目录和投递回执归项目窗口持有；窗口关闭、重载、切项目时撤销未交接的工作。 */
 export function registerWorkbenchSessionPeersIpc(options: {
-  runtime: WorkbenchConversationRuntimeApi
+  runtime: WorkbenchConversationDispatcherApi
+  recovery: WorkbenchConversationRecovery
   windows: WorkbenchConversationWindows
 }): { peers: WorkbenchSessionPeers; releaseProject(root: string): void; dispose(): void } {
   const catalogs = new Map<string, { sender: WebContents; members: WorkbenchPeerMember[] }>()
@@ -82,7 +87,15 @@ export function registerWorkbenchSessionPeersIpc(options: {
       return catalog && owns(catalog.sender, ref.projectRoot) ? catalog.members : []
     },
     prepare: async (task, signal) =>
-      createWindowSink(await preparePeer(task, signal, 'prepare'), task),
+      prepareWindowConversation({
+        sender: await preparePeer(task, signal, 'prepare'),
+        ref: task,
+        inputId: task.inputId,
+        goalMode: false,
+        signal,
+        recovery: options.recovery,
+        runtime: options.runtime,
+      }),
     prepareGuidance: async (task, signal) => {
       await preparePeer(task, signal, 'prepare-guidance')
     },

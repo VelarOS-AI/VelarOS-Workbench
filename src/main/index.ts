@@ -32,6 +32,7 @@ import { registerWorkbenchAgentProcessesIpc } from './conversation/WorkbenchAgen
 import { createWorkbenchConversationConfiguration } from './conversation/WorkbenchConversationConfiguration'
 import { createWorkbenchConversationDispatcher } from './conversation/WorkbenchConversationDispatcher'
 import { registerWorkbenchConversationIpc } from './conversation/WorkbenchConversationIpc'
+import { WorkbenchConversationRecovery } from './conversation/WorkbenchConversationRecovery'
 import { createWorkbenchConversationRuntime } from './conversation/WorkbenchConversationRuntime'
 import { registerWorkbenchMemoryIpc } from './conversation/WorkbenchMemoryIpc'
 import { WorkbenchMemoryService } from './conversation/WorkbenchMemoryService'
@@ -399,9 +400,13 @@ if (hasSingleInstanceLock)
       activity: (ref) => providers.chatRunAttribution.activityFor(ref),
       projectFilesEdited: (ref, paths) => syncAgentEdits(ref.projectRoot, paths),
     })
+    const conversationRecovery = new WorkbenchConversationRecovery(
+      join(providers.parts.storagePaths.getChatHistoryBackupsDir(), 'events')
+    )
     const conversationRuntime = createWorkbenchConversationDispatcher(
       platformConversationRuntime,
-      engineConversationRuntime
+      engineConversationRuntime,
+      conversationRecovery
     )
     registerWorkbenchTerminalIpc(providers.parts.terminal)
     const disposeDebugIpc = registerWorkbenchDebugIpc(providers.parts.debug)
@@ -434,11 +439,13 @@ if (hasSingleInstanceLock)
       },
     })
     const sessionPeers = registerWorkbenchSessionPeersIpc({
-      runtime: platformConversationRuntime,
+      runtime: conversationRuntime,
+      recovery: conversationRecovery,
       windows: windowManager,
     })
     const disposeConversationIpc = registerWorkbenchConversationIpc({
       runtime: conversationRuntime,
+      recovery: conversationRecovery,
       windows: windowManager,
       backupDir: () => providers.parts.storagePaths.getChatHistoryBackupsDir(),
       analytics: productAnalytics,

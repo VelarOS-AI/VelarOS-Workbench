@@ -34,11 +34,15 @@ import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchProjectHub } from '../projects/ProjectHub'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
 
-import type { WorkbenchConversationDispatcherApi } from './WorkbenchConversationDispatcher'
-import { WorkbenchConversationRecovery } from './WorkbenchConversationRecovery'
+import type {
+  WorkbenchConversationDispatcherApi,
+  WorkbenchPreparedConversation,
+} from './WorkbenchConversationDispatcher'
+import type { WorkbenchConversationRecovery } from './WorkbenchConversationRecovery'
 import { goalArtifact } from './WorkbenchConversationRules'
 import type {
   WorkbenchConversationRef,
+  WorkbenchConversationRuntimeApi,
   WorkbenchConversationSink,
 } from './WorkbenchConversationRuntime'
 
@@ -72,6 +76,7 @@ interface WorkbenchConversationAnalytics {
 
 interface WorkbenchConversationIpcOptions {
   runtime: WorkbenchConversationDispatcherApi
+  recovery: WorkbenchConversationRecovery
   windows: WorkbenchConversationWindows
   /** 聊天历史落盘备份的目录。 */
   backupDir(): string
@@ -86,9 +91,7 @@ interface WorkbenchConversationIpcOptions {
 export function registerWorkbenchConversationIpc(
   options: WorkbenchConversationIpcOptions
 ): () => void {
-  const { runtime } = options
-  const recovery = new WorkbenchConversationRecovery(join(options.backupDir(), 'events'))
-  const admissions = new Set<string>()
+  const { runtime, recovery } = options
   /** 已经挂了销毁监听的窗口：窗口没了，它发起的运行跟着停。 */
   const watchedSenders = new WeakSet<WebContents>()
   const runsBySender = new Map<number, Map<string, WorkbenchConversationRef>>()
@@ -182,61 +185,37 @@ export function registerWorkbenchConversationIpc(
     callWithEnvelope(async () => {
       const request = parseSendRequest(raw)
       const ref = ownedRef(event, request)
-      const admissionKey = `${ref.projectRoot}\0${ref.sessionId}`
-      if (runtime.isRunning(ref) || admissions.has(admissionKey))
-        throw new AppError('CONFLICT', '会话仍在运行')
-      admissions.add(admissionKey)
-      try {
-        const journalRun = await recovery.begin(
-          ref,
-          request.inputId,
-          request.executionModes?.includes('goal') ?? false
-        )
-        const executionId = `${ref.sessionId}:${request.inputId}`
-        let journalFailed = false
-        const sink = withAnalytics(
-          createWindowSink(event.sender, ref, (item, deliver) => {
-            if (journalFailed) return
-            void recovery
-              .append(journalRun, item)
-              .then(deliver)
-              .catch((error: unknown) => {
-                if (journalFailed) return
-                journalFailed = true
-                deliver({
-                  ...ref,
-                  event: {
-                    type: 'state',
-                    payload: {
-                      kind: 'error',
-                      message: '会话记录保存失败，执行已停止。请检查磁盘空间后重试。',
-                    },
-                  },
-                })
-                log.warn('会话事件持久化失败', { error: AppError.getMessage(error) })
-                void runtime
-                  .cancel(ref)
-                  .catch((reason: unknown) => log.warn('停止恢复失败的会话失败', { reason }))
-              })
-          }),
-          options.analytics,
-          executionId,
-          ref.projectRoot
-        )
-        const { accepted, completed } = runtime.submit(sink, { ...request, ...ref })
-        options.analytics?.recordRunStarted({
-          executionId,
-          sessionId: ref.sessionId,
-          projectRoot: ref.projectRoot,
-          modelSelection: request.engine
-            ? { provider: request.engine.id, model: request.engine.model ?? '' }
-            : { provider: request.model.provider, model: request.model.model },
-        })
-        trackRun(event.sender, ref, completed)
-        await accepted
-      } finally {
-        admissions.delete(admissionKey)
-      }
+      const executionId = `${ref.sessionId}:${request.inputId}`
+      const { accepted, completed } = runtime.submit(
+        async (signal) => {
+          const prepared = await prepareWindowConversation({
+            sender: event.sender,
+            ref,
+            inputId: request.inputId,
+            goalMode: request.executionModes.includes('goal'),
+            signal,
+            recovery,
+            runtime,
+            analytics: options.analytics,
+          })
+          try {
+            options.analytics?.recordRunStarted({
+              executionId,
+              sessionId: ref.sessionId,
+              projectRoot: ref.projectRoot,
+              modelSelection: request.engine
+                ? { provider: request.engine.id, model: request.engine.model ?? '' }
+                : { provider: request.model.provider, model: request.model.model },
+            })
+          } catch (error) {
+            log.debug('产品改进数据记录失败', { error: AppError.getMessage(error) })
+          }
+          return prepared
+        },
+        { ...request, ...ref }
+      )
+      trackRun(event.sender, ref, completed)
+      await accepted
     })
   )
   ipcMain.handle(WorkbenchConversationChannels.cancel, (event, raw: unknown) =>
@@ -281,7 +260,6 @@ export function registerWorkbenchConversationIpc(
     callWithEnvelope(async () => {
       const ref = ownedRef(event, parseSessionRequest(raw))
       await runtime.deleteSession(ref)
-      await recovery.remove(ref)
     })
   )
   ipcMain.handle(WorkbenchConversationChannels.backupHistory, (_event, raw: unknown) =>
@@ -309,6 +287,70 @@ export function registerWorkbenchConversationIpc(
       WorkbenchConversationChannels.engines,
     ])
       ipcMain.removeHandler(channel)
+  }
+}
+
+/** 普通发送与会话协作共用真实持久流，完整 envelope 写盘后才交付给窗口。 */
+export async function prepareWindowConversation(options: {
+  sender: WebContents
+  ref: WorkbenchConversationRef
+  inputId: string
+  goalMode: boolean
+  signal: AbortSignal
+  recovery: WorkbenchConversationRecovery
+  runtime: Pick<WorkbenchConversationRuntimeApi, 'cancel'>
+  analytics?: WorkbenchConversationAnalytics
+}): Promise<WorkbenchPreparedConversation> {
+  const { sender, inputId, goalMode, signal, recovery, runtime } = options
+  signal.throwIfAborted()
+  const ref = { projectRoot: options.ref.projectRoot, sessionId: options.ref.sessionId }
+  const run = await recovery.begin(ref, inputId, goalMode)
+  let journalFailed = false
+  let journalFailure: unknown
+  let pending = Promise.resolve()
+  const sink = withAnalytics(
+    createWindowSink(sender, ref, (item, deliver) => {
+      if (journalFailed) return
+      // Recovery 自己按会话排队；最后一条回执也等待前面的失败收束。
+      pending = recovery
+        .append(run, item)
+        .then(deliver)
+        .catch((error: unknown) => {
+          if (journalFailed) return
+          journalFailed = true
+          journalFailure = error
+          deliver({
+            ...ref,
+            event: {
+              type: 'state',
+              payload: {
+                kind: 'error',
+                message: '会话记录保存失败，执行已停止。请检查磁盘空间后重试。',
+              },
+            },
+          })
+          log.warn('会话事件持久化失败', { error: AppError.getMessage(error) })
+          void runtime
+            .cancel(ref)
+            .catch((reason: unknown) => log.warn('停止恢复失败的会话失败', { reason }))
+        })
+    }),
+    options.analytics,
+    `${ref.sessionId}:${inputId}`,
+    ref.projectRoot
+  )
+  return {
+    sink,
+    finish: async ({ started, reason }) => {
+      if (!started)
+        sink.state(
+          signal.aborted
+            ? { kind: 'aborted', message: workbenchMainText('conversation.runStopped') }
+            : { kind: 'error', message: AppError.getMessage(reason) }
+        )
+      await pending
+      if (journalFailed) throw journalFailure
+    },
   }
 }
 

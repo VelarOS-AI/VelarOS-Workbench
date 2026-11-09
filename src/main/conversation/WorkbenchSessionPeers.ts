@@ -17,19 +17,19 @@ import type { WorkbenchConversationSendRequest } from '../../shared/workbenchCon
 import type { WorkbenchPeerMember, WorkbenchPeerTask } from '../../shared/workbenchSessionPeers'
 
 import type {
-  WorkbenchConversationRef,
-  WorkbenchConversationRuntimeApi,
-  WorkbenchConversationSink,
-} from './WorkbenchConversationRuntime'
+  WorkbenchConversationDispatcherApi,
+  WorkbenchPreparedConversation,
+} from './WorkbenchConversationDispatcher'
+import type { WorkbenchConversationRef } from './WorkbenchConversationRuntime'
 
 interface WorkbenchSessionPeersOptions {
   runtime: Pick<
-    WorkbenchConversationRuntimeApi,
+    WorkbenchConversationDispatcherApi,
     'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit' | 'guidance'
   >
   catalog(ref: WorkbenchConversationRef): readonly WorkbenchPeerMember[]
   /** 界面先建消息与运行卡，再由运行时发送；受理回执前不向调用方声称已送达。 */
-  prepare(task: WorkbenchPeerTask, signal: AbortSignal): Promise<WorkbenchConversationSink>
+  prepare(task: WorkbenchPeerTask, signal: AbortSignal): Promise<WorkbenchPreparedConversation>
   /** 只准备目标活动运行里的可见引导，不创建运行或检查点。 */
   prepareGuidance(task: WorkbenchPeerTask, signal: AbortSignal): Promise<void>
   /** 运行时已接纳引导；通知失败不能撤销该次投递。 */
@@ -210,16 +210,18 @@ export class WorkbenchSessionPeers {
       const configuration = this.requests.get(id) ?? this.requests.get(key(from))
       if (!configuration) throw new AppError('UNAVAILABLE', '会话执行配置暂不可用。')
       try {
-        const sink = await this.options.prepare(task, signal)
-        signal.throwIfAborted()
-        const submission = this.options.runtime.submit(sink, {
-          ...configuration,
-          ...task,
-          text: task.text,
-          engine: undefined,
-          images: undefined,
-          executionModes: [],
-        })
+        const submission = this.options.runtime.submit(
+          (preparationSignal) => this.options.prepare(task, preparationSignal),
+          {
+            ...configuration,
+            ...task,
+            text: task.text,
+            engine: undefined,
+            images: undefined,
+            executionModes: [],
+          },
+          signal
+        )
         await submission.accepted
       } catch (error) {
         this.options.cancelPreparation(task, AppError.getMessage(error))

@@ -6,10 +6,12 @@ import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, test } from 'bun:test'
 
 import { createWorkbenchConversationDispatcher } from '../src/main/conversation/WorkbenchConversationDispatcher'
+import { WorkbenchConversationRecovery } from '../src/main/conversation/WorkbenchConversationRecovery'
 import type {
   WorkbenchConversationRuntimeApi,
   WorkbenchConversationSink,
 } from '../src/main/conversation/WorkbenchConversationRuntime'
+import { WorkbenchSessionPeers } from '../src/main/conversation/WorkbenchSessionPeers'
 import { ClaudeCodeEngine } from '../src/main/engines/ClaudeCodeEngine'
 import { CodexEngine } from '../src/main/engines/CodexEngine'
 import { WorkbenchEngineConversationRuntime } from '../src/main/engines/WorkbenchEngineConversationRuntime'
@@ -683,6 +685,210 @@ test('an already cancelled engine wait rejects even when its work has completed'
 })
 
 describe('conversation dispatcher', () => {
+  test('deleting during peer preparation joins duplicate deletes and drains the cancelled journal', async () => {
+    const recovery = new WorkbenchConversationRecovery(join(rig.root, 'dispatcher-events'))
+    const target = ref()
+    await rig.sessions.set('codex', target, 'old-thread')
+    const preparing = gate()
+    const releasePreparation = gate()
+    const finishing = gate()
+    const releaseFinish = gate()
+    const completeRun = gate()
+    let starts = 0
+    let cancelledRuns = 0
+    let platformDeletes = 0
+    let settled = 0
+    let preparationsCancelled = 0
+    const platform = {
+      isRunning: () => false,
+      subscribeRunOutcome: () => () => {},
+      submit: () => {
+        starts += 1
+        return { accepted: Promise.resolve(), completed: completeRun.promise }
+      },
+      cancel: async () => {
+        cancelledRuns += 1
+        completeRun.release()
+        return { aborted: true }
+      },
+      deleteSession: async () => {
+        platformDeletes += 1
+      },
+      close: async () => {},
+    } as unknown as WorkbenchConversationRuntimeApi
+    const dispatcher = createWorkbenchConversationDispatcher(platform, rig.runtime, recovery)
+    dispatcher.subscribeRunSettled(() => {
+      settled += 1
+      assert.equal(dispatcher.isRunning(target), false)
+    })
+    const sink = record().sink
+    const source = { ...target, sessionId: 'source-chat' }
+    const peers = new WorkbenchSessionPeers({
+      runtime: dispatcher,
+      catalog: () => [
+        { sessionId: source.sessionId, title: 'source' },
+        { sessionId: target.sessionId, title: 'target' },
+      ],
+      prepare: async (task, signal) => {
+        const run = await recovery.begin(target, task.inputId, false)
+        preparing.release()
+        await releasePreparation.promise
+        return {
+          sink,
+          finish: async ({ started }) => {
+            assert.equal(started, false)
+            assert.equal(signal.aborted, true)
+            const event = await recovery.append(run, {
+              type: 'state',
+              payload: { kind: 'aborted', message: 'cancelled before execution' },
+            })
+            assert.equal(event.streamId, run.id)
+            assert.equal(event.sequence, 1)
+            assert.equal(typeof event.emittedAt, 'number')
+            finishing.release()
+            await releaseFinish.promise
+          },
+        }
+      },
+      prepareGuidance: async () => {},
+      acceptGuidance: () => {},
+      cancelPreparation: () => {
+        preparationsCancelled += 1
+      },
+    })
+    const answer = peers
+      .forSession({ ...request('codex', 'hi', 'never-ask'), ...source })
+      .ask({ to: target.sessionId, task: 'hi' }, new AbortController().signal)
+    void answer.catch(() => undefined)
+    await preparing.promise
+    assert.equal(dispatcher.isRunning(target), true)
+    const deletion = dispatcher.deleteSession(target)
+    assert.equal(dispatcher.deleteSession(target), deletion)
+    const cancellation = dispatcher.cancel(target)
+    let deleted = false
+    let cancelled = false
+    void deletion.then(() => {
+      deleted = true
+    })
+    void cancellation.then(() => {
+      cancelled = true
+    })
+    assert.throws(() => dispatcher.submit(sink, { ...request('codex', 'hi', 'never-ask'), ...target }))
+    releasePreparation.release()
+    await finishing.promise
+    assert.equal(deleted, false)
+    assert.equal(cancelled, false)
+    assert.equal(settled, 0)
+    assert.equal(dispatcher.isRunning(target), true)
+    assert.equal(platformDeletes, 0)
+    releaseFinish.release()
+    await Promise.all([deletion, cancellation])
+    await assert.rejects(answer)
+    assert.equal(starts, 0)
+    assert.equal(platformDeletes, 1)
+    assert.equal(await rig.sessions.get('codex', target), null)
+    assert.equal(await recovery.read(target, {}, false), null)
+    assert.equal(settled, 1)
+    assert.equal(preparationsCancelled, 1)
+    const caller = new AbortController()
+    const next = dispatcher.submit(
+      sink,
+      {
+        ...request('codex', 'new input', 'never-ask'),
+        ...target,
+        engine: undefined,
+      },
+      caller.signal
+    )
+    await next.accepted
+    caller.abort()
+    assert.equal(cancelledRuns, 0)
+    assert.equal(dispatcher.isRunning(target), true)
+    completeRun.release()
+    await next.completed
+    assert.equal(starts, 1)
+    peers.close()
+    await dispatcher.close()
+  })
+
+  test('a failed backend delete waits for the other backend and journal before deletion and close reject', async () => {
+    const recovery = new WorkbenchConversationRecovery(join(rig.root, 'dispatcher-events'))
+    const target = ref()
+    await recovery.begin(target, 'previous-input', false)
+    const deletingEngine = gate()
+    const releaseEngine = gate()
+    const removingJournal = gate()
+    const releaseJournal = gate()
+    const failure = new Error('Platform deletion failed')
+    let engineDeletes = 0
+    let platformDeletes = 0
+    let removes = 0
+    let closes = 0
+    const platform = {
+      deleteSession: async () => {
+        platformDeletes += 1
+        throw failure
+      },
+      close: async () => {
+        closes += 1
+      },
+    } as unknown as WorkbenchConversationRuntimeApi
+    const engines = {
+      deleteSession: async () => {
+        engineDeletes += 1
+        deletingEngine.release()
+        await releaseEngine.promise
+      },
+      close: async () => {
+        closes += 1
+      },
+    } as unknown as WorkbenchEngineConversationRuntime
+    const dispatcher = createWorkbenchConversationDispatcher(platform, engines, {
+      remove: async (ref) => {
+        removes += 1
+        removingJournal.release()
+        await releaseJournal.promise
+        await recovery.remove(ref)
+      },
+    })
+    const deletion = dispatcher.deleteSession(target)
+    await deletingEngine.promise
+    const closing = dispatcher.close()
+    assert.equal(dispatcher.close(), closing)
+    assert.equal(dispatcher.deleteSession(target), deletion)
+    let deleted = false
+    let closed = false
+    void deletion.catch(() => {
+      deleted = true
+    })
+    void closing.catch(() => {
+      closed = true
+    })
+    await assert.rejects(dispatcher.deleteSession({ ...target, sessionId: 'new-chat' }))
+    assert.throws(() =>
+      dispatcher.submit(record().sink, {
+        ...request('codex', 'hi', 'never-ask'),
+        ...target,
+      })
+    )
+    assert.equal(platformDeletes, 1)
+    assert.equal(removes, 0)
+    assert.equal(deleted, false)
+    assert.equal(closed, false)
+    releaseEngine.release()
+    await removingJournal.promise
+    assert.equal(deleted, false)
+    assert.equal(closed, false)
+    releaseJournal.release()
+    await assert.rejects(deletion, (error) => error === failure)
+    await assert.rejects(closing, (error) => error === failure)
+    assert.equal(engineDeletes, 1)
+    assert.equal(platformDeletes, 1)
+    assert.equal(removes, 1)
+    assert.equal(closes, 2)
+    assert.equal(await recovery.read(target, {}, false), null)
+  })
+
   test('engine requests go to the engine runtime, the rest to Platform; answers follow the running side', async () => {
     const calls: string[] = []
     let engineRunning = false
@@ -716,16 +922,23 @@ describe('conversation dispatcher', () => {
       close: async () => void calls.push('engines.close'),
       status: async () => [],
     } as unknown as WorkbenchEngineConversationRuntime
-    const dispatcher = createWorkbenchConversationDispatcher(platform, engines)
+    const dispatcher = createWorkbenchConversationDispatcher(
+      platform,
+      engines,
+      new WorkbenchConversationRecovery(join(rig.root, 'dispatcher-events'))
+    )
     const sink = record().sink
     const target = { projectRoot: '/work/app', sessionId: 'chat-1' }
 
-    dispatcher.submit(sink, { ...request('claude-code', 'hi', 'never-ask'), ...target })
-    dispatcher.submit(sink, {
+    await dispatcher.submit(sink, {
+      ...request('claude-code', 'hi', 'never-ask'),
+      ...target,
+    }).completed
+    await dispatcher.submit(sink, {
       ...request('codex', 'hi', 'never-ask'),
       ...target,
       engine: undefined,
-    })
+    }).completed
     await dispatcher.answer(target, 'card-1', { approved: true })
     engineRunning = true
     await dispatcher.answer(target, 'card-1', { approved: true })
@@ -752,3 +965,11 @@ describe('conversation dispatcher', () => {
     ])
   })
 })
+
+function gate(): { promise: Promise<void>; release(): void } {
+  let release!: () => void
+  const promise = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
+}
