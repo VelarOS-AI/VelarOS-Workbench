@@ -1286,6 +1286,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const fileOwnerTokenRef = useRef<Nullable<object>>(null)
     const renameActionRef = useRef<Nullable<WorkbenchRenameAction>>(null)
     const formatRequestRef = useRef<Nullable<object>>(null)
+    const referenceSelectionRequestRef = useRef<Nullable<object>>(null)
     /** 视图里正在显示的文件（项目 + 路径）；没有路径时为 null。 */
     const activeFileKeyRef = useRef<Nullable<string>>(null)
     const instanceExtensionsRef = useRef<Nullable<WorkbenchEditorInstanceExtensions>>(null)
@@ -1358,6 +1359,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         fileOwnerTokenRef.current = null
         renameActionRef.current = null
         formatRequestRef.current = null
+        referenceSelectionRequestRef.current = null
       }
     }, [path, projectRoot])
 
@@ -2257,19 +2259,30 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const identifier = word ?? getCurrentIdentifier()
       if (!view || !identifier) return
 
+      const owner = captureFileOwner(view)
+      if (!owner) return
+      const sourceDocument = view.state.doc
+      const requestToken = {}
+      referenceSelectionRequestRef.current = requestToken
       const references = await findWorkbenchLanguageServiceReferences({
         view,
         context: {
-          projectRoot,
-          path,
+          projectRoot: owner.projectRoot,
+          path: owner.path,
           language,
           getOpenTabs: () => openTabsLatest.current,
           hostRuntime,
         },
         position: identifier.from,
       })
+      if (
+        referenceSelectionRequestRef.current !== requestToken ||
+        !isCurrentFileOwner(owner) ||
+        view.state.doc !== sourceDocument
+      ) return
+      referenceSelectionRequestRef.current = null
       const currentFileReferences = references.filter(
-        (location) => location.path === pathRef.current && location.range
+        (location) => location.path === owner.path && location.range
       )
 
       if (!isEmpty(currentFileReferences)) {
@@ -2292,7 +2305,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }
       }
 
-      if (!usesWorkbenchSemanticLanguageService(pathRef.current)) selectAllOccurrences(word)
+      if (!usesWorkbenchSemanticLanguageService(owner.path)) selectAllOccurrences(identifier)
     }
 
     const formatDocument = async (): Promise<void> => {
@@ -2584,6 +2597,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }
 
         if (update.selectionSet || update.docChanged) {
+          referenceSelectionRequestRef.current = null
           emitCursorPosition(update.view, callbacksRef.current.onCursorPositionChange)
         }
       })
