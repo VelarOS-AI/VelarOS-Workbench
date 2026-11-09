@@ -107,6 +107,13 @@ describe('indentation detection', () => {
     expect(detectWorkbenchIndentation('')).toBeNull()
   })
 
+  test('ignores whitespace-only lines and preserves the surrounding indentation', () => {
+    expect(detectWorkbenchIndentation('    \nx\n')).toBeNull()
+    expect(
+      detectWorkbenchIndentation(['root {', '\t ', '  child', '        ', '\t', '}'].join('\n'))
+    ).toEqual({ style: 'space', size: 2 })
+  })
+
   test('uses .editorconfig first, then the detected style, then the language default', () => {
     const detected = { style: 'space', size: 4 } as const
     expect(resolveWorkbenchIndentation({ path: 'a.ts', detected, editorConfig: null })).toEqual({

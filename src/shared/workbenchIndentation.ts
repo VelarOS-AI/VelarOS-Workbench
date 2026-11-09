@@ -32,7 +32,7 @@ export function detectWorkbenchIndentation(content: string): Nullable<WorkbenchD
     const text = content.slice(lineStart, lineEnd)
     lineStart = lineEnd + 1
     const indent = /^[ \t]*/u.exec(text)![0]
-    if (indent.length === text.trimEnd().length) {
+    if (text.trimEnd().length === 0) {
       if (newline < 0) break
       continue
     }
