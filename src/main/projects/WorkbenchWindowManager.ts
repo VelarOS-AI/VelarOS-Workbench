@@ -1,5 +1,4 @@
 import { existsSync, statSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { type BaseWindow, BrowserWindow, type WebContents } from 'electron'
@@ -303,8 +302,8 @@ export class WorkbenchWindowManager {
       timeout: 120_000,
     })
     if (result.failed) {
-      await rm(projectPath, { recursive: true, force: true }).catch(() => undefined)
       console.error('[workbench-app] failed to clone project', {
+        projectPath,
         exitCode: result.exitCode,
         timedOut: result.timedOut,
       })

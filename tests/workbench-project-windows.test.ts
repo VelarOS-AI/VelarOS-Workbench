@@ -12,9 +12,30 @@ import { AppError } from '@velaros-ai/velaros/core/error'
 import { WorkbenchProjectHub } from '../src/main/projects/ProjectHub'
 import { RecentProjectsStore } from '../src/main/projects/RecentProjectsStore'
 
+type CloneGit = (
+  file: string,
+  args: string[],
+  options: { timeout: number; reject: boolean; env: NodeJS.ProcessEnv }
+) => Promise<{ failed: boolean; exitCode: number; timedOut: boolean }>
+
+let cloneParent: string | undefined
+let cloneGit: CloneGit | undefined
+
 mock.module('electron', () => ({
   BrowserWindow: { getFocusedWindow: () => null },
-  dialog: {},
+  dialog: {
+    showOpenDialog: async () => {
+      assert.ok(cloneParent, 'Only a clone fixture may select its destination')
+      return { canceled: false, filePaths: [cloneParent] }
+    },
+  },
+}))
+
+mock.module('execa', () => ({
+  execa: (file: string, args: string[], options: Parameters<CloneGit>[2]) => {
+    assert.ok(cloneGit, 'Unexpected Git invocation outside the clone fixture')
+    return cloneGit(file, args, options)
+  },
 }))
 
 class ProjectWindow extends EventEmitter {
@@ -50,6 +71,76 @@ async function projectTransitionFixture(
 }
 
 void describe('Workbench project window ownership', () => {
+  void test('failed clones preserve a concurrently created destination and partial clone files without opening a window', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-clone-failure-'))
+    const activeRoot = join(dataRoot, 'active')
+    const foreignRoot = join(dataRoot, 'foreign-project')
+    const partialRoot = join(dataRoot, 'partial-project')
+    const gitStarted = Promise.withResolvers<void>()
+    const gitFailure = Promise.withResolvers<{ failed: boolean; exitCode: number; timedOut: boolean }>()
+    const failure = { failed: true, exitCode: 128, timedOut: false }
+    let pendingClone: Promise<unknown> | undefined
+    try {
+      await mkdir(activeRoot)
+      const { WorkbenchWindowManager } = await import('../src/main/projects/WorkbenchWindowManager')
+      let createdWindows = 0
+      const manager = new WorkbenchWindowManager(dataRoot, {
+        createBrowserWindow: () => {
+          createdWindows += 1
+          return new ProjectWindow() as unknown as BrowserWindow
+        },
+      })
+      const window = manager.createWindow(activeRoot) as unknown as ProjectWindow
+      const sender = window.webContents as unknown as WebContents
+      cloneParent = dataRoot
+      cloneGit = async (file, args, options) => {
+        assert.equal(file, 'git')
+        assert.deepEqual(args, ['clone', '--', 'https://example.test/foreign-project.git', foreignRoot])
+        assert.equal(options.timeout, 120_000)
+        assert.equal(options.reject, false)
+        assert.equal(options.env.GIT_TERMINAL_PROMPT, '0')
+        gitStarted.resolve()
+        return gitFailure.promise
+      }
+
+      const cloning = manager.cloneProjectInNewWindow(sender, 'https://example.test/foreign-project.git')
+      pendingClone = cloning
+      await Promise.race([
+        gitStarted.promise,
+        cloning.then(() => { throw new Error('Clone finished before entering the Git boundary') }),
+      ])
+      // The real preflight has completed. Another actor now owns this real directory.
+      await mkdir(foreignRoot)
+      await writeFile(join(foreignRoot, 'foreign.txt'), 'created by another actor')
+      gitFailure.resolve(failure)
+      assert.deepEqual(await cloning, { ok: false, reason: 'clone-failed' })
+      assert.equal(await readFile(join(foreignRoot, 'foreign.txt'), 'utf8'), 'created by another actor')
+      assert.equal(createdWindows, 1)
+
+      cloneGit = async (file, args) => {
+        assert.equal(file, 'git')
+        assert.deepEqual(args, ['clone', '--', 'https://example.test/partial-project.git', partialRoot])
+        await mkdir(join(partialRoot, '.git'), { recursive: true })
+        await writeFile(join(partialRoot, '.git', 'partial'), 'partial clone evidence')
+        return failure
+      }
+      const partialClone = manager.cloneProjectInNewWindow(sender, 'https://example.test/partial-project.git')
+      pendingClone = partialClone
+      assert.deepEqual(await partialClone, { ok: false, reason: 'clone-failed' })
+      assert.equal(await readFile(join(partialRoot, '.git', 'partial'), 'utf8'), 'partial clone evidence')
+      assert.equal(createdWindows, 1)
+      assert.deepEqual(manager.getOpenProjectPaths(), [activeRoot])
+    } finally {
+      gitFailure.resolve(failure)
+      try { await pendingClone }
+      finally {
+        cloneGit = undefined
+        cloneParent = undefined
+        await rm(dataRoot, { recursive: true, force: true })
+      }
+    }
+  })
+
   void test('project transitions release each actual project before publishing the next root', async () => {
     const firstRelease = Promise.withResolvers<void>()
     const secondRelease = Promise.withResolvers<void>()
