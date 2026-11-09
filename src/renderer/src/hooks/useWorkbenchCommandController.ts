@@ -447,17 +447,18 @@ export function useWorkbenchCommandController({
     const project = activeProjectRef.current
     if (!session?.command || !project) return
 
-    // 等旧进程真的退出（让出端口、释放文件）再起新的，否则新进程一起来就撞上「端口已被占用」。
-    await workbenchHost.kernel.project.stopWorkbenchTerminalSession({
-      sessionId,
-      waitForExit: true,
-    })
-    discardWorkbenchTerminalOutput(sessionId)
-
     const command = session.command
     const label = session.title
     const launch = session.launch
     try {
+      // 停止失败时保留旧卡和输出；只有真实退出成功才启动新进程。
+      Result.unwrap(
+        await workbenchHost.kernel.project.stopWorkbenchTerminalSession({
+          sessionId,
+          waitForExit: true,
+        })
+      )
+      discardWorkbenchTerminalOutput(sessionId)
       const result = await startRunSessionProcess(project, command, launch)
       const fresh: WorkbenchTerminalSessionView = {
         id: result.sessionId,

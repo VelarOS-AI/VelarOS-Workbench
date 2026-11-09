@@ -16,6 +16,7 @@ import type { WorkbenchProject } from '@renderer/models/project/workbenchProject
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, Log } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { useLatest, useMemoizedFn, useTimerScope } from '../support/genericHooks'
 
@@ -162,17 +163,18 @@ export function useWorkbenchEditorAutosave({
       if (exitFlushedTabKeysRef.current.has(flushKey)) {
         continue
       }
-      exitFlushedTabKeysRef.current.add(flushKey)
-
       try {
-        workbenchHost.kernel.project.saveWorkbenchFileSync({
-          projectRoot: project.rootPath,
-          path: tab.path,
-          content: tab.content,
-          ...resolveWorkbenchTabTextFormat(tab),
-          expectedModifiedAt: tab.file.modifiedAt,
-          expectedSize: tab.file.size,
-        })
+        Result.unwrap(
+          workbenchHost.kernel.project.saveWorkbenchFileSync({
+            projectRoot: project.rootPath,
+            path: tab.path,
+            content: tab.content,
+            ...resolveWorkbenchTabTextFormat(tab),
+            expectedModifiedAt: tab.file.modifiedAt,
+            expectedSize: tab.file.size,
+          })
+        )
+        exitFlushedTabKeysRef.current.add(flushKey)
       } catch (error) {
         log.warn('页面卸载前同步保存标签失败', {
           projectRoot: project.rootPath,
