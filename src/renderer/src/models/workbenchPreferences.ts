@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react'
 
 import { DefaultBrowserSearchEngine } from '@velaros-ai/capabilities/browser/contracts'
-import { isFiniteNumber, isObject, isString, Log } from '@velaros-ai/velaros/core'
+import { AppError, isFiniteNumber, isObject, isString, Log, Result } from '@velaros-ai/velaros/core'
+import type { Result as ResultType } from '@velaros-ai/velaros/core/result'
+import { isRecord } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
 import {
   type WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
@@ -358,14 +360,17 @@ export function readWorkbenchConversationRunPreferences(): Pick<
 }
 
 /** 编辑区里按 ⌥Z：切换自动换行，存进偏好。 */
-export function toggleWorkbenchEditorWordWrap(): void {
-  const preferences = readWorkbenchPreferences()
-  saveWorkbenchPreferences({ ...preferences, editorWordWrap: !preferences.editorWordWrap })
+export function toggleWorkbenchEditorWordWrap(): ResultType<WorkbenchPreferences> {
+  return updateWorkbenchPreferences((preferences) => ({
+    editorWordWrap: !preferences.editorWordWrap,
+  }))
 }
 
 /** 差异查看器工具栏上的切换：换一种排法，存进偏好，下次打开还是它。 */
-export function saveWorkbenchDiffLayout(diffLayout: WorkbenchDiffLayout): void {
-  saveWorkbenchPreferences({ ...readWorkbenchPreferences(), diffLayout })
+export function saveWorkbenchDiffLayout(
+  diffLayout: WorkbenchDiffLayout
+): ResultType<WorkbenchPreferences> {
+  return updateWorkbenchPreferences({ diffLayout })
 }
 
 /** 用户手动保存时应用的本地历史节流窗口（毫秒）。 */
@@ -380,25 +385,61 @@ const workbenchPreferencesStore = createLocalStorageJsonStore<WorkbenchPreferenc
   log,
   readErrorLevel: 'warn',
   readErrorMessage: '工作台偏好读取失败',
-  writeErrorMessage: '工作台偏好写入失败',
 })
 
 export function readWorkbenchPreferences(storage?: StorageLike): WorkbenchPreferences {
   return workbenchPreferencesStore.read(storage)
 }
 
+function resolvePreferencesStorage(storage?: StorageLike): StorageLike {
+  const resolved = storage ?? globalThis.localStorage
+  if (!resolved) throw new Error('Workbench local storage is unavailable in this host')
+  return resolved
+}
+
 export function saveWorkbenchPreferences(
   preferences: WorkbenchPreferences,
   storage: StorageLike | undefined = undefined,
   target: Window = window
-): void {
-  const normalized = normalizeWorkbenchPreferences(preferences)
-  workbenchPreferencesStore.write(normalized, storage)
-  target.dispatchEvent(
-    new CustomEvent(WORKBENCH_PREFERENCES_CHANGED_EVENT, {
-      detail: normalized,
-    })
-  )
+): ResultType<WorkbenchPreferences> {
+  try {
+    const normalized = normalizeWorkbenchPreferences(preferences)
+    resolvePreferencesStorage(storage).setItem(STORAGE_KEY, JSON.stringify(normalized))
+    target.dispatchEvent(
+      new CustomEvent(WORKBENCH_PREFERENCES_CHANGED_EVENT, {
+        detail: normalized,
+      })
+    )
+    return Result.ok(normalized)
+  } catch (error) {
+    log.warn('工作台偏好写入失败', { error })
+    return Result.fail(AppError.from(error))
+  }
+}
+
+/** 在最新持久化值上更新；读失败时不拿显示用的默认值覆盖未知旧数据。 */
+export function updateWorkbenchPreferences(
+  update:
+    | Partial<WorkbenchPreferences>
+    | ((current: WorkbenchPreferences) => Partial<WorkbenchPreferences>),
+  storage: StorageLike | undefined = undefined,
+  target: Window = window
+): ResultType<WorkbenchPreferences> {
+  try {
+    const resolved = resolvePreferencesStorage(storage)
+    const raw = resolved.getItem(STORAGE_KEY)
+    const stored: unknown = raw === null ? undefined : JSON.parse(raw)
+    if (raw !== null && !isRecord(stored))
+      throw new TypeError('Workbench preferences must be an object')
+    const current = normalizeWorkbenchPreferences(
+      stored as Partial<WorkbenchPreferences> | undefined
+    )
+    const patch = typeof update === 'function' ? update(current) : update
+    return saveWorkbenchPreferences({ ...current, ...patch }, resolved, target)
+  } catch (error) {
+    log.warn('工作台偏好更新读取失败，保留原存储', { error })
+    return Result.fail(AppError.from(error))
+  }
 }
 
 export function getWorkbenchPreferencesStyle(preferences: WorkbenchPreferences): CSSProperties {

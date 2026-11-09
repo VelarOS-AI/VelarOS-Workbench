@@ -268,12 +268,6 @@ void describe('Workbench diff layout preference', () => {
       'src/renderer/src/components/aiChanges/WorkbenchAiChangeDiffPanel.tsx',
     ])
       assert.match(readSource(consumer), /<WorkbenchDiffLayoutToggle \/>/u, consumer)
-
-    const preferences = readSource('src/renderer/src/models/workbenchPreferences.ts')
-    assert.match(
-      preferences,
-      /export function saveWorkbenchDiffLayout\(diffLayout: WorkbenchDiffLayout\): void \{\s*saveWorkbenchPreferences\(\{ \.\.\.readWorkbenchPreferences\(\), diffLayout \}\)/u
-    )
   })
 })
 

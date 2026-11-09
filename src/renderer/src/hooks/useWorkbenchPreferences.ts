@@ -1,12 +1,14 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 
+import type { Result } from '@velaros-ai/velaros/core/result'
+
 import {
   DEFAULT_WORKBENCH_PREFERENCES,
   getWorkbenchEditorMetrics,
   getWorkbenchPreferencesStyle,
-  normalizeWorkbenchPreferences,
   readWorkbenchPreferences,
   saveWorkbenchPreferences,
+  updateWorkbenchPreferences,
   WORKBENCH_PREFERENCES_CHANGED_EVENT,
   type WorkbenchDensity,
   type WorkbenchDiffLayout,
@@ -14,6 +16,7 @@ import {
   type WorkbenchPreferences,
   type WorkbenchThemeId,
 } from '../models/workbenchPreferences'
+import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 
 export interface WorkbenchPreferencesController {
   preferences: WorkbenchPreferences
@@ -23,6 +26,7 @@ export interface WorkbenchPreferencesController {
 }
 
 export function useWorkbenchPreferences(): WorkbenchPreferencesController {
+  const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const [preferences, setPreferences] = useState<WorkbenchPreferences>(() =>
     readWorkbenchPreferences()
   )
@@ -56,6 +60,7 @@ export function useWorkbenchPreferences(): WorkbenchPreferencesController {
 
     window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
     window.addEventListener('storage', handleStorageChanged)
+    refresh()
 
     return () => {
       window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
@@ -63,21 +68,20 @@ export function useWorkbenchPreferences(): WorkbenchPreferencesController {
     }
   }, [])
 
-  function commit(nextPreferences: WorkbenchPreferences): void {
-    const normalized = normalizeWorkbenchPreferences(nextPreferences)
-    setPreferences(normalized)
-    saveWorkbenchPreferences(normalized)
-  }
-
-  function updatePreferences(patch: Partial<WorkbenchPreferences>): void {
-    commit({
-      ...preferences,
-      ...patch,
+  function handleSave(result: Result<WorkbenchPreferences>): void {
+    if (result.ok) return
+    messageLatest.current.error({
+      title: tLatest.current('workbench.settingsTitle'),
+      description: result.error.message,
     })
   }
 
+  function updatePreferences(patch: Partial<WorkbenchPreferences>): void {
+    handleSave(updateWorkbenchPreferences(patch))
+  }
+
   function resetPreferences(): void {
-    commit(DEFAULT_WORKBENCH_PREFERENCES)
+    handleSave(saveWorkbenchPreferences(DEFAULT_WORKBENCH_PREFERENCES))
   }
 
   return {
@@ -110,6 +114,7 @@ function useWorkbenchPreferenceValue<T>(
 
     window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
     window.addEventListener('storage', handleStorageChanged)
+    refresh()
 
     return () => {
       window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
