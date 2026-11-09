@@ -101,6 +101,9 @@ ADR 0028 已读，产品装配方案：
 | 7a23605 | 删除仅测试消费的旧 graph neighborhood helper |
 | d3242bb | raw observer 到场时获知当前观察缺失 |
 | 7e33207 | 双后端提交准备、peer、journal 删除与关闭统一 owner |
+| ca1f720 | 观察卡按持久请求序号接纳，旧回合继续结算原卡 |
+| aea65c3 | 冷 lazy 导航由实际编辑器就绪与接纳回执消费 |
+| bef1d1e | typed lint 单批修复后用新 Program 独立验证 |
 
 统一底座接入批：配套 0.9.1 基础/扩展显式装配、产品不可变执行凭据、foundation-v1 数据代际、
 无执行空闲控制、active-only tell 与错误回执、schema2 来源和正式候选拒绝门；来源 commit、
@@ -133,7 +136,7 @@ Terminal 准备取消、Debug 晚交清理失败、真实 LSP 协议/共享 disp
 
 后续 Git 顺序、argv、退役字段，跨包 TS 磁盘版本与数据配置缓存，renderer 调试确认及启动接纳均已继续收口。
 仍未完成的明确项：语言 worker 硬终止时跨线程子进程 owner、Markdown 计算取消，
-代码型配置及依赖模块完整热重载；观察卡跨回合身份、编辑器冷 lazy 导航准入，正式 typed lint 的旧 AST 自动修复，
+代码型配置及依赖模块完整热重载；
 source map/Windows helper 资源边界及其余覆盖表空白。历史读取、删除期间草稿与跨后端删除事务已由后述批次收口。
 worker 必须有真实资源所有权方案，不能靠加大 8s 预算或 best-effort PID 通知宣称解决。
 正式资产已交付：Platform v0.7.3 双包 0.9.2 已经 Release/tag→commit/asset digest/实际下载 SHA
@@ -216,3 +219,22 @@ Dispatcher 故障/路由 3、peer 6 均通过。受影响 node/web 类型及 sco
 仅以真实消费链、类型/lint和既有接线断言交付；没有新 DOM 框架、hook 镜像、全量回归、压力矩阵或生产 build。
 CodeMirror 基线 3424 行以及 EditorPanel/EditorGroupsPanel/FilePanel 已全文补审；发行两大脚本、打包、Node 资源准备与
 部分工程 runner 已全文，剩余缺口仍按细表推进，尚未把全仓标为完成。
+
+观察卡现在采用公开 `ActTurnTrace.request.sequence` 的持久模型请求顺序。成功登记或清除只推进该序号，
+清除保留 tombstone；重读旧回合仍可结算它第一次取得的执行目标，但不能覆盖后来登记的观察。
+没有用 UUID、抓取时间或另一套运行时计数推断顺序。新增旧回合 pending、更新、清除和重读组合故障及既有脚本 IPC 用例通过。
+
+冷 lazy 编辑器由 CodeMirror 实际安装状态后的 onReady 唤醒。Panel 保留一项导航意图及可取消帧，
+请求、项目、文件、组和可见代码面改变时撤销旧 owner；句柄返回实际接纳布尔值后才消费共享请求 id。
+GoToLine 在未就绪时保留输入和意图，取消、改输入或转查找会失效。未加轮询或测试专用 ready epoch。
+两条既有编辑器组接线断言通过；没有宣称覆盖真实 DOM 的冷加载交互。
+
+正式 lint 的 typed 分区不再让 ESLint 对同一个不可变 Program 反复改文本：只应用首批公开诊断中的
+不相交 fix，核对 Program 与输入及落盘前内容，保留 BOM；然后退出该 worker，由新 worker 重建 Program 只读验证。
+应用修复返回独立未验证退出码，剩余错误不能报告成功；修复及验证共用原单分区 45s / 2GiB 预算。
+实际插件的重叠 import 排序/移除用例验证了单批写入、BOM 唯一、无重复 import、新诊断及旧快照拒绝。
+初始夹具加载整个仓库配置触及原 5s 测试限制，缩小为相同已安装插件及最小源码后 118ms 通过，未改预算或断言。
+
+本批共 5 项必要行为/接线检查通过，node/web 类型及 1 node / 2 web / 3 测试文件 scoped lint 通过。
+最后仅夹具的 prefer-template 一处写法失败，修正后只复查该文件；其余绿项复用。JS runner 遵循原 ESLint 忽略，
+未执行全仓 autofix、完整回归、压力测试或生产构建。跨线程 LSP owner 方案已完成只读审查，实施仍在进行，尚未算解决。
