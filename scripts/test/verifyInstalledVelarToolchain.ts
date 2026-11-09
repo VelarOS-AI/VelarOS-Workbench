@@ -1249,4 +1249,3 @@ process.stdout.write('Workbench installed Velar toolchain acceptance passed\n')
 async function runNpm(arguments_: readonly string[], cwd: string): Promise<void> {
   await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', arguments_, cwd)
 }
-

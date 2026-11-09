@@ -280,3 +280,28 @@ inputId/streamId，再推进该运行的 sequence。旧 journal 仅从真实 hea
 编辑器无高置信行为问题，零生产消费者的 hover helper 正在窄删；codeGraph Dialog 三项归属问题进入实施。
 LSP main owner 新故障及两个本地协议场景仍在原预算内超时，只有进程终止旧场景通过；node 类型已绿，尚未交付该批。
 Markdown 新 SDK 读取故障同样正在定位真实 gate，不能用静态实施冒充完成。
+
+`d515e9f` 交付主线程 LSP 进程 owner：Worker 创建前登记真实 MessageChannel/scope，输入请求同步捕获项目 lease；
+worker 只持有有界字节传输，main 保留 ChildProcess、stdio、终止命令和退休 scope 到真实 close。
+关闭仍共用原 8 秒绝对期限，普通请求仍为 15 秒。真实 worker 硬终止、本地分块协议、项目隔离/语义/缺工具链等七项必要行为通过。
+首轮协议挂起定位为 Bun 的 stdin.write 回调先于返回值，写回执补齐两项事实后才 settle；只复查原失败项，读取算法与原预算保留。
+
+同批 Markdown 将 signal 接到请求级 workspace、SDK token、FS await/循环与解析边界，取消后不缓存读取；
+等 run 真正收束再 dispose，成功/失败路径都归一 CANCELLED。三处交互 signal 和 fallback 读盘前准入已接通。
+新增真实 SDK gate 故障最初因夹具改写 SDK 冻结对象的 dispose 而提前抛错；改用公开 factory 委托真实 SDK 观察释放后，
+原全部断言在 21ms 通过，原 5 秒不变。最终 node 类型、10 node / 12 测试 lint 通过，三处 import 排序只单批写入后 fresh 复查。
+无消费的 type-hover helper 与专属测试同批退役；未加新 DOM 框架或依赖。
+
+`836b981` 撤销卸载/失活/上下文变化后的图请求发布，源码仅接纳最新打开意图，图/片段/源码沿用相同草稿优先规则。
+`3e5a00a` 仅在录制中捕获键位，真实空格可录；规则读取随清理失效，分析/更新偏好失败被接收并提示，分析只发布 Main 确认值及 revision。
+`15ab73d` 删除零调用旧标题行、恒空包装/专属样式、无读者 chrome 字段及文件树 identity wrapper；实际 mutation controller 与 partial-failure 逻辑保留。
+三批 web 类型、10 web / 2 测试 lint 和 Space 真实记录/派发用例通过；没有把 DOM 乱序、保存失败 UI 记作实测。
+
+`724ab61` 为安装验收脚本添加单次资源会话，等待实际 close 后交完整流式 UTF-8 输出；命令/终止命令保留 owner，
+取消和期限在 120 秒内预留现有 5500ms 关闭窗口。原错误与清理错误分别报告，未确认资源收束时仍注销但保留临时目录。
+12 项受控时序/故障和一项真实原生进程用例通过，两个脚本定向严格类型与新测试 lint 通过；首次定向配置误取未安装的 Bun 类型，
+改用实际 Node/Electron 脚本环境，未放宽严格规则；实际 stdin=null 类型与诊断 code 联合类型按真实合同修正，行为绿项复用。
+Windows 已脱离父链且关闭 stdio 的后代仍非完整保证；保留实际安装/Web/Core/Desktop 入口，未重跑整套安装验收。
+
+精确剩余清单现见 [refactoring-remaining.md](./refactoring-remaining.md)：main/preload/shared 当前生产源码全文证据缺口为零；
+renderer 95 个行为源码尚欠完整正文回执，不能据此断言无人读过；i18n 大数据、声明/样式、fixture 与运行矩阵分别列出。
