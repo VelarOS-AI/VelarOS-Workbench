@@ -4,6 +4,7 @@ import {
   type ReactElement,
   type ReactNode,
   type RefObject,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -288,6 +289,7 @@ import { EditorSymbolLocationsPanel } from './EditorSymbolLocationsPanel'
 import { useEditorCodeActions } from './useEditorCodeActions'
 import { useEditorSymbolNavigation } from './useEditorSymbolNavigation'
 import { workbenchEditorLanguageFeatureClasses } from './workbenchEditorLanguageFeatureClasses'
+import { resolveWorkbenchAnchorEndLine } from './workbenchLineAnchors'
 
 /** Agent 带用户看代码时不抢焦点：用户可能正在输入框里打字。 */
 export interface CodeMirrorEditorNavigationOptions {
@@ -457,6 +459,19 @@ interface WorkbenchRenameAction {
   owner: WorkbenchEditorFileOwner
   doc: EditorState['doc']
   identifier: WorkbenchIdentifierRange
+}
+
+interface WorkbenchCommentDraft {
+  owner: WorkbenchEditorFileOwner
+  doc: EditorState['doc']
+  from: number
+  to: number
+  startLine: number
+  endLine: number
+  snippet: string
+  left: number
+  anchorTop: number
+  anchorBottom: number
 }
 
 interface WorkbenchSymbolLocationsAnchor {
@@ -1106,6 +1121,7 @@ const COMMENT_POPUP_BOUNDARY_INSET = 8
 const COMMENT_POPUP_ANCHOR_GAP = 4
 
 function CommentInputPopup({
+  owner,
   left,
   anchorTop,
   anchorBottom,
@@ -1116,6 +1132,7 @@ function CommentInputPopup({
   onSubmit,
   onCancel,
 }: {
+  owner: WorkbenchEditorFileOwner
   left: number
   anchorTop: number
   anchorBottom: number
@@ -1186,9 +1203,10 @@ function CommentInputPopup({
     }
   }, [anchorBottom, anchorTop, boundaryRef, left])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    setValue('')
     inputRef.current?.focus()
-  }, [])
+  }, [owner])
 
   const trimmed = value.trim()
 
@@ -1287,6 +1305,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const renameActionRef = useRef<Nullable<WorkbenchRenameAction>>(null)
     const formatRequestRef = useRef<Nullable<object>>(null)
     const referenceSelectionRequestRef = useRef<Nullable<object>>(null)
+    // 文档事务先同步接纳草稿，再发布浮层快照；同一tick提交不能读到旧offset。
+    const commentDraftRef = useRef<Nullable<WorkbenchCommentDraft>>(null)
+    const [commentDraft, setCommentDraft] = useState<Nullable<WorkbenchCommentDraft>>(null)
+    const acceptCommentDraft = useCallback((draft: Nullable<WorkbenchCommentDraft>): void => {
+      commentDraftRef.current = draft
+      setCommentDraft(draft)
+    }, [])
     /** 视图里正在显示的文件（项目 + 路径）；没有路径时为 null。 */
     const activeFileKeyRef = useRef<Nullable<string>>(null)
     const instanceExtensionsRef = useRef<Nullable<WorkbenchEditorInstanceExtensions>>(null)
@@ -1360,8 +1385,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         renameActionRef.current = null
         formatRequestRef.current = null
         referenceSelectionRequestRef.current = null
+        acceptCommentDraft(null)
       }
-    }, [path, projectRoot])
+    }, [acceptCommentDraft, path, projectRoot])
 
     const captureFileOwner = (view: EditorView): Nullable<WorkbenchEditorFileOwner> => {
       const token = fileOwnerTokenRef.current
@@ -1372,12 +1398,15 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       return { token, view, key, projectRoot: currentRoot, path: currentPath }
     }
 
-    const isCurrentFileOwner = (owner: WorkbenchEditorFileOwner): boolean =>
-      fileOwnerTokenRef.current === owner.token &&
-      viewRef.current === owner.view &&
-      activeFileKeyRef.current === owner.key &&
-      projectRootRef.current === owner.projectRoot &&
-      pathRef.current === owner.path
+    const isCurrentFileOwner = useCallback(
+      (owner: WorkbenchEditorFileOwner): boolean =>
+        fileOwnerTokenRef.current === owner.token &&
+        viewRef.current === owner.view &&
+        activeFileKeyRef.current === owner.key &&
+        projectRootRef.current === owner.projectRoot &&
+        pathRef.current === owner.path,
+      [pathRef, projectRootRef]
+    )
 
     const modelConfig = useStandaloneWorkbenchModelConfig()
     const completionModel = modelConfig.completionModel
@@ -1589,20 +1618,44 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       useState<Nullable<WorkbenchSymbolLocationsAnchor>>(null)
     const [renamePopup, setRenamePopup] =
       useState<Nullable<{ action: WorkbenchRenameAction; left: number; top: number }>>(null)
-    const [commentDraft, setCommentDraft] = useState<
-      Nullable<{
-        from: number
-        to: number
-        startLine: number
-        endLine: number
-        snippet: string
-        left: number
-        anchorTop: number
-        anchorBottom: number
-      }>
-    >(null)
     const renamePopupRef = useLatest(renamePopup)
-    const commentDraftRef = useLatest(commentDraft)
+    const requestCommentDraftMeasure = useCallback(
+      (draft: WorkbenchCommentDraft): void => {
+        const view = draft.owner.view
+        view.requestMeasure({
+          key: 'workbench-comment-draft',
+          read: (measuredView) => {
+            if (
+              commentDraftRef.current !== draft ||
+              !isCurrentFileOwner(draft.owner) ||
+              measuredView !== view ||
+              measuredView.state.doc !== draft.doc
+            )
+              return null
+            const start = measuredView.coordsAtPos(draft.from)
+            const end = measuredView.coordsAtPos(draft.to)
+            return start || end
+              ? {
+                  left: start?.left ?? end!.left,
+                  anchorTop: start?.top ?? end!.top,
+                  anchorBottom: end?.bottom ?? start!.bottom,
+                }
+              : null
+          },
+          write: (position) => {
+            if (
+              !position ||
+              commentDraftRef.current !== draft ||
+              !isCurrentFileOwner(draft.owner) ||
+              view.state.doc !== draft.doc
+            )
+              return
+            acceptCommentDraft({ ...draft, ...position })
+          },
+        })
+      },
+      [acceptCommentDraft, isCurrentFileOwner]
+    )
 
     useLayoutEffect(() => {
       const view = viewRef.current
@@ -1614,19 +1667,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       // 右键菜单没有稳定的文档锚点，缩放时直接收起；评论草稿和重命名框则保留
       // 用户输入，并在 CodeMirror 完成新字号的内部测量后重新读取其文档坐标。
       setContextMenu(null)
+      const draft = commentDraftRef.current
+      if (draft) requestCommentDraftMeasure(draft)
       view.requestMeasure({
         key: 'workbench-editor-metrics-and-overlays',
         read: (measuredView) => {
-          const draft = commentDraftRef.current
           const rename = renamePopupRef.current
-          const draftFrom = draft
-            ? Math.min(Math.max(0, draft.from), measuredView.state.doc.length)
-            : null
-          const draftTo = draft
-            ? Math.min(Math.max(0, draft.to), measuredView.state.doc.length)
-            : null
-          const draftStartCoords = draftFrom === null ? null : measuredView.coordsAtPos(draftFrom)
-          const draftEndCoords = draftTo === null ? null : measuredView.coordsAtPos(draftTo)
           const renamePosition = rename
             ? Math.min(Math.max(0, rename.action.identifier.from), measuredView.state.doc.length)
             : null
@@ -1634,14 +1680,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             renamePosition === null ? null : measuredView.coordsAtPos(renamePosition)
 
           return {
-            comment:
-              draft && (draftStartCoords || draftEndCoords)
-                ? {
-                    left: draftStartCoords?.left ?? draftEndCoords!.left,
-                    anchorTop: draftStartCoords?.top ?? draftEndCoords!.top,
-                    anchorBottom: draftEndCoords?.bottom ?? draftStartCoords!.bottom,
-                  }
-                : null,
             rename:
               rename && renameCoords
                 ? { left: renameCoords.left, top: renameCoords.bottom + 4 }
@@ -1651,15 +1689,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         write: (measure) => {
           if (viewRef.current !== view) return
           view.dom.classList.remove('cm-workbenchMetricsRefreshing')
-          if (measure.comment) {
-            setCommentDraft((current) => (current ? { ...current, ...measure.comment } : current))
-          }
           if (measure.rename) {
             setRenamePopup((current) => (current ? { ...current, ...measure.rename } : current))
           }
         },
       })
-    }, [commentDraftRef, editorMetricsCompartment, editorMetricsExtension, renamePopupRef])
+    }, [editorMetricsCompartment, editorMetricsExtension, renamePopupRef, requestCommentDraftMeasure])
 
     const commentEditLabelRef = useLatest(t('workbench.editorCommentEdit'))
     const commentSaveLabelRef = useLatest(t('workbench.editorCommentSave'))
@@ -1942,8 +1977,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     // 评论只对选中的块生效：打开输入浮层收集正文，确认后落成锚定评论。
     const startCommentForSelection = (): void => {
       const view = viewRef.current
-      const currentPath = pathRef.current
-      if (!view || !currentPath) return
+      if (!view) return
+      const owner = captureFileOwner(view)
+      if (!owner?.path) return
 
       const selection = view.state.selection.main
       if (selection.from === selection.to) return
@@ -1952,11 +1988,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const startCoords = view.coordsAtPos(selection.from)
       const endCoords = view.coordsAtPos(selection.to)
       setContextMenu(null)
-      setCommentDraft({
+      acceptCommentDraft({
+        owner,
+        doc,
         from: selection.from,
         to: selection.to,
         startLine: doc.lineAt(selection.from).number,
-        endLine: doc.lineAt(selection.to).number,
+        endLine: resolveWorkbenchAnchorEndLine(doc, selection),
         snippet: view.state.sliceDoc(selection.from, selection.to),
         // 横向对齐选区起点，避免长选区的评论框贴着最后一个字符偏到右侧。
         left: startCoords?.left ?? endCoords?.left ?? 120,
@@ -1965,17 +2003,22 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       })
     }
 
-    const commitComment = (rawBody: string): void => {
-      const draft = commentDraft
-      setCommentDraft(null)
-      const view = viewRef.current
-      const currentPath = pathRef.current
+    const cancelComment = (owner: WorkbenchEditorFileOwner): void => {
+      if (commentDraftRef.current?.owner === owner) acceptCommentDraft(null)
+    }
+
+    const commitComment = (owner: WorkbenchEditorFileOwner, rawBody: string): void => {
+      const draft = commentDraftRef.current
+      if (!draft || draft.owner !== owner) return
+      acceptCommentDraft(null)
+      const view = owner.view
       const body = rawBody.trim()
-      if (!draft || !view || !currentPath || !body) return
+      if (!owner.path || !body || !isCurrentFileOwner(owner) || view.state.doc !== draft.doc)
+        return
 
       const comment = commentStore.add({
-        projectRoot,
-        path: currentPath,
+        projectRoot: owner.projectRoot,
+        path: owner.path,
         startLine: draft.startLine,
         endLine: draft.endLine,
         snippet: draft.snippet,
@@ -2583,6 +2626,33 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     ): WorkbenchEditorInstanceExtensions => {
       const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {
         if (update.docChanged) {
+          const draft = commentDraftRef.current
+          if (draft) {
+            if (
+              !isCurrentFileOwner(draft.owner) ||
+              update.view !== draft.owner.view ||
+              draft.doc !== update.startState.doc
+            ) {
+              acceptCommentDraft(null)
+            } else {
+              const from = update.changes.mapPos(draft.from, 1)
+              const to = update.changes.mapPos(draft.to, -1)
+              if (to <= from) acceptCommentDraft(null)
+              else {
+                const next: WorkbenchCommentDraft = {
+                  ...draft,
+                  doc: update.state.doc,
+                  from,
+                  to,
+                  startLine: update.state.doc.lineAt(from).number,
+                  endLine: resolveWorkbenchAnchorEndLine(update.state.doc, { from, to }),
+                  snippet: update.state.sliceDoc(from, to),
+                }
+                acceptCommentDraft(next)
+                requestCommentDraftMeasure(next)
+              }
+            }
+          }
           const renameAction = renameActionRef.current
           renameActionRef.current = null
           formatRequestRef.current = null
@@ -3006,7 +3076,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         activeFileKeyRef.current = key
         setContextMenu(null)
         setRenamePopup(null)
-        setCommentDraft(null)
+        acceptCommentDraft(null)
         settleFileState(view, saved, value)
         return
       }
@@ -3019,7 +3089,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       view.dispatch(sync)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
-    }, [path, projectRoot, value])
+    }, [acceptCommentDraft, path, projectRoot, value])
 
     // 查找栏的查找词与开关项交给 CodeMirror 的搜索状态（高亮全部匹配、下一处、替换都靠它）；查找栏关了就收起。
     const appliedFindRef = useRef<Nullable<WorkbenchEditorFindRequest>>(null)
@@ -3527,6 +3597,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         )}
         {!!commentDraft && (
           <CommentInputPopup
+            owner={commentDraft.owner}
             left={commentDraft.left}
             anchorTop={commentDraft.anchorTop}
             anchorBottom={commentDraft.anchorBottom}
@@ -3534,8 +3605,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             placeholder={t('workbench.editorCommentPlaceholder')}
             submitLabel={t('workbench.editorCommentSubmit')}
             cancelLabel={t('workbench.editorCommentCancel')}
-            onSubmit={commitComment}
-            onCancel={() => setCommentDraft(null)}
+            onSubmit={(body) => commitComment(commentDraft.owner, body)}
+            onCancel={() => cancelComment(commentDraft.owner)}
           />
         )}
       </>
