@@ -238,3 +238,8 @@ GoToLine 在未就绪时保留输入和意图，取消、改输入或转查找�
 本批共 5 项必要行为/接线检查通过，node/web 类型及 1 node / 2 web / 3 测试文件 scoped lint 通过。
 最后仅夹具的 prefer-template 一处写法失败，修正后只复查该文件；其余绿项复用。JS runner 遵循原 ESLint 忽略，
 未执行全仓 autofix、完整回归、压力测试或生产构建。跨线程 LSP owner 方案已完成只读审查，实施仍在进行，尚未算解决。
+
+`98885e9` 沿用实际文件 owner 收束“选择所有语义引用”：请求捕获原文档、项目与路径，后继请求、
+选区/正文事务、切文件或卸载都会使旧回执失效；fallback 也只用原 identifier。web 类型与该单文件 lint 通过，
+没有新 DOM harness 或镜像测试，真实 DOM 异步交互未测。新的团队短游标及已证未修项见
+[refactoring-coverage.md](./refactoring-coverage.md)，后续按实际未读生产路径补齐，已审且合理保留的模块不反复找新题。
