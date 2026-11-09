@@ -384,12 +384,12 @@ function toMatchableEvent(event: WorkbenchKeyboardEventLike): KeyboardEvent {
 }
 
 function normalizeShortcutKey(key: string): string {
+  if (key === ' ') return 'Space'
+
   const normalized = key.trim()
   if (!normalized) return ''
 
   const lower = normalized.toLowerCase()
-  if (lower === ' ') return 'Space'
-
   if (lower === 'escape' || lower === 'esc') return 'Escape'
 
   if (lower === 'enter' || lower === 'return') return 'Enter'

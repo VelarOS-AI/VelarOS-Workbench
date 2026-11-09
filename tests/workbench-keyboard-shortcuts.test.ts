@@ -300,6 +300,22 @@ void describe('Workbench keyboard shortcuts', () => {
     assert.equal(shortcutFromWorkbenchKeyboardEvent(keydown('p', { metaKey: true }), Linux), 'Meta+P')
   })
 
+  void test('records the Space key and dispatches its primary-modifier shortcut', () => {
+    assert.equal(
+      shortcutFromWorkbenchKeyboardEvent(keydown(' ', { code: 'Space' }), Windows),
+      'Space'
+    )
+    const keymap = { ...DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP, 'quick-open': 'Mod+Space' }
+    for (const [platform, modifiers] of [
+      [Mac, { metaKey: true }],
+      [Windows, { ctrlKey: true }],
+    ] as const) {
+      const event = keydown(' ', { ...modifiers, code: 'Space' })
+      assert.equal(shortcutFromWorkbenchKeyboardEvent(event, platform), 'Mod+Space')
+      assert.equal(getWorkbenchKeyboardShortcut(event, keymap, platform), 'quick-open')
+    }
+  })
+
   void test('a Control shortcut recorded on macOS fires on Control, not on Command', () => {
     const keymap = { ...DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP, 'quick-open': 'Ctrl+P' }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { WorkbenchProductAnalyticsState } from '@shared/workbenchProductAnalytics'
 
@@ -15,17 +15,20 @@ export function useWorkbenchProductAnalytics(): {
   readonly enabled: boolean
   readonly noticeRequired: boolean
   readonly noticeResolved: boolean
-  readonly setEnabled: (enabled: boolean) => void
+  readonly setEnabled: (enabled: boolean) => Promise<void>
   readonly resolveNotice: (decision: 'allowed' | 'declined') => Promise<void>
   readonly openDetails: () => void
 } {
   const [state, setState] = useState(InitialState)
+  const applyState = useCallback((next: WorkbenchProductAnalyticsState): void => {
+    setState((current) => (next.revision >= current.revision ? next : current))
+  }, [])
 
   useEffect(() => {
     let active = true
     const apply = (next: WorkbenchProductAnalyticsState): void => {
       if (!active) return
-      setState((current) => (next.revision >= current.revision ? next : current))
+      applyState(next)
     }
     const unsubscribe = window.velarosWorkbenchProductAnalytics.onChanged(apply)
     void window.velarosWorkbenchProductAnalytics.getState().then(apply)
@@ -33,18 +36,17 @@ export function useWorkbenchProductAnalytics(): {
       active = false
       unsubscribe()
     }
-  }, [])
+  }, [applyState])
 
   return {
     enabled: state.enabled,
     noticeRequired: state.noticeRequired,
     noticeResolved: state.noticeResolved,
-    setEnabled: (enabled) => {
-      setState((current) => ({ ...current, enabled }))
-      void window.velarosWorkbenchProductAnalytics.setEnabled(enabled).then(setState)
+    setEnabled: async (enabled) => {
+      applyState(await window.velarosWorkbenchProductAnalytics.setEnabled(enabled))
     },
     resolveNotice: async (decision) => {
-      setState(await window.velarosWorkbenchProductAnalytics.resolveNotice(decision))
+      applyState(await window.velarosWorkbenchProductAnalytics.resolveNotice(decision))
     },
     openDetails: () => {
       void window.velarosWorkbenchProductAnalytics.openDetails()

@@ -189,6 +189,8 @@ export function WorkbenchKeymapSettings({
     action: WorkbenchKeyboardShortcutAction,
     event: KeyboardEvent<HTMLButtonElement>
   ): void {
+    if (capturingAction !== action) return
+
     event.preventDefault()
     event.stopPropagation()
 

@@ -2,7 +2,6 @@ import {
   type KeyboardEvent,
   type ReactElement,
   type ReactNode,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -20,7 +19,6 @@ import { useWorkbenchProductAnalytics } from '@renderer/hooks/useWorkbenchProduc
 import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchProviderModelCatalog'
 import { useWorkbenchUpdate } from '@renderer/hooks/useWorkbenchUpdate'
 import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
-import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { formatWorkbenchEditorCommandHint } from '@renderer/models/editor/workbenchEditorKeymap'
 import type {
   WorkbenchKeyboardShortcutAction,
@@ -57,6 +55,7 @@ import {
   updateStandaloneWorkbenchModelConfig,
   useStandaloneWorkbenchModelConfig,
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
+import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -66,6 +65,7 @@ import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
+import { Log } from '@velaros-ai/velaros/core'
 import { Result } from '@velaros-ai/velaros/core/result'
 
 import {
@@ -162,7 +162,7 @@ export function WorkbenchSettingsDialog({
   onResetShortcut,
   onSetShortcut,
 }: WorkbenchSettingsDialogProps): Nullable<ReactElement> {
-  const { t } = useWorkbenchI18n()
+  const { t, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const hostRuntime = useWorkbenchHostRuntime()
   const updateState = useWorkbenchUpdate()
   const productAnalytics = useWorkbenchProductAnalytics()
@@ -272,27 +272,6 @@ export function WorkbenchSettingsDialog({
     [t]
   )
 
-  const refreshProjectAiRules = useCallback(async (): Promise<void> => {
-    if (!project) {
-      setProjectAiRules(null)
-      return
-    }
-
-    setIsLoadingProjectAiRules(true)
-    try {
-      const result = Result.unwrap(
-        await hostRuntime.kernel.project.getWorkbenchProjectAiRules({
-          projectRoot: project.rootPath,
-        })
-      )
-      setProjectAiRules(result)
-    } catch {
-      setProjectAiRules(null)
-    } finally {
-      setIsLoadingProjectAiRules(false)
-    }
-  }, [hostRuntime, project?.rootPath])
-
   useEffect(() => {
     if (!open) {
       setCapturingAction(null)
@@ -387,10 +366,32 @@ export function WorkbenchSettingsDialog({
   }, [project?.rootPath])
 
   useEffect(() => {
-    if (!open || activeSection !== 'ai') return
+    const projectRoot = project?.rootPath
+    if (!open || activeSection !== 'ai' || !projectRoot) {
+      setIsLoadingProjectAiRules(false)
+      return
+    }
 
+    let active = true
+    const request = { projectRoot }
+    async function refreshProjectAiRules(): Promise<void> {
+      setIsLoadingProjectAiRules(true)
+      try {
+        const result = Result.unwrap(
+          await hostRuntime.kernel.project.getWorkbenchProjectAiRules(request)
+        )
+        if (active) setProjectAiRules(result)
+      } catch {
+        if (active) setProjectAiRules(null)
+      } finally {
+        if (active) setIsLoadingProjectAiRules(false)
+      }
+    }
     void refreshProjectAiRules()
-  }, [activeSection, open, refreshProjectAiRules])
+    return () => {
+      active = false
+    }
+  }, [activeSection, hostRuntime, open, project?.rootPath])
 
   if (!open) return null
 
@@ -420,6 +421,14 @@ export function WorkbenchSettingsDialog({
   function closeDialog(): void {
     commitModelConnectionDrafts()
     onOpenChange(false)
+  }
+
+  function reportSettingSaveFailure(titleKey: string, error: unknown): void {
+    Log.tag('WorkbenchSettings').caught('Failed to save setting', error, { setting: titleKey })
+    messageLatest.current.error({
+      title: tLatest.current(titleKey),
+      description: error instanceof Error ? error.message : String(error),
+    })
   }
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -928,7 +937,11 @@ export function WorkbenchSettingsDialog({
             </IconButton>
             <Switch
               checked={productAnalytics.enabled}
-              onCheckedChange={productAnalytics.setEnabled}
+              onCheckedChange={(enabled) => {
+                void productAnalytics.setEnabled(enabled).catch((error: unknown) => {
+                  reportSettingSaveFailure('workbench.settingsProductAnalytics', error)
+                })
+              }}
             />
           </div>
         </SettingRow>
@@ -993,7 +1006,11 @@ export function WorkbenchSettingsDialog({
               { value: 'beta', label: t('workbench.settingsUpdateChannelBeta') },
               { value: 'canary', label: t('workbench.settingsUpdateChannelPreview') },
             ]}
-            onChange={(channel) => void window.velarosWorkbenchUpdate.setChannel(channel)}
+            onChange={(channel) => {
+              void window.velarosWorkbenchUpdate.setChannel(channel).catch((error: unknown) => {
+                reportSettingSaveFailure('workbench.settingsUpdateChannel', error)
+              })
+            }}
           />
         </SettingRow>
         <SettingRow
@@ -1003,9 +1020,13 @@ export function WorkbenchSettingsDialog({
           <Switch
             size="sm"
             checked={updateState.automaticDownloads}
-            onCheckedChange={(enabled) =>
-              void window.velarosWorkbenchUpdate.setAutomaticDownloads(enabled)
-            }
+            onCheckedChange={(enabled) => {
+              void window.velarosWorkbenchUpdate
+                .setAutomaticDownloads(enabled)
+                .catch((error: unknown) => {
+                  reportSettingSaveFailure('workbench.settingsAutomaticUpdates', error)
+                })
+            }}
           />
         </SettingRow>
         <SettingRow title={t('workbench.settingsCurrentVersion')} description={status}>
