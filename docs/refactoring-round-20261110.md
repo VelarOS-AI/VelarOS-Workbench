@@ -13,6 +13,8 @@
 | 上传回执 `1cc357b` | 上传旧统计后关停、重启统计并采集新事件，旧成功回执会从新对象扣数。捕获真实原 metrics 对象，只在仍是该对象时结算，不增加另一计数权威。 | 受控 fetch 接收旧上传期间，以公开方法完成 disable/re-enable/新 run/tool，第二次实际请求保留新计数。该场景、node 类型及源码/测试 lint 通过。 |
 | Memory 设置 `c0f7e22` | A 删除未完时 B 可再发起，A 的回执会清掉 B 的 pending/确认；旧项目读取也可能迟到。使用单删除 owner 同步准入并禁用其他删除入口，旧 view 回执不发布。错误保存 kind/原始 message 后在 render 翻译，locale 不再启动另一列表请求或清分页。 | producer/owner 源码审阅、web 类型和单文件 lint 通过；真实 DOM 删除/语言切换未实测。 |
 | 项目退役准入 `da49c91` | 同窗 A→B / A→C 可重复释放 A 后覆盖 B；局部资源关完又可重建，而整体仍未收尾。每窗 record 串行交接并持有实际退役门，释放失败保留原 Hub；新资源入口同步核同一 authority，既有 stop/cancel/answer/receipt 继续收尾。 | 17 个定向场景、node 类型及 14 node / 12 测试 lint 通过；关闭回调登记顺序收紧后仅复查该一场景及两文件 lint。既有 web 证明复用。 |
+| 克隆目录 `5d13978` | preflight 后目录可被其他主体创建，Git 失败不证明目录归 Workbench。删除应用的无条件递归回收，由 Git 管理自身清理，日志带目标路径。 | 一个受控 Git 结果、真实临时文件系统场景覆盖并发目标与部分克隆文件，字节保留、失败结果和窗口数均符合；源码/测试 lint 通过。没有实际 Git/网络运行。 |
+| Hub 投影 `1e30efe` | 初始快照可晚于 live 到达，拒绝又无人接收。先订阅，以当前 view/read 许可拒旧快照和旧失败；只保留 loading/ready/error 单判别投影，失败展示真实原因并准入一次重试。 | web 类型和四源码 lint 通过。唯一 App 消费者按 kind 渲染，真实空项目仍为欢迎页；DOM/live/HMR 时序未实测。 |
 
 ## 项目切换与资源准入边界
 
@@ -41,7 +43,8 @@ Terminal/Debug/Language、命令/搜索/Watch/Workspace、Conversation/Peer/Cons
   下一批要同时处理真实 composition，不能仅局部 throw 中断启动，或增加另一临时偏好权威。
   更新 v1 的真实 producer 曾写同一路径 `{version:1, automaticDownloads}`，保留其明确含义；未冒称已有迁移测试。
 - 统计 Runtime 的在途 consent 上传可能在 disposer 后继续写入/广播，需要实际关闭 owner 的完整接线；尚未实施。
-- 克隆失败递归删除尚无自身目录所有权证明；ProjectHub 初始快照也可能覆盖先到的 live 状态。两处列为后续窄批，尚未算修复。
+- 失败克隆现在可能留下 Git 未自行清理的目录；这是有意保留未知或部分结果，不通过自动删除换取重试便利。
+- Hub 的主进程权威、正常 Drop/Menu/locale 行为保留；读取失败不再被投影为无项目，也没有新增第二份项目状态。
 
 ## 本批统一验证
 
@@ -55,6 +58,9 @@ node / web 类型分别 1.8s / 5.5s，3 node / 8 web / 5 测试文件定向 lint
 node 类型 0.9s，14 个主进程和 12 个测试文件 lint 通过；两处 renderer 代码自第一组绿项后没有语义变化，复用 web 类型/lint。
 终审修正关闭事件的释放登记顺序后，只复查该关闭场景和对应两文件 lint，均通过；其余绿项不重复。
 一次 shared-lock EEXIST 在检查开始前退出，没有计作测试失败或占用别人的锁。
+
+克隆与 Hub 两项冻结后集中验证：克隆单场景约 45ms，web 类型 3.9s，1 node / 4 web / 1 测试文件 lint 通过。
+克隆生产差量仅移除危险清理及增加日志字段，无签名变化，未重复完整 node 类型；没有重复前五批或旧 Git/PTY/执行证明。
 
 本轮没有安装依赖、构建、完整回归、供应商请求或跨 OS 矩阵，也没有新增 DOM 框架或实现镜像测试。
 0.9.4 的实际运行及旧 Linux 制品证明保留原归档身份，未改称本轮实测。
