@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { describe, test } from 'bun:test'
 import * as ts from 'typescript'
 
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import {
   clearWorkbenchProjectEslintCache,
   clearWorkbenchProjectEslintResults,
@@ -90,7 +91,7 @@ void describe('language service hot paths', () => {
 
   void test('returns TypeScript document highlights instead of failing on the files-to-search argument', async () => {
     const { projectRoot } = await createTypeScriptProject()
-    const services = new WorkbenchLanguageServices(new PathResolver())
+    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
     try {
       const result = await services.getDocumentHighlights({
         projectRoot,
@@ -159,7 +160,7 @@ void describe('language service hot paths', () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-eslint-cache-')))
     const eslintPackage = resolve(process.cwd(), 'node_modules', 'eslint')
     const absolutePath = join(projectRoot, 'main.js')
-    const services = new WorkbenchLanguageServices(new PathResolver())
+    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
     const input = (content: string) => ({ projectRoot, absolutePath, relativePath: 'main.js', content })
     try {
       await mkdir(join(projectRoot, 'node_modules'), { recursive: true })
@@ -203,7 +204,7 @@ void describe('language service hot paths', () => {
 
   void test('a workspace rescan reloads Prettier data configuration and EditorConfig', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-prettier-cache-')))
-    const services = new WorkbenchLanguageServices(new PathResolver())
+    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
     const configPath = join(projectRoot, '.prettierrc.json')
     const editorConfigPath = join(projectRoot, '.editorconfig')
     const request = {

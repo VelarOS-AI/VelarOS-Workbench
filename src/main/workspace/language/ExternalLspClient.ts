@@ -1,4 +1,3 @@
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path'
@@ -15,9 +14,12 @@ import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isPathInsideRoot } from '../PathContainmentHelper'
 
 import {
-  shouldDetachExternalLspProcess,
-  terminateExternalLspProcessTree,
-} from './ExternalLspProcessLifecycle'
+  type ExternalLspExit,
+  type ExternalLspLauncher,
+  type ExternalLspLauncherGroup,
+  type ExternalLspTransport,
+  withinLspDeadline,
+} from './ExternalLspTransport'
 
 interface JsonRpcMessage {
   jsonrpc?: string
@@ -155,31 +157,6 @@ interface OpenDocument {
 
 const GracefulLspExitTimeoutMs = 500
 
-async function waitForChildProcessExit(
-  child: ChildProcessWithoutNullStreams,
-  timeoutMs: number
-): Promise<boolean> {
-  if (child.exitCode !== null || child.signalCode !== null) return true
-
-  return new Promise<boolean>((resolve) => {
-    let settled = false
-    const settle = (value: boolean): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      child.off('exit', onExit)
-      resolve(value)
-    }
-    const onExit = (): void => settle(true)
-    const timer = setTimeout(
-      () => settle(child.exitCode !== null || child.signalCode !== null),
-      timeoutMs
-    )
-    timer.unref()
-    child.once('exit', onExit)
-  })
-}
-
 interface DiagnosticSnapshot {
   version: number
   diagnostics: ExternalLspDiagnostic[]
@@ -212,8 +189,6 @@ const DiagnosticWaitTimeoutMs = 4_000
 const DefaultRequestTimeoutMs = 15_000
 const MaxLspHeaderBytes = 8 * 1024
 const MaxLspMessageBytes = 16 * 1024 * 1024
-/** 语言服务器停止读取 stdin 时允许在本进程内排队的字节数上限。 */
-const MaxLspPendingWriteBytes = 32 * 1024 * 1024
 const LspHeaderSeparator = '\r\n\r\n'
 const LspHeaderSeparatorBytes = 4
 const JsonRpcMethodNotFound = -32_601
@@ -608,15 +583,13 @@ function launchFor(
 }
 
 export class ExternalLspClient {
-  private process: Nullable<ChildProcessWithoutNullStreams> = null
+  private process: Nullable<ExternalLspTransport> = null
+  private opening: Promise<ExternalLspTransport> | null = null
   /** 已到达但尚未成帧的分段缓冲；只在跨段读取时才 concat，避免每个 chunk 全量复制。 */
   private readonly inbound: Buffer[] = []
   private inboundLength = 0
   /** 头部已解析、正在等待 body 收满时的 body 字节数；null 表示当前处于头部阶段。 */
   private pendingBodySize: Nullable<number> = null
-  private readonly outbound: Buffer[] = []
-  private outboundLength = 0
-  private outboundPaused = false
   private nextRequestId = 1
   /** 同 URI 关闭再打开仍比旧诊断新；不为已关闭文档保留正文或版本历史表。 */
   private nextDocumentVersion = 1
@@ -627,7 +600,7 @@ export class ExternalLspClient {
   private serverCapabilities: Record<string, unknown> = {}
   private initializePromise: Nullable<Promise<void>> = null
   private processTermination: Nullable<{
-    child: ChildProcessWithoutNullStreams
+    child: ExternalLspTransport
     completed: Promise<void>
   }> = null
   private stderr = ''
@@ -635,6 +608,7 @@ export class ExternalLspClient {
   private disposal: Promise<void> | null = null
 
   public constructor(
+    private readonly launcher: ExternalLspLauncher,
     private readonly runtimeRoot: string,
     private readonly descriptor: WorkbenchLanguageServiceDescriptor,
     private readonly requestTimeoutMs = DefaultRequestTimeoutMs,
@@ -685,8 +659,7 @@ export class ExternalLspClient {
   public retainDocuments(paths: Iterable<string>): void {
     // 与 synchronize 使用同一个 URI producer；未落盘文件不能靠 realpath 重建身份。
     const retained = new Set([...paths].map((path) => pathToFileURL(path).toString()))
-    for (const uri of this.documents.keys())
-      if (!retained.has(uri)) this.close(fileURLToPath(uri))
+    for (const uri of this.documents.keys()) if (!retained.has(uri)) this.close(fileURLToPath(uri))
   }
 
   public close(path: string): void {
@@ -1015,12 +988,13 @@ export class ExternalLspClient {
   }
 
   private async disposeProcess(): Promise<void> {
+    const opened = await this.opening?.catch(() => null)
     const retiring = this.processTermination
     if (retiring) await retiring.completed.catch(() => undefined)
-    const child = this.process ?? retiring?.child
+    const child = this.process ?? retiring?.child ?? opened
     if (!child) return
-    if (child.exitCode === null && child.signalCode === null) {
-      if (this.process === child) {
+    if (!child.isClosed) {
+      if (!child.exited && this.process === child) {
         try {
           await this.request('shutdown', null)
           this.notify('exit', null)
@@ -1028,22 +1002,15 @@ export class ExternalLspClient {
           // 握手失败仍须确认退出；保留进程所有权直到真实收束。
         }
       }
-      if (!(await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)))
-        await this.terminateProcess(child)
+      try {
+        await withinLspDeadline(child.closed, Date.now() + GracefulLspExitTimeoutMs)
+      } catch {
+        await child.terminate()
+      }
     }
+    await child.closed
     if (this.process === child) this.process = null
     if (this.processTermination === retiring) this.processTermination = null
-  }
-
-  private async terminateProcess(child: ChildProcessWithoutNullStreams): Promise<void> {
-    const terminated = await terminateExternalLspProcessTree(child.pid)
-    if (!(await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)))
-      throw new AppError(
-        'UNAVAILABLE',
-        `${this.descriptor.label}: language server did not exit`,
-        undefined,
-        { pid: child.pid, terminationConfirmed: terminated }
-      )
   }
 
   private async initialize(): Promise<void> {
@@ -1100,26 +1067,33 @@ export class ExternalLspClient {
     // 不走 Electron 运行时时一个键也不写：继承来的 ELECTRON_RUN_AS_NODE 要原样留给子进程。
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: pathValue }
     if (launch.electronRunAsNode) env.ELECTRON_RUN_AS_NODE = '1'
-    const child = spawn(launch.command, launch.args, {
+    const opening = this.launcher.open({
+      projectRoot: this.workspaceRoot ?? this.runtimeRoot,
+      command: launch.command,
+      args: launch.args,
       cwd: this.runtimeRoot,
-      detached: shouldDetachExternalLspProcess(),
       env,
       shell: process.platform === 'win32' && launch.command.endsWith('.cmd'),
-      stdio: ['pipe', 'pipe', 'pipe'],
     })
+    this.opening = opening
+    let child: ExternalLspTransport
+    try {
+      child = await opening
+    } finally {
+      if (this.opening === opening) this.opening = null
+    }
+    if (this.disposed) {
+      await child.terminate()
+      throw new AppError(
+        'CLOSED',
+        workbenchMainText('language.clientClosed', { server: this.descriptor.label })
+      )
+    }
     this.process = child
-    child.stdout.on('data', (chunk: Buffer) => this.accept(chunk))
-    child.stderr.on('data', (chunk: Buffer) => {
-      this.stderr = `${this.stderr}${chunk.toString('utf8')}`.slice(-4_000)
-    })
-    // 服务器已死时写入会得到 EPIPE；没有监听者的话它是一个未捕获异常。
-    child.stdin.on('error', (error) => {
-      if (!this.disposed && this.process === child) this.fail(error)
-    })
-    child.on('error', (error) => {
+    child.on('failure', (error: Error) => {
       if (this.process === child) this.fail(error)
     })
-    child.on('exit', (code, signal) => {
+    child.on('exit', ({ code, signal }: ExternalLspExit) => {
       if (this.disposed || this.process !== child) return
       this.fail(
         new AppError(
@@ -1131,6 +1105,11 @@ export class ExternalLspClient {
           })
         )
       )
+    })
+    child.accept((stream, bytes) => {
+      if (stream === 'stdout')
+        this.accept(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+      else this.stderr = `${this.stderr}${Buffer.from(bytes).toString('utf8')}`.slice(-4_000)
     })
 
     const result = (await this.request('initialize', {
@@ -1268,7 +1247,7 @@ export class ExternalLspClient {
 
   private send(message: JsonRpcMessage): void {
     const child = this.process
-    if (!child || child.stdin.destroyed)
+    if (!child || child.isClosed)
       throw new AppError(
         'INTERNAL',
         workbenchMainText('language.serverNotRunning', { server: this.descriptor.label })
@@ -1280,47 +1259,11 @@ export class ExternalLspClient {
         'INVARIANT',
         workbenchMainText('language.messageTooLarge', { server: this.descriptor.label })
       )
-    this.write(child, Buffer.from(`Content-Length: ${size}\r\n\r\n${json}`, 'utf8'))
-  }
-
-  /**
-   * 写入侧背压：`stdin.write()` 返回 false 表示内核缓冲已满、数据只能堆在 Node 内存里。
-   * 忽略返回值意味着语言服务器一卡住，主进程内存就无上限增长。这里改成排队等 'drain'，
-   * 并给队列封顶——服务器停止读取时要的是一条明确的失败，而不是无声的内存膨胀。
-   */
-  private write(child: ChildProcessWithoutNullStreams, payload: Buffer): void {
-    if (!this.outboundPaused && this.outbound.length === 0) {
-      if (child.stdin.write(payload)) return
-      this.outboundPaused = true
-      child.stdin.once('drain', () => this.resumeWrites(child))
-      return
-    }
-
-    if (this.outboundLength + payload.length > MaxLspPendingWriteBytes) {
-      this.fail(
-        new AppError(
-          'INTERNAL',
-          workbenchMainText('language.inputBackedUp', { server: this.descriptor.label })
-        )
-      )
-      return
-    }
-    this.outbound.push(payload)
-    this.outboundLength += payload.length
-  }
-
-  private resumeWrites(child: ChildProcessWithoutNullStreams): void {
-    this.outboundPaused = false
-    if (this.process !== child || child.stdin.destroyed) return
-    while (this.outbound.length > 0) {
-      const payload = this.outbound.shift()
-      if (!payload) return
-      this.outboundLength -= payload.length
-      if (child.stdin.write(payload)) continue
-      this.outboundPaused = true
-      child.stdin.once('drain', () => this.resumeWrites(child))
-      return
-    }
+    void child
+      .write(new TextEncoder().encode(`Content-Length: ${size}\r\n\r\n${json}`))
+      .catch((error: unknown) => {
+        if (this.process === child) this.fail(AppError.from(error))
+      })
   }
 
   /**
@@ -1551,11 +1494,8 @@ export class ExternalLspClient {
     this.inbound.length = 0
     this.inboundLength = 0
     this.pendingBodySize = null
-    this.outbound.length = 0
-    this.outboundLength = 0
-    this.outboundPaused = false
     if (child) {
-      const completed = this.terminateProcess(child)
+      const completed = child.terminate()
       this.processTermination = { child, completed }
       void completed.catch((terminationError: unknown) =>
         Log.tag('WorkbenchLanguageService').warn('external_lsp_termination_failed', {
@@ -1590,6 +1530,7 @@ function normalizeLocations(value: unknown): ExternalLspLocation[] {
 }
 
 export class ExternalLspManager {
+  public constructor(private readonly launcher: ExternalLspLauncherGroup) {}
   private readonly clients = new Map<
     string,
     {
@@ -1662,6 +1603,7 @@ export class ExternalLspManager {
       }
       this.assertClientRequestActive(boundary, generation)
       const client = new ExternalLspClient(
+        this.launcher,
         runtimeRoot,
         descriptor,
         DefaultRequestTimeoutMs,
@@ -1737,19 +1679,29 @@ export class ExternalLspManager {
   public dispose(): Promise<void> {
     if (this.disposal) return this.disposal
     this.disposed = true
-    const disposal = this.disposeAll()
+    const disposal = this.disposeAll(Date.now() + DefaultRequestTimeoutMs)
     this.disposal = disposal
     return disposal
   }
 
-  private async disposeAll(): Promise<void> {
+  private async disposeAll(deadlineAt: number): Promise<void> {
     await Promise.allSettled(this.workspaceInvalidations.values())
     await Promise.allSettled([...this.refreshes.values()].map(({ promise }) => promise))
     const clients = [...this.clients.values()].map((managed) => managed.client)
     this.clients.clear()
     this.documentOwners.clear()
     this.clientOwners.clear()
-    await Promise.all(clients.map((client) => client.dispose()))
+    const results = await Promise.allSettled(clients.map((client) => client.dispose()))
+    try {
+      // client 失败也必须收束显式注入的整组；不为组关闭重新发一张 15 秒预算。
+      await this.launcher.close(deadlineAt)
+    } catch (reason) {
+      results.push({ status: 'rejected', reason })
+    }
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : []
+    )
+    if (failures.length) throw new AggregateError(failures, 'Language clients did not close')
   }
 
   private async waitForWorkspaceInvalidation(workspaceRoot: string): Promise<void> {

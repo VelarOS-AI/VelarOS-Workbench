@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { test } from 'bun:test'
 
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import {
   type WorkbenchLanguagePathResolver,
   WorkbenchLanguageServices,
@@ -51,7 +52,7 @@ void test('retains large contextual completion rosters within a safe external LS
     args: [fixture, 'many-completions'],
     documentLanguageId: 'many-completions',
   })
-  const services = new WorkbenchLanguageServices(languagePathResolver)
+  const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
 
   try {
     const result = await services.getCompletions({

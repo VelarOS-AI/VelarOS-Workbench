@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
+import { ExternalLspProcessHost } from '../../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../../src/main/workspace/language/LanguageServices'
 import { clearTypeScriptProjectCache } from '../../src/main/workspace/language/TypeScriptProjectHost'
 import { PathResolver } from '../../src/main/workspace/PathResolver'
@@ -59,7 +60,7 @@ export async function createLanguageProject(
     await writeFile(join(projectRoot, path), content, 'utf8')
   }
   for (const [path, content] of Object.entries(files)) await write(path, content)
-  const services = new WorkbenchLanguageServices(new PathResolver())
+  const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
 
   return {
     projectRoot,

@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
+import { ExternalLspProcessHost } from '../../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../../src/main/workspace/language/LanguageServices'
 import { VelarWorkbenchLanguageService } from '../../src/shared/contributions/velar/service'
 import { registerWorkbenchLanguageService } from '../../src/shared/workbenchLanguageServices'
@@ -328,7 +329,7 @@ try {
     command: nodeExecutable,
     args: [installedProjectCli, 'lsp'],
   })
-  services = new WorkbenchLanguageServices(languagePathResolver)
+  services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
   const resolved = await services.resolveLanguageService({
     projectRoot,
     path: 'src/main.vel',

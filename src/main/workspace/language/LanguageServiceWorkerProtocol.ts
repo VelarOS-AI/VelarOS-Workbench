@@ -35,6 +35,8 @@ import {
   type WorkbenchLanguageServiceSignatureHelpQueryResult,
 } from '@shared/contracts/workbench'
 
+import type { ExternalLspProjectLease } from './ExternalLspTransport'
+
 export interface WorkbenchLanguageServiceProjectRequest {
   projectRoot: string
 }
@@ -181,6 +183,7 @@ export function isWorkbenchLanguageServiceOperationSuperseded(
 export type WorkbenchLanguageServiceWorkerRequest = {
   [TOperation in WorkbenchLanguageServiceWorkerOperation]: {
     id: number
+    projectLease?: ExternalLspProjectLease
     operation: TOperation
     request: WorkbenchLanguageServiceWorkerOperationMap[TOperation]['request']
   }

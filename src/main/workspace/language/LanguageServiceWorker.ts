@@ -1,5 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import * as v8 from 'node:v8'
-import { parentPort, workerData } from 'node:worker_threads'
+import { MessagePort, parentPort, workerData } from 'node:worker_threads'
 
 import { AppError } from '@velaros-ai/velaros/core/error'
 
@@ -10,6 +11,8 @@ import { isWorkbenchAppLocale, setWorkbenchMainLocale } from '../../i18n/workben
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { PathResolver } from '../PathResolver'
 
+import type { ExternalLspProjectLease } from './ExternalLspTransport'
+import { ExternalLspWorkerTransport } from './ExternalLspWorkerTransport'
 import {
   decideWorkbenchLanguageMemoryAction,
   type WorkbenchLanguageMemoryAction,
@@ -36,7 +39,13 @@ const port = (() => {
 
 registerWorkbenchLanguageService(VelarWorkbenchLanguageService)
 configureTypeScriptProjectPool(v8.getHeapStatistics().heap_size_limit)
-const languageServices = new WorkbenchLanguageServices(new PathResolver())
+if (!(workerData?.processPort instanceof MessagePort))
+  throw new AppError('INVARIANT', 'Language worker needs its main-owned process transport')
+const projects = new AsyncLocalStorage<ExternalLspProjectLease | undefined>()
+const languageServices = new WorkbenchLanguageServices(
+  new PathResolver(),
+  new ExternalLspWorkerTransport(workerData.processPort, () => projects.getStore())
+)
 
 async function dispatch(
   request: WorkbenchLanguageServiceWorkerRequest,
@@ -97,7 +106,8 @@ const cancellation =
     ? new Int32Array(workerData.cancellation)
     : undefined
 const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
-  dispatch,
+  dispatch: (request, signal) =>
+    projects.run(request.projectLease, () => dispatch(request, signal)),
   post: (message) => port.postMessage(message),
   cancellation,
 })

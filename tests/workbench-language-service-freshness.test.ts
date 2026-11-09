@@ -7,6 +7,7 @@ import path, { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import {
   WorkbenchLanguageServiceWorkerClient,
@@ -83,7 +84,7 @@ void describe('language service freshness after files change on disk', () => {
         [mainPath],
         new Map([[mainPath, content]])
       )
-    const services = new WorkbenchLanguageServices(new PathResolver())
+    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
     try {
       const before = acquire()
       assert.equal(before.service.getSemanticDiagnostics(mainPath).length, 1)
@@ -174,7 +175,7 @@ void describe('language service freshness after files change on disk', () => {
 
   void test('projectFilesChanged refreshes TypeScript from relative paths and ignores paths outside the project', async () => {
     const { projectRoot, mainPath, dependencyPath } = await createProject()
-    const services = new WorkbenchLanguageServices(new PathResolver())
+    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
     const request = { projectRoot, path: 'src/main.ts', language: 'typescript' }
     try {
       const before = await services.getDiagnostics({ ...request, content: readFileSync(mainPath, 'utf8') })

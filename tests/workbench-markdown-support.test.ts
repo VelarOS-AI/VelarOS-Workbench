@@ -2,14 +2,19 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { setImmediate } from 'node:timers/promises'
 
 import { ensureSyntaxTree, highlightingFor } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
-import { describe, test } from 'bun:test'
+import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
+import { withWorkbenchMarkdownLanguageService } from '../src/main/workspace/language/MarkdownLanguageService'
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import {
   usesWorkbenchBuiltinLanguageService,
@@ -119,7 +124,7 @@ void describe('Workbench Markdown support', () => {
 
   void test('provides Markdown symbols, definitions, and broken-link diagnostics', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-markdown-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     const guide = '# Install\n\nRun the installer.\n'
     const readme = [
       '# Workbench',
@@ -170,6 +175,145 @@ void describe('Workbench Markdown support', () => {
       assert.equal(definition.locations[0]?.line, 1)
     } finally {
       await services.dispose()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('cancels a Markdown SDK read without detached rejections or early disposal', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-markdown-cancel-'))
+    const guidePath = join(projectRoot, 'guide.md')
+    const readme = '[Install guide](guide.md#install)'
+    const originalFs = { ...(await import('node:fs/promises')) }
+    const originalSdk = { ...(await import('vscode-markdown-languageservice')) }
+    let enterRead!: () => void
+    let releaseRead!: () => void
+    const readEntered = new Promise<void>((resolve) => {
+      enterRead = resolve
+    })
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve
+    })
+    const controller = new AbortController()
+    const unhandled: unknown[] = []
+    const onUnhandled = (error: unknown): void => {
+      unhandled.push(error)
+    }
+    let guideReads = 0
+    let readSignal: unknown
+    let disposed = false
+    let runSettled = false
+    let disposedBeforeRunSettled = false
+    let settled = false
+    const sdkFailure = new Error('Markdown request failed after its read settled')
+    const createLanguageService: typeof originalSdk.createLanguageService = (options) => {
+      const service = originalSdk.createLanguageService(options)
+      return {
+        ...service,
+        dispose() {
+          disposedBeforeRunSettled = !runSettled
+          disposed = true
+          service.dispose()
+        },
+      }
+    }
+    const gatedReadFile = (async (...args: Parameters<typeof readFile>) => {
+      const content = await originalFs.readFile(...args)
+      const isGuide =
+        typeof args[0] === 'string' &&
+        (process.platform === 'win32'
+          ? args[0].toLowerCase() === guidePath.toLowerCase()
+          : args[0] === guidePath)
+      if (isGuide) {
+        guideReads += 1
+        readSignal = typeof args[1] === 'object' && args[1] ? args[1].signal : undefined
+        enterRead()
+        await readGate
+      }
+      return content
+    }) as typeof readFile
+
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      await writeFile(guidePath, '# Install\n', 'utf8')
+      void mock.module('vscode-markdown-languageservice', () => ({
+        ...originalSdk,
+        createLanguageService,
+      }))
+      void mock.module('node:fs/promises', () => ({ ...originalFs, readFile: gatedReadFile }))
+      assert.equal((await import('node:fs/promises')).readFile, gatedReadFile)
+      assert.equal(
+        (await import('vscode-markdown-languageservice')).createLanguageService,
+        createLanguageService
+      )
+      const pending = withWorkbenchMarkdownLanguageService(
+        {
+          projectRoot,
+          absolutePath: join(projectRoot, 'README.md'),
+          content: readme,
+          signal: controller.signal,
+        },
+        async ({ service, document, token }) => {
+          try {
+            await service.getDefinition(document, { line: 0, character: 19 }, token)
+            // Also exercise cancellation normalization when the request callback rejects.
+            throw sdkFailure
+          } finally {
+            runSettled = true
+          }
+        }
+      )
+      const observed = pending.then(
+        (value) => {
+          settled = true
+          return { ok: true as const, value }
+        },
+        (error: unknown) => {
+          settled = true
+          return { ok: false as const, error }
+        }
+      )
+      try {
+        await readEntered
+        assert.equal(readSignal, controller.signal)
+        controller.abort()
+        await Promise.resolve()
+        assert.equal(settled, false, 'cancellation must await the in-flight SDK callback')
+        assert.equal(disposed, false)
+        releaseRead()
+        const outcome = await observed
+        assert.ok(!outcome.ok)
+        assert.ok(outcome.error instanceof AppError)
+        assert.equal(outcome.error.code, 'CANCELLED')
+        assert.notEqual(outcome.error, sdkFailure)
+        assert.equal(disposed, true)
+        assert.equal(disposedBeforeRunSettled, false)
+      } finally {
+        releaseRead()
+        await observed
+      }
+
+      const overlayReadme = '[Install guide](guide.md#overlay-install)'
+      const definition = await withWorkbenchMarkdownLanguageService(
+        {
+          projectRoot,
+          absolutePath: join(projectRoot, 'README.md'),
+          content: overlayReadme,
+          openFiles: [{ absolutePath: guidePath, content: '# Overlay install\n' }],
+        },
+        ({ service, document, token }) =>
+          service.getDefinition(document, { line: 0, character: 19 }, token)
+      )
+      const location = Array.isArray(definition) ? definition[0] : definition
+      assert.ok(location && 'uri' in location)
+      assert.equal(location.range.start.line, 0)
+      assert.equal(guideReads, 1, 'the next request must use its unsaved overlay')
+      await setImmediate()
+      assert.deepEqual(unhandled, [])
+    } finally {
+      releaseRead()
+      void mock.module('vscode-markdown-languageservice', () => originalSdk)
+      void mock.module('node:fs/promises', () => originalFs)
+      process.off('unhandledRejection', onUnhandled)
       await rm(projectRoot, { recursive: true, force: true })
     }
   })

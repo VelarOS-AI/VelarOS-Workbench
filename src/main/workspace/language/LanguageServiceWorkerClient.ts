@@ -1,6 +1,6 @@
 import { totalmem } from 'node:os'
 import { resolve } from 'node:path'
-import { Worker } from 'node:worker_threads'
+import { MessageChannel, type MessagePort, Worker } from 'node:worker_threads'
 
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import { Log } from '@velaros-ai/velaros/core'
@@ -26,6 +26,15 @@ import {
 } from '../../i18n/workbenchMainLocale'
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 
+import {
+  ExternalLspProcessHost,
+  type ExternalLspWorkerProcessScope,
+} from './ExternalLspProcessHost'
+import {
+  type ExternalLspProjectLease,
+  ExternalLspTerminationReserveMs,
+  withinLspDeadline,
+} from './ExternalLspTransport'
 import {
   computeWorkbenchLanguageWorkerHeapLimitMb,
   isWorkbenchLanguageMemoryNotification,
@@ -54,6 +63,8 @@ export interface WorkbenchLanguageServiceWorkerPort {
 }
 
 export interface WorkbenchLanguageServiceWorkerFactoryOptions {
+  /** 真实 LSP 管道端点；ChildProcess 始终由 main 持有。 */
+  processPort: MessagePort
   /** 取消缓冲：worker 陷在同步计算里收不到消息时，也能从这里读到自己的请求已被取消。 */
   cancellation: SharedArrayBuffer
   /** 创建时的界面语言，worker 里给用户看的提示按它出。 */
@@ -107,6 +118,8 @@ export function getWorkbenchLanguageServiceRequestTimeoutMs(
 }
 
 interface LanguageServiceWorkerInstance {
+  processes: ExternalLspWorkerProcessScope
+  processPort: MessagePort
   port: WorkbenchLanguageServiceWorkerPort
   cancellation: Int32Array
   startedAt: number
@@ -115,6 +128,7 @@ interface LanguageServiceWorkerInstance {
 }
 
 interface PendingLanguageServiceRequest {
+  projectLease?: ExternalLspProjectLease
   id: number
   operation: WorkbenchLanguageServiceWorkerOperation
   request: unknown
@@ -180,6 +194,7 @@ const log = Log.tag('WorkbenchLanguageService')
 const WorkerOutOfMemoryCode = 'ERR_WORKER_OUT_OF_MEMORY'
 
 function createDefaultLanguageServiceWorker({
+  processPort,
   cancellation,
   locale,
 }: WorkbenchLanguageServiceWorkerFactoryOptions): WorkbenchLanguageServiceWorkerPort {
@@ -188,7 +203,8 @@ function createDefaultLanguageServiceWorker({
     resourceLimits: {
       maxOldGenerationSizeMb: computeWorkbenchLanguageWorkerHeapLimitMb(totalmem()),
     },
-    workerData: { cancellation, locale },
+    workerData: { cancellation, locale, processPort },
+    transferList: [processPort],
   })
 }
 
@@ -206,6 +222,12 @@ function isWorkerOutOfMemory(error: unknown): boolean {
 export class WorkbenchLanguageServiceWorkerClient {
   private worker: Nullable<LanguageServiceWorkerInstance> = null
   private disposed = false
+  private disposal?: Promise<void>
+  private readonly processes = new ExternalLspProcessHost()
+  private readonly retiring = new Map<
+    LanguageServiceWorkerInstance | ExternalLspWorkerProcessScope,
+    Promise<unknown>
+  >()
   private nextRequestId = 1
   private readonly pending = new Map<number, PendingLanguageServiceRequest>()
   private readonly supersedable = new Map<string, number>()
@@ -229,8 +251,15 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   public invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
-    if (!this.worker) return Promise.resolve()
-    return this.call('invalidateProject', request)
+    const root = resolve(request.projectRoot)
+    for (const pending of [...this.pending.values()])
+      if (pending.projectLease?.projectRoot === root)
+        this.cancel(pending.id, new AppError('CANCELLED', 'Language project was released'))
+    return this.processes.releaseProject(
+      root,
+      Date.now() + this.requestTimeoutMs('invalidateProject'),
+      () => (this.worker ? this.call('invalidateProject', request) : Promise.resolve())
+    )
   }
 
   public projectFilesChanged(
@@ -356,40 +385,47 @@ export class WorkbenchLanguageServiceWorkerClient {
     return this.call('getCallHierarchy', request)
   }
 
-  public async dispose(): Promise<void> {
-    if (this.disposed) return
+  public dispose(): Promise<void> {
+    if (this.disposal) return this.disposal
     this.disposed = true
     this.stopFollowingLocale()
     if (this.restartTimer) clearTimeout(this.restartTimer)
     this.restartTimer = null
     const worker = this.worker
-    if (!worker) {
-      this.rejectPending(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
-      return
-    }
-
-    let timeout: Nullable<ReturnType<typeof setTimeout>> = null
-    try {
-      const gracefulShutdown = new Promise<unknown>((resolvePromise, reject) => {
-        this.post(this.createPending('shutdown', {}, resolvePromise, reject), worker)
-      })
-      await Promise.race([
-        gracefulShutdown,
-        new Promise<void>((_resolve, reject) => {
-          timeout = setTimeout(() => {
-            reject(new AppError('TIMEOUT', workbenchMainText('language.serviceCloseTimedOut')))
-          }, GracefulWorkerShutdownTimeoutMs)
-        }),
-      ])
-    } catch {
-      // worker 已异常或服务端无响应时仍需继续退出；terminate 是最终兜底。
-    } finally {
-      if (timeout) clearTimeout(timeout)
-      this.clearProbe(worker)
-      if (this.worker === worker) this.worker = null
-      this.rejectPending(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
-      await worker.port.terminate().catch(() => 0)
-    }
+    const deadlineAt = Date.now() + GracefulWorkerShutdownTimeoutMs
+    const closingProcesses = this.processes.close(deadlineAt)
+    void Promise.allSettled([closingProcesses])
+    this.disposal = (async () => {
+      try {
+        if (worker) {
+          const gracefulShutdown = new Promise<unknown>((accept, reject) => {
+            this.post(this.createPending('shutdown', {}, accept, reject), worker)
+          })
+          // child 清理已并行开始并预留 force 窗口，不能 8 秒之后再补一轮完整 kill 等待。
+          await withinLspDeadline(
+            gracefulShutdown,
+            deadlineAt - ExternalLspTerminationReserveMs
+          ).catch(() => {})
+        }
+      } finally {
+        if (worker) {
+          this.clearProbe(worker)
+          if (this.worker === worker) this.worker = null
+          this.retire(worker, deadlineAt)
+        }
+        this.rejectPending(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
+      }
+      const results = await withinLspDeadline(
+        Promise.allSettled([closingProcesses, ...this.retiring.values()]),
+        deadlineAt
+      )
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : []
+      )
+      if (failures.length)
+        throw new AggregateError(failures, 'Language service resources did not close')
+    })()
+    return this.disposal
   }
 
   private supersedeKey(
@@ -484,6 +520,12 @@ export class WorkbenchLanguageServiceWorkerClient {
     reject: (error: AppError) => void
   ): PendingLanguageServiceRequest {
     const pending: PendingLanguageServiceRequest = {
+      projectLease:
+        operation === 'shutdown' || operation === 'invalidateProject'
+          ? undefined
+          : this.processes.captureProject(
+              (request as WorkbenchLanguageServiceProjectRequest).projectRoot
+            ),
       id: this.nextRequestId++,
       operation,
       request,
@@ -506,10 +548,12 @@ export class WorkbenchLanguageServiceWorkerClient {
     pending.deadlineAt = Date.now() + timeoutMs
     pending.timeout = setTimeout(() => this.handleRequestTimeout(pending), timeoutMs)
     try {
+      if (pending.projectLease) worker.processes.bindProject(pending.projectLease)
       worker.port.postMessage({
         id: pending.id,
         operation: pending.operation,
         request: pending.request,
+        projectLease: pending.projectLease,
       } as WorkbenchLanguageServiceWorkerMessage)
     } catch (error) {
       this.settle(pending, AppError.from(error, 'IPC'))
@@ -602,8 +646,27 @@ export class WorkbenchLanguageServiceWorkerClient {
     if (this.worker) return this.worker
 
     const buffer = createWorkbenchLanguageServiceCancellationBuffer()
-    const port = this.createWorker({ cancellation: buffer, locale: getWorkbenchMainLocale() })
+    const channel = new MessageChannel()
+    channel.port2.unref()
+    const processes = this.processes.createWorkerScope(channel.port1)
+    let port: WorkbenchLanguageServiceWorkerPort
+    try {
+      port = this.createWorker({
+        cancellation: buffer,
+        locale: getWorkbenchMainLocale(),
+        processPort: channel.port2,
+      })
+    } catch (error) {
+      channel.port2.close()
+      this.followRetirement(
+        processes,
+        processes.close(Date.now() + ExternalLspTerminationReserveMs)
+      )
+      throw error
+    }
     const worker: LanguageServiceWorkerInstance = {
+      processes,
+      processPort: channel.port2,
       port,
       cancellation: new Int32Array(buffer),
       startedAt: Date.now(),
@@ -613,6 +676,7 @@ export class WorkbenchLanguageServiceWorkerClient {
     port.on('message', (message) => this.handleWorkerMessage(worker, message))
     port.on('error', (error) => this.handleWorkerFailure(worker, error))
     port.on('exit', (exitCode) => {
+      this.retire(worker, Date.now() + ExternalLspTerminationReserveMs)
       if (this.worker !== worker) return
       this.handleWorkerFailure(
         worker,
@@ -672,7 +736,7 @@ export class WorkbenchLanguageServiceWorkerClient {
     for (const pending of [...this.pending.values()])
       if (pending.worker === worker) this.settle(pending, error)
     this.inFlightDiagnostics.splice(0)
-    void worker.port.terminate().catch(() => 0)
+    this.retire(worker, Date.now() + ExternalLspTerminationReserveMs)
 
     // 平稳跑过一阵才出事的不算接连失败；接连失败的重建间隔翻倍，免得反复拉起一个起不来的 worker。
     const now = Date.now()
@@ -721,5 +785,32 @@ export class WorkbenchLanguageServiceWorkerClient {
     this.pending.clear()
     this.supersedable.clear()
     this.inFlightDiagnostics.splice(0)
+  }
+
+  private retire(worker: LanguageServiceWorkerInstance, deadlineAt: number): void {
+    if (this.retiring.has(worker)) return
+    worker.processPort.close()
+    this.followRetirement(
+      worker,
+      Promise.resolve().then(() =>
+        withinLspDeadline(
+          Promise.all([worker.processes.close(deadlineAt), worker.port.terminate()]),
+          deadlineAt
+        )
+      )
+    )
+  }
+
+  private followRetirement(
+    owner: LanguageServiceWorkerInstance | ExternalLspWorkerProcessScope,
+    retirement: Promise<unknown>
+  ): void {
+    this.retiring.set(owner, retirement)
+    void retirement.then(
+      () => this.retiring.delete(owner),
+      (error: unknown) => {
+        log.warn('language_worker_resources_failed_to_close', { error })
+      }
+    )
   }
 }

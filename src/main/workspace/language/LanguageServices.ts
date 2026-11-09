@@ -13,6 +13,7 @@ import { DiagnosticLevel, IncludeWorkspaceHeaderCompletions } from 'vscode-markd
 import { URI } from 'vscode-uri'
 
 import { isNumber, isPresent, optionalWhen, toNullable, toOptional } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   type WorkbenchLanguageServiceCallHierarchyRequest,
@@ -64,6 +65,8 @@ import {
   type WorkbenchLanguageServiceDescriptor,
 } from '@shared/workbenchLanguageServices'
 
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
+
 import {
   type ExternalLspCodeAction,
   type ExternalLspDiagnostic,
@@ -78,6 +81,7 @@ import {
   type ExternalLspWorkspaceEdit,
   resolveExternalLspRuntimeRoot,
 } from './ExternalLspClient'
+import type { ExternalLspLauncherGroup } from './ExternalLspTransport'
 import {
   clearWorkbenchProjectEslintCache,
   clearWorkbenchProjectEslintResults,
@@ -466,9 +470,14 @@ interface TypeScriptProjectSnapshot {
 }
 
 class WorkbenchLanguageServices {
-  private readonly externalLsp = new ExternalLspManager()
+  private readonly externalLsp: ExternalLspManager
 
-  constructor(private readonly pathResolver: WorkbenchLanguagePathResolver) {}
+  constructor(
+    private readonly pathResolver: WorkbenchLanguagePathResolver,
+    launcher: ExternalLspLauncherGroup
+  ) {
+    this.externalLsp = new ExternalLspManager(launcher)
+  }
 
   public async invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
@@ -683,7 +692,7 @@ class WorkbenchLanguageServices {
             )
           ),
         }
-      })
+      }, signal)
     if (resolved.service?.runtime !== 'typescript-language-service')
       return {
         projectRoot: resolved.projectRoot,
@@ -1087,7 +1096,7 @@ class WorkbenchLanguageServices {
           path: request.path,
           hover: hover ? buildExternalHoverResult(hover.contents) : null,
         }
-      })
+      }, signal)
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, hover: null }
 
@@ -1424,7 +1433,7 @@ class WorkbenchLanguageServices {
             kind: highlight.kind === 3 ? ('write' as const) : ('read' as const),
           })),
         }
-      })
+      }, signal)
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, highlights: [] }
 
@@ -1839,8 +1848,11 @@ class WorkbenchLanguageServices {
   private async withMarkdownLanguageService<T>(
     request: WorkbenchLanguageServiceRequest,
     projectRoot: string,
-    run: (context: WorkbenchMarkdownLanguageServiceContext) => Promise<T>
+    run: (context: WorkbenchMarkdownLanguageServiceContext) => Promise<T>,
+    signal?: AbortSignal
   ): Promise<T> {
+    if (signal?.aborted)
+      throw new AppError('CANCELLED', workbenchMainText('language.requestCancelledPlain'))
     const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
     const openFiles = (request.openFiles ?? []).map((file) => ({
       absolutePath: this.resolveAbsoluteProjectPath(projectRoot, file.path),
@@ -1852,6 +1864,7 @@ class WorkbenchLanguageServices {
         absolutePath,
         content: request.content ?? safeReadFile(absolutePath) ?? '',
         openFiles,
+        signal,
       },
       run
     )

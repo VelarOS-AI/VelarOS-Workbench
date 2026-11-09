@@ -11,6 +11,7 @@ import { describe, test } from 'bun:test'
 import { optionalWhen } from '@velaros-ai/velaros/core'
 
 import { ExternalLspClient } from '../src/main/workspace/language/ExternalLspClient'
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import {
   shouldDetachExternalLspProcess,
   terminateExternalLspProcessTree,
@@ -18,8 +19,12 @@ import {
 
 const fixture = fileURLToPath(new URL('./fixtures/protocol-lsp.cjs', import.meta.url))
 
-function protocolClient(projectRoot: string, mode: string): ExternalLspClient {
-  return new ExternalLspClient(projectRoot, {
+function protocolClient(
+  lspProcesses: ExternalLspProcessHost,
+  projectRoot: string,
+  mode: string
+): ExternalLspClient {
+  return new ExternalLspClient(lspProcesses, projectRoot, {
     id: `protocol-fixture-${mode}`,
     label: 'Protocol Fixture Language',
     installKind: 'builtin',
@@ -32,8 +37,12 @@ function protocolClient(projectRoot: string, mode: string): ExternalLspClient {
   })
 }
 
-function extensionClient(projectRoot: string, declared = true): ExternalLspClient {
-  return new ExternalLspClient(projectRoot, {
+function extensionClient(
+  lspProcesses: ExternalLspProcessHost,
+  projectRoot: string,
+  declared = true
+): ExternalLspClient {
+  return new ExternalLspClient(lspProcesses, projectRoot, {
     id: 'protocol-fixture-extension',
     label: 'Protocol Fixture Language',
     installKind: 'builtin',
@@ -55,107 +64,127 @@ function extensionClient(projectRoot: string, declared = true): ExternalLspClien
 
 void describe('external LSP protocol boundaries', () => {
   void test('answers server-initiated requests instead of treating them as responses', async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-protocol-'))
-    const client = protocolClient(projectRoot, 'server-request')
+    const lspProcesses = new ExternalLspProcessHost()
     try {
-      const { items: completions } = await client.completion(
-        join(projectRoot, 'probe.protocol'),
-        'comp',
-        { line: 0, character: 4 }
-      )
-      const observed = JSON.parse(completions[0]?.label ?? '{}') as Record<string, string>
+      const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-protocol-'))
+      const client = protocolClient(lspProcesses, projectRoot, 'server-request')
+      try {
+        const { items: completions } = await client.completion(
+          join(projectRoot, 'probe.protocol'),
+          'comp',
+          { line: 0, character: 4 }
+        )
+        const observed = JSON.parse(completions[0]?.label ?? '{}') as Record<string, string>
 
-      // initialize 的返回值没有被同 id 的服务端请求顶掉——否则 capabilities 为空，补全直接消失。
-      assert.equal(completions.length, 1)
-      // 服务端请求都拿到了回复，没有一条被静默丢弃。
-      assert.equal(observed['registerCapability'], 'null')
-      assert.equal(observed['unknownMethod'], 'error:-32601')
-      assert.equal(observed['configuration'], '[null,null]')
-      const folders = JSON.parse(observed['workspaceFolders'] ?? 'null') as Array<{ uri: string }>
-      assert.equal(folders.length, 1)
-      assert.equal(folders[0]?.uri.startsWith('file://'), true)
+        // initialize 的返回值没有被同 id 的服务端请求顶掉——否则 capabilities 为空，补全直接消失。
+        assert.equal(completions.length, 1)
+        // 服务端请求都拿到了回复，没有一条被静默丢弃。
+        assert.equal(observed['registerCapability'], 'null')
+        assert.equal(observed['unknownMethod'], 'error:-32601')
+        assert.equal(observed['configuration'], '[null,null]')
+        const folders = JSON.parse(observed['workspaceFolders'] ?? 'null') as Array<{ uri: string }>
+        assert.equal(folders.length, 1)
+        assert.equal(folders[0]?.uri.startsWith('file://'), true)
+      } finally {
+        const disposal = client.dispose()
+        assert.equal(client.dispose(), disposal)
+        await disposal
+        await rm(projectRoot, { recursive: true, force: true })
+      }
     } finally {
-      const disposal = client.dispose()
-      assert.equal(client.dispose(), disposal)
-      await disposal
-      await rm(projectRoot, { recursive: true, force: true })
+      await lspProcesses.close()
     }
   })
 
   void test('reassembles a large response split across chunk and header boundaries', async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-chunked-'))
-    const client = protocolClient(projectRoot, 'chunked')
+    const lspProcesses = new ExternalLspProcessHost()
     try {
-      const { items: completions } = await client.completion(
-        join(projectRoot, 'probe.protocol'),
-        'comp',
-        { line: 0, character: 4 }
-      )
-      const label = completions[0]?.label ?? ''
+      const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-chunked-'))
+      const client = protocolClient(lspProcesses, projectRoot, 'chunked')
+      try {
+        const { items: completions } = await client.completion(
+          join(projectRoot, 'probe.protocol'),
+          'comp',
+          { line: 0, character: 4 }
+        )
+        const label = completions[0]?.label ?? ''
 
-      assert.equal(label.length, 512 * 1024)
-      assert.equal(label.startsWith('组件组件'), true)
-      assert.equal(label.endsWith('组件组件'), true)
-      assert.equal(label.replaceAll('组件', ''), '')
+        assert.equal(label.length, 512 * 1024)
+        assert.equal(label.startsWith('组件组件'), true)
+        assert.equal(label.endsWith('组件组件'), true)
+        assert.equal(label.replaceAll('组件', ''), '')
+      } finally {
+        await client.dispose()
+        await rm(projectRoot, { recursive: true, force: true })
+      }
     } finally {
-      await client.dispose()
-      await rm(projectRoot, { recursive: true, force: true })
+      await lspProcesses.close()
     }
   })
 
   void test('transports only declared, capability-gated extension requests', async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-extension-'))
-    const client = extensionClient(projectRoot)
+    const lspProcesses = new ExternalLspProcessHost()
     try {
-      const path = join(projectRoot, 'main.protocol')
-      const first = (await client.requestExtension(path, 'first', 'ownership-graph', {
-        maximumNodes: 120,
-        textDocument: { uri: 'file:///spoofed' },
-        version: 999,
-      })) as {
-        params: { maximumNodes: number; textDocument: { uri: string }; version: number }
-      }
-      assert.equal(first.params.maximumNodes, 120)
-      assert.equal(first.params.textDocument.uri.startsWith('file://'), true)
-      assert.equal(first.params.textDocument.uri.includes('spoofed'), false)
-      assert.equal(first.params.version, 1)
+      const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-extension-'))
+      const client = extensionClient(lspProcesses, projectRoot)
+      try {
+        const path = join(projectRoot, 'main.protocol')
+        const first = (await client.requestExtension(path, 'first', 'ownership-graph', {
+          maximumNodes: 120,
+          textDocument: { uri: 'file:///spoofed' },
+          version: 999,
+        })) as {
+          params: { maximumNodes: number; textDocument: { uri: string }; version: number }
+        }
+        assert.equal(first.params.maximumNodes, 120)
+        assert.equal(first.params.textDocument.uri.startsWith('file://'), true)
+        assert.equal(first.params.textDocument.uri.includes('spoofed'), false)
+        assert.equal(first.params.version, 1)
 
-      const changedPath = join(projectRoot, 'changed.protocol')
-      await client.filesChanged([changedPath])
-      const second = (await client.requestExtension(path, 'second', 'ownership-graph')) as {
-        params: { version: number }
-        fileChanges: Array<{ uri: string; type: number }>
-      }
-      assert.equal(second.params.version, 2)
-      assert.equal(second.fileChanges.length, 1)
-      assert.equal(second.fileChanges[0]?.uri.includes('changed.protocol'), true)
-      assert.equal(second.fileChanges[0]?.type, 2)
+        const changedPath = join(projectRoot, 'changed.protocol')
+        await client.filesChanged([changedPath])
+        const second = (await client.requestExtension(path, 'second', 'ownership-graph')) as {
+          params: { version: number }
+          fileChanges: Array<{ uri: string; type: number }>
+        }
+        assert.equal(second.params.version, 2)
+        assert.equal(second.fileChanges.length, 1)
+        assert.equal(second.fileChanges[0]?.uri.includes('changed.protocol'), true)
+        assert.equal(second.fileChanges[0]?.type, 2)
 
-      const preserved = (await client.requestExtension(
-        path,
-        'stale disk content',
-        'ownership-graph',
-        {},
-        true
-      )) as { params: { version: number } }
-      assert.equal(preserved.params.version, 2)
+        const preserved = (await client.requestExtension(
+          path,
+          'stale disk content',
+          'ownership-graph',
+          {},
+          true
+        )) as { params: { version: number } }
+        assert.equal(preserved.params.version, 2)
+      } finally {
+        await client.dispose()
+        await rm(projectRoot, { recursive: true, force: true })
+      }
     } finally {
-      await client.dispose()
-      await rm(projectRoot, { recursive: true, force: true })
+      await lspProcesses.close()
     }
   })
 
   void test('rejects an undeclared extension request before starting the language server', async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-extension-deny-'))
-    const client = extensionClient(projectRoot, false)
+    const lspProcesses = new ExternalLspProcessHost()
     try {
-      await assert.rejects(
-        client.requestExtension(join(projectRoot, 'main.protocol'), '', 'ownership-graph'),
-        /没有声明语言扩展请求/u
-      )
+      const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-extension-deny-'))
+      const client = extensionClient(lspProcesses, projectRoot, false)
+      try {
+        await assert.rejects(
+          client.requestExtension(join(projectRoot, 'main.protocol'), '', 'ownership-graph'),
+          /没有声明语言扩展请求/u
+        )
+      } finally {
+        await client.dispose()
+        await rm(projectRoot, { recursive: true, force: true })
+      }
     } finally {
-      await client.dispose()
-      await rm(projectRoot, { recursive: true, force: true })
+      await lspProcesses.close()
     }
   })
 })

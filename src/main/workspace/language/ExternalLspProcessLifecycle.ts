@@ -1,8 +1,11 @@
-import { spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 
 import { optionalWhen } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 import { logRuntime } from '@velaros-ai/velaros/core/logger'
 import { createPlatform } from '@velaros-ai/velaros/core/platform'
+
+import { withinLspDeadline } from './ExternalLspTransport'
 
 type ExternalLspProcessTreeTerminationPlan =
   | {
@@ -28,6 +31,8 @@ const TerminationCommandTimeoutMs = 5_000
 
 const log = logRuntime.tag('ExternalLspProcessLifecycle')
 const currentPlatform = createPlatform()
+/** taskkill 自身也是 main 持有的资源；超时拒绝也不丢掉未 close 的命令。 */
+const terminationCommands = new Map<ChildProcess, Promise<void>>()
 
 function shouldDetachExternalLspProcess(platform: NodeJS.Platform = process.platform): boolean {
   return createPlatform({ platform }).shouldUseDetachedProcessGroup()
@@ -77,25 +82,50 @@ async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boole
 }
 
 /** 异步执行平台的进程树终止命令；主进程不阻塞，但调用方仍可 await 到它结束。 */
-async function runTerminationCommand(file: string, args: string[]): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const child = spawn(file, args, { stdio: 'ignore', windowsHide: true })
-    const timer = setTimeout(() => child.kill('SIGKILL'), TerminationCommandTimeoutMs)
-    const settle = (value: boolean): void => {
-      clearTimeout(timer)
-      resolve(value)
-    }
+async function runTerminationCommand(
+  file: string,
+  args: string[],
+  deadlineAt: number,
+  ownedCommands?: Map<ChildProcess, Promise<void>>
+): Promise<boolean> {
+  const child = spawn(file, args, { stdio: 'ignore', windowsHide: true })
+  let failed = false
+  let exitCode: number | null = null
+  const closed = new Promise<void>((resolve) => {
     child.once('error', (error) => {
+      failed = true
       log.warn('failed to run external LSP process tree termination command', { file, error })
-      settle(false)
     })
-    child.once('close', (code) => settle(code === 0))
+    child.once('close', (code) => {
+      exitCode = code
+      terminationCommands.delete(child)
+      ownedCommands?.delete(child)
+      resolve()
+    })
   })
+  terminationCommands.set(child, closed)
+  ownedCommands?.set(child, closed)
+  const until = Math.min(deadlineAt, Date.now() + TerminationCommandTimeoutMs)
+  try {
+    await withinLspDeadline(closed, until)
+    return !failed && exitCode === 0
+  } catch (error) {
+    child.kill('SIGKILL')
+    throw error
+  }
 }
 
-async function deliverTermination(pid: number, signal: NodeJS.Signals): Promise<boolean> {
+async function deliverTermination(
+  pid: number,
+  signal: NodeJS.Signals,
+  deadlineAt: number,
+  ownedCommands?: Map<ChildProcess, Promise<void>>
+): Promise<boolean> {
+  if (Date.now() >= deadlineAt)
+    throw new AppError('TIMEOUT', 'Language server termination timed out')
   const plan = buildExternalLspProcessTreeTerminationPlan(pid, signal)
-  if (plan.kind === 'command') return runTerminationCommand(plan.file, plan.args)
+  if (plan.kind === 'command')
+    return runTerminationCommand(plan.file, plan.args, deadlineAt, ownedCommands)
 
   try {
     process.kill(plan.pid, plan.signal)
@@ -132,19 +162,36 @@ function reportTerminationFailure(pid: number, signal: NodeJS.Signals, error: un
  */
 async function terminateExternalLspProcessTree(
   pid: number | undefined,
-  signal: NodeJS.Signals = 'SIGTERM'
+  signal: NodeJS.Signals = 'SIGTERM',
+  deadlineAt = Date.now() + TerminationCommandTimeoutMs,
+  ownedCommands?: Map<ChildProcess, Promise<void>>
 ): Promise<boolean> {
   if (!pid) return false
   if (!isProcessAlive(pid)) return false
 
-  const delivered = await deliverTermination(pid, signal)
+  const delivered = await deliverTermination(pid, signal, deadlineAt, ownedCommands)
   if (signal === 'SIGKILL')
-    return delivered ? waitForProcessExit(pid, TerminationKillConfirmationMs) : !isProcessAlive(pid)
-  if (delivered && (await waitForProcessExit(pid, TerminationEscalationMs))) return true
+    return delivered
+      ? waitForProcessExit(
+          pid,
+          Math.min(TerminationKillConfirmationMs, Math.max(0, deadlineAt - Date.now()))
+        )
+      : !isProcessAlive(pid)
+  if (
+    delivered &&
+    (await waitForProcessExit(
+      pid,
+      Math.min(TerminationEscalationMs, Math.max(0, deadlineAt - Date.now()))
+    ))
+  )
+    return true
 
-  const killed = await deliverTermination(pid, 'SIGKILL')
+  const killed = await deliverTermination(pid, 'SIGKILL', deadlineAt, ownedCommands)
   if (!killed) return !isProcessAlive(pid)
-  return waitForProcessExit(pid, TerminationKillConfirmationMs)
+  return waitForProcessExit(
+    pid,
+    Math.min(TerminationKillConfirmationMs, Math.max(0, deadlineAt - Date.now()))
+  )
 }
 
 export {

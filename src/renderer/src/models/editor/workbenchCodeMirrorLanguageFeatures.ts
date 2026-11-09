@@ -509,17 +509,6 @@ export function buildWorkbenchEditorHoverDom(
   return wrapper
 }
 
-export function isWorkbenchTypeHover(
-  hover: Nullable<WorkbenchLanguageServiceHoverResult>
-): boolean {
-  return (
-    !!hover &&
-    /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
-      hover.displayText.trim()
-    )
-  )
-}
-
 const HOVER_TOKEN_CHARACTER = /[\p{L}\p{N}_$@]/u
 
 export function getWorkbenchHoverTokenRange(

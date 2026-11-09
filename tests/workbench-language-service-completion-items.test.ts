@@ -5,6 +5,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 
 import { afterAll, beforeAll, describe, test } from 'bun:test'
 
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import { clearTypeScriptProjectCache } from '../src/main/workspace/language/TypeScriptProjectHost'
 
@@ -55,7 +56,7 @@ beforeAll(async () => {
   }))
   await mkdir(join(projectRoot, 'src'))
   await writeFile(join(projectRoot, 'src/theme.ts'), 'export function useTheme(): string { return "x" }\n')
-  services = new WorkbenchLanguageServices(languagePathResolver)
+  services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
 })
 
 afterAll(async () => {

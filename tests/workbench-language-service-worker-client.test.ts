@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 
 import { describe, test } from 'bun:test'
@@ -95,6 +98,76 @@ function sleep(ms: number): Promise<void> {
 }
 
 void describe('language worker client', () => {
+  void test('hard worker termination waits for its main-owned language server to close', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'wb-lsp-worker-owner-')))
+    const packageRoot = join(projectRoot, 'node_modules', '@velarscript', 'cli')
+    const serverPidPath = join(projectRoot, 'server.pid')
+    const fixture = await readFile(new URL('./fixtures/fake-lsp.cjs', import.meta.url), 'utf8')
+    await mkdir(packageRoot, { recursive: true })
+    await Promise.all([
+      writeFile(join(projectRoot, 'velar.json'), '{}'),
+      writeFile(join(projectRoot, 'main.vel'), 'let value = 1\n'),
+      writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({
+          name: '@velarscript/cli',
+          version: '1.0.0',
+          bin: { velar: 'server.cjs' },
+        })
+      ),
+      writeFile(
+        join(packageRoot, 'server.cjs'),
+        [
+          `require('node:fs').writeFileSync(${JSON.stringify(serverPidPath)}, String(process.pid))`,
+          // EOF 或 worker finally 都不能碰巧使此 fixture 消失：必须由 main 真实终止。
+          'setInterval(() => {}, 1000)',
+          "process.on('SIGTERM', () => {})",
+          fixture,
+        ].join('\n')
+      ),
+    ])
+    let worker: Worker | undefined
+    let serverPid: number | undefined
+    const client = new WorkbenchLanguageServiceWorkerClient((options) => {
+      worker = new Worker(
+        new URL('../src/main/workspace/language/LanguageServiceWorker.ts', import.meta.url),
+        {
+          workerData: options,
+          transferList: [options.processPort],
+        }
+      )
+      return worker
+    })
+    try {
+      const result = await client.getHover({
+        projectRoot,
+        path: 'main.vel',
+        language: 'velar',
+        content: 'let value = 1\n',
+        position: { line: 1, column: 6 },
+      })
+      assert.ok(result.hover)
+      serverPid = Number(await readFile(serverPidPath, 'utf8'))
+      assert.ok(Number.isSafeInteger(serverPid) && serverPid > 0)
+      process.kill(serverPid, 0)
+      assert.ok(worker)
+      await worker.terminate()
+      await client.dispose()
+      assert.throws(() => process.kill(serverPid!, 0), { code: 'ESRCH' })
+    } finally {
+      await client.dispose().catch(() => {})
+      if (worker) await worker.terminate()
+      if (serverPid) {
+        try {
+          process.kill(serverPid, 'SIGKILL')
+        } catch {
+          /* fixture already closed */
+        }
+      }
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  }, 15_000)
+
   void test('real worker initialization failures settle without replaying requests', async () => {
     const workers: FakeLanguageServiceWorker[] = []
     let attempts = 0
@@ -115,7 +188,10 @@ void describe('language worker client', () => {
       await assert.rejects(client.getDefinition({ ...request, path: 'failed.ts' }), invalidPath)
       const firstRequest = { ...request, path: 'first.ts' }
       const first = client.getDefinition(firstRequest)
-      assert.deepEqual(workers[0]!.requests.map((message) => message.request), [firstRequest])
+      assert.deepEqual(
+        workers[0]!.requests.map((message) => message.request),
+        [firstRequest]
+      )
       workers[0]!.reply(workers[0]!.requests[0]!)
       await first
       workers[0]!.crash()
@@ -132,7 +208,10 @@ void describe('language worker client', () => {
 
       const recoveredRequest = { ...request, path: 'recovered.ts' }
       const recovered = client.getDefinition(recoveredRequest)
-      assert.deepEqual(workers[2]!.requests.map((message) => message.request), [recoveredRequest])
+      assert.deepEqual(
+        workers[2]!.requests.map((message) => message.request),
+        [recoveredRequest]
+      )
       workers[2]!.reply(workers[2]!.requests[0]!)
       await recovered
       await client.dispose()

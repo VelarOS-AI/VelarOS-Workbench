@@ -5,6 +5,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import {
   createWorkbenchLanguageServiceCancellationBuffer,
@@ -136,7 +137,7 @@ void describe('language worker scheduler', () => {
 
   void test('stops a superseded TypeScript semantic pass at its next checkpoint', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-ts-cancel-')))
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     const buffer = new Int32Array(createWorkbenchLanguageServiceCancellationBuffer())
     const content = 'export function greet(name: string) { return name }\nexport class Box {}\n'
     await writeFile(join(projectRoot, 'main.ts'), content)

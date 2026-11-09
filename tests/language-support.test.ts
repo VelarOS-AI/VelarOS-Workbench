@@ -27,6 +27,7 @@ import {
   ExternalLspManager,
   resolveExternalLspRuntimeRoot,
 } from '../src/main/workspace/language/ExternalLspClient'
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import {
   buildExternalDefinitionPreview,
   buildExternalHoverResult,
@@ -58,7 +59,6 @@ import {
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import {
   getWorkbenchHoverTokenRange,
-  isWorkbenchTypeHover,
   shouldUseWorkbenchSingleCodeHoverLayout,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
@@ -180,7 +180,7 @@ void describe('focused Workbench language surface', () => {
     assert.equal(resolveWorkbenchCodeMirrorLanguage('styles/app.sass', '').mode, 'builtin')
 
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-sass-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     try {
       const sass = await services.getDiagnostics({
         projectRoot,
@@ -723,7 +723,7 @@ void describe('focused Workbench language surface', () => {
 
   void test('adds semantic roles and useful hover behavior to TypeScript and JavaScript', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-script-semantics-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     const typeScript = [
       'interface User { readonly name: string; format(prefix: string): string }',
       'class Greeter implements User {',
@@ -1324,12 +1324,6 @@ void describe('focused Workbench language surface', () => {
     )
   })
 
-  void test('recognizes type hovers for modifier-click information', () => {
-    assert.equal(isWorkbenchTypeHover({ displayText: 'type SetBlockRequest: BlockMutation' }), true)
-    assert.equal(isWorkbenchTypeHover({ displayText: 'interface Request' }), true)
-    assert.equal(isWorkbenchTypeHover({ displayText: 'function parse(request: Request)' }), false)
-  })
-
   void test('keeps the hover interactive until a modifier-click navigation actually opens', async () => {
     const editor = await readFile('src/renderer/src/components/editor/CodeMirrorEditor.tsx', 'utf8')
 
@@ -1537,7 +1531,7 @@ void describe('shared external LSP client', () => {
       command: process.execPath,
       args: [fixture, 'documents'],
     })
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     const probe = async (request: Parameters<WorkbenchLanguageServices['getCompletions']>[0]) => {
       const result = await services.getCompletions(request)
       const detail = result.items[0]?.detail
@@ -1624,7 +1618,7 @@ void describe('shared external LSP client', () => {
       projectRootMarkers: ['runtime.json'],
       documentLanguageId: 'nested-fixture-language',
     }
-    const manager = new ExternalLspManager()
+    const manager = new ExternalLspManager(new ExternalLspProcessHost())
     const probe = async (
       client: ExternalLspClient,
       path: string
@@ -1774,7 +1768,7 @@ void describe('shared external LSP client', () => {
       projectRootMarkers: ['runtime.json'],
       documentLanguageId: 'moving-fixture-language',
     }
-    const manager = new ExternalLspManager()
+    const manager = new ExternalLspManager(new ExternalLspProcessHost())
     const probeFor = async (
       client: ExternalLspClient,
       path: string
@@ -1900,7 +1894,7 @@ void describe('shared external LSP client', () => {
       documentLanguageId: 'racing-fixture-language',
     }
 
-    const disposedManager = new ExternalLspManager()
+    const disposedManager = new ExternalLspManager(new ExternalLspProcessHost())
     const pendingDisposalClient = disposedManager.client(workspaceRoot, descriptor, documentPath)
     const disposalRejection = assert.rejects(pendingDisposalClient, /管理器已关闭/u)
     await disposedManager.dispose()
@@ -1910,7 +1904,7 @@ void describe('shared external LSP client', () => {
       /管理器已关闭/u
     )
 
-    const invalidatedManager = new ExternalLspManager()
+    const invalidatedManager = new ExternalLspManager(new ExternalLspProcessHost())
     try {
       const pendingInvalidationClient = invalidatedManager.client(
         workspaceRoot,
@@ -1956,7 +1950,7 @@ void describe('shared external LSP client', () => {
       projectRootMarkers: ['runtime.json'],
       documentLanguageId: 'refresh-reconcile-race-fixture-language',
     }
-    const manager = new ExternalLspManager()
+    const manager = new ExternalLspManager(new ExternalLspProcessHost())
     let releaseOldClient = (): void => undefined
 
     try {
@@ -2040,7 +2034,7 @@ void describe('shared external LSP client', () => {
       packageRoot,
       process.platform === 'win32' ? 'junction' : 'dir'
     )
-    const manager = new ExternalLspManager()
+    const manager = new ExternalLspManager(new ExternalLspProcessHost())
     const descriptor = {
       id: 'escaped-bin-fixture-language',
       label: 'Escaped Bin Fixture Language',
@@ -2103,107 +2097,117 @@ void describe('shared external LSP client', () => {
   })
 
   void test('resolves the nearest ancestor Node toolchain for nested projects', async () => {
-    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
-    const workspaceRoot = await mkdtemp(join(tmpdir(), 'workbench-ancestor-lsp-'))
-    const projectRoot = join(workspaceRoot, 'packages', 'server')
-    const binRoot = join(workspaceRoot, 'node_modules', '.bin')
-    const commandName = 'ancestor-fixture-lsp'
-    const command = join(binRoot, process.platform === 'win32' ? `${commandName}.cmd` : commandName)
-    await mkdir(projectRoot, { recursive: true })
-    await mkdir(binRoot, { recursive: true })
-    await writeFile(
-      command,
-      process.platform === 'win32'
-        ? `@"${process.execPath}" "${fixture}" %*\r\n`
-        : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)} "$@"\n`,
-      'utf8'
-    )
-    if (process.platform !== 'win32') await chmod(command, 0o755)
-
-    const client = new ExternalLspClient(projectRoot, {
-      id: 'ancestor-fixture-language',
-      label: 'Ancestor Fixture Language',
-      installKind: 'builtin',
-      runtime: 'lsp-server',
-      extensions: ['ancestor'],
-      languages: ['ancestor-fixture-language'],
-      command: commandName,
-      documentLanguageId: 'ancestor-fixture-language',
-    })
+    const lspProcesses = new ExternalLspProcessHost()
     try {
-      const diagnostics = await client.getDiagnostics(
-        join(projectRoot, 'main.ancestor'),
-        'component App:\n'
+      const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+      const workspaceRoot = await mkdtemp(join(tmpdir(), 'workbench-ancestor-lsp-'))
+      const projectRoot = join(workspaceRoot, 'packages', 'server')
+      const binRoot = join(workspaceRoot, 'node_modules', '.bin')
+      const commandName = 'ancestor-fixture-lsp'
+      const command = join(binRoot, process.platform === 'win32' ? `${commandName}.cmd` : commandName)
+      await mkdir(projectRoot, { recursive: true })
+      await mkdir(binRoot, { recursive: true })
+      await writeFile(
+        command,
+        process.platform === 'win32'
+          ? `@"${process.execPath}" "${fixture}" %*\r\n`
+          : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)} "$@"\n`,
+        'utf8'
       )
-      assert.deepEqual(
-        diagnostics.map((item) => item.code),
-        ['VEL5001']
-      )
+      if (process.platform !== 'win32') await chmod(command, 0o755)
+
+      const client = new ExternalLspClient(lspProcesses, projectRoot, {
+        id: 'ancestor-fixture-language',
+        label: 'Ancestor Fixture Language',
+        installKind: 'builtin',
+        runtime: 'lsp-server',
+        extensions: ['ancestor'],
+        languages: ['ancestor-fixture-language'],
+        command: commandName,
+        documentLanguageId: 'ancestor-fixture-language',
+      })
+      try {
+        const diagnostics = await client.getDiagnostics(
+          join(projectRoot, 'main.ancestor'),
+          'component App:\n'
+        )
+        assert.deepEqual(
+          diagnostics.map((item) => item.code),
+          ['VEL5001']
+        )
+      } finally {
+        await client.dispose()
+        await rm(workspaceRoot, { recursive: true, force: true })
+      }
     } finally {
-      await client.dispose()
-      await rm(workspaceRoot, { recursive: true, force: true })
+      await lspProcesses.close()
     }
   })
 
   void test('runs a project package bin with the Workbench runtime instead of its shebang', async () => {
-    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
-    const workspaceRoot = await mkdtemp(join(tmpdir(), 'workbench-owned-node-lsp-'))
-    const projectRoot = join(workspaceRoot, 'packages', 'server')
-    const packageRoot = join(workspaceRoot, 'node_modules', '@fixture', 'language-server')
-    const binRoot = join(workspaceRoot, 'node_modules', '.bin')
-    const command = join(binRoot, process.platform === 'win32' ? 'fixture-lsp.cmd' : 'fixture-lsp')
-    await mkdir(projectRoot, { recursive: true })
-    await mkdir(packageRoot, { recursive: true })
-    await mkdir(binRoot, { recursive: true })
-    await writeFile(
-      join(packageRoot, 'package.json'),
-      JSON.stringify({
-        name: '@fixture/language-server',
-        bin: { 'fixture-lsp': './server.cjs' },
-      }),
-      'utf8'
-    )
-    await writeFile(join(packageRoot, 'server.cjs'), await readFile(fixture), 'utf8')
-    await writeFile(
-      command,
-      process.platform === 'win32'
-        ? '@echo off\r\nexit /b 77\r\n'
-        : '#!/usr/bin/env __workbench_missing_node__\n',
-      'utf8'
-    )
-    if (process.platform !== 'win32') await chmod(command, 0o755)
-
-    const client = new ExternalLspClient(projectRoot, {
-      id: 'workbench-owned-node-fixture',
-      label: 'Workbench-owned Node Fixture',
-      installKind: 'builtin',
-      runtime: 'lsp-server',
-      extensions: ['owned-node'],
-      languages: ['owned-node'],
-      packageName: '@fixture/language-server',
-      command: 'fixture-lsp',
-      projectNodePackageBin: 'fixture-lsp',
-      documentLanguageId: 'owned-node',
-    })
+    const lspProcesses = new ExternalLspProcessHost()
     try {
-      const diagnostics = await client.getDiagnostics(
-        join(projectRoot, 'main.owned-node'),
-        'component App:\n'
+      const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+      const workspaceRoot = await mkdtemp(join(tmpdir(), 'workbench-owned-node-lsp-'))
+      const projectRoot = join(workspaceRoot, 'packages', 'server')
+      const packageRoot = join(workspaceRoot, 'node_modules', '@fixture', 'language-server')
+      const binRoot = join(workspaceRoot, 'node_modules', '.bin')
+      const command = join(binRoot, process.platform === 'win32' ? 'fixture-lsp.cmd' : 'fixture-lsp')
+      await mkdir(projectRoot, { recursive: true })
+      await mkdir(packageRoot, { recursive: true })
+      await mkdir(binRoot, { recursive: true })
+      await writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({
+          name: '@fixture/language-server',
+          bin: { 'fixture-lsp': './server.cjs' },
+        }),
+        'utf8'
       )
-      assert.deepEqual(
-        diagnostics.map((item) => item.code),
-        ['VEL5001']
+      await writeFile(join(packageRoot, 'server.cjs'), await readFile(fixture), 'utf8')
+      await writeFile(
+        command,
+        process.platform === 'win32'
+          ? '@echo off\r\nexit /b 77\r\n'
+          : '#!/usr/bin/env __workbench_missing_node__\n',
+        'utf8'
       )
+      if (process.platform !== 'win32') await chmod(command, 0o755)
+
+      const client = new ExternalLspClient(lspProcesses, projectRoot, {
+        id: 'workbench-owned-node-fixture',
+        label: 'Workbench-owned Node Fixture',
+        installKind: 'builtin',
+        runtime: 'lsp-server',
+        extensions: ['owned-node'],
+        languages: ['owned-node'],
+        packageName: '@fixture/language-server',
+        command: 'fixture-lsp',
+        projectNodePackageBin: 'fixture-lsp',
+        documentLanguageId: 'owned-node',
+      })
+      try {
+        const diagnostics = await client.getDiagnostics(
+          join(projectRoot, 'main.owned-node'),
+          'component App:\n'
+        )
+        assert.deepEqual(
+          diagnostics.map((item) => item.code),
+          ['VEL5001']
+        )
+      } finally {
+        await client.dispose()
+        await rm(workspaceRoot, { recursive: true, force: true })
+      }
     } finally {
-      await client.dispose()
-      await rm(workspaceRoot, { recursive: true, force: true })
+      await lspProcesses.close()
     }
   })
 
   void test('restarts an external language server after project dependencies change', async () => {
     const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-refresh-lsp-'))
-    const manager = new ExternalLspManager()
+    const manager = new ExternalLspManager(new ExternalLspProcessHost())
     const descriptor = {
       id: 'refresh-fixture-language',
       label: 'Refresh Fixture Language',
@@ -2251,66 +2255,71 @@ void describe('shared external LSP client', () => {
   })
 
   void test('maps the shared semantic LSP surface over stdio', async () => {
-    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
-    const projectRoot = fileURLToPath(new URL('..', import.meta.url))
-    const client = new ExternalLspClient(projectRoot, {
-      id: 'velarscript',
-      label: 'VelarScript',
-      installKind: 'builtin',
-      runtime: 'lsp-server',
-      extensions: ['vel'],
-      languages: ['velar'],
-      command: process.execPath,
-      args: [fixture],
-      documentLanguageId: 'velar',
-      protocol: {
-        capabilityPath: ['capabilities', 'experimental', 'velar', 'protocolVersion'],
-        version: 1,
-      },
-    })
-    const path = `${projectRoot}/tests/fixture.vel`
+    const lspProcesses = new ExternalLspProcessHost()
+    try {
+      const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+      const projectRoot = fileURLToPath(new URL('..', import.meta.url))
+      const client = new ExternalLspClient(lspProcesses, projectRoot, {
+        id: 'velarscript',
+        label: 'VelarScript',
+        installKind: 'builtin',
+        runtime: 'lsp-server',
+        extensions: ['vel'],
+        languages: ['velar'],
+        command: process.execPath,
+        args: [fixture],
+        documentLanguageId: 'velar',
+        protocol: {
+          capabilityPath: ['capabilities', 'experimental', 'velar', 'protocolVersion'],
+          version: 1,
+        },
+      })
+      const path = `${projectRoot}/tests/fixture.vel`
 
-    const diagnostics = await client.getDiagnostics(path, 'component App:\n')
-    const completions = await client.completion(path, 'comp', { line: 0, character: 4 })
-    const hover = await client.hover(path, 'component App:\n', { line: 0, character: 2 })
-    const definitions = await client.definition(path, 'component App:\n', {
-      line: 0,
-      character: 11,
-    })
-    const references = await client.references(path, 'component App:\n', { line: 0, character: 11 })
-    const documentHighlights = await client.documentHighlights(path, 'component App:\n', {
-      line: 0,
-      character: 11,
-    })
-    const rename = await client.rename(
-      path,
-      'component App:\n',
-      { line: 0, character: 11 },
-      'Shell'
-    )
-    const symbols = await client.documentSymbols(path, 'component App:\n')
-    const signature = await client.signatureHelp(path, 'mount(', { line: 0, character: 6 })
-    const hints = await client.inlayHints(path, 'component App:\n', {
-      start: { line: 0, character: 0 },
-      end: { line: 1, character: 0 },
-    })
-    const edits = await client.format(path, 'component App:\n')
+      const diagnostics = await client.getDiagnostics(path, 'component App:\n')
+      const completions = await client.completion(path, 'comp', { line: 0, character: 4 })
+      const hover = await client.hover(path, 'component App:\n', { line: 0, character: 2 })
+      const definitions = await client.definition(path, 'component App:\n', {
+        line: 0,
+        character: 11,
+      })
+      const references = await client.references(path, 'component App:\n', { line: 0, character: 11 })
+      const documentHighlights = await client.documentHighlights(path, 'component App:\n', {
+        line: 0,
+        character: 11,
+      })
+      const rename = await client.rename(
+        path,
+        'component App:\n',
+        { line: 0, character: 11 },
+        'Shell'
+      )
+      const symbols = await client.documentSymbols(path, 'component App:\n')
+      const signature = await client.signatureHelp(path, 'mount(', { line: 0, character: 6 })
+      const hints = await client.inlayHints(path, 'component App:\n', {
+        start: { line: 0, character: 0 },
+        end: { line: 1, character: 0 },
+      })
+      const edits = await client.format(path, 'component App:\n')
 
-    assert.deepEqual(
-      diagnostics.map((item) => item.code),
-      ['VEL5001']
-    )
-    assert.equal(completions.items[0]?.label, 'component')
-    assert.deepEqual(hover?.contents, { kind: 'markdown', value: 'Velar hover' })
-    assert.equal(definitions[0]?.range.start.character, 10)
-    assert.equal(references[0]?.range.start.line, 1)
-    assert.equal(documentHighlights[0]?.range.start.character, 10)
-    assert.equal(rename.changes?.[definitions[0]?.uri ?? '']?.[0]?.newText, 'Shell')
-    assert.equal(symbols[0]?.name, 'App')
-    assert.equal(signature?.signatures[0]?.label, 'mount(node, target) -> none')
-    assert.equal(hints[0]?.label, ': string')
-    assert.equal(edits[0]?.newText, 'component App:\n')
-    await client.dispose()
+      assert.deepEqual(
+        diagnostics.map((item) => item.code),
+        ['VEL5001']
+      )
+      assert.equal(completions.items[0]?.label, 'component')
+      assert.deepEqual(hover?.contents, { kind: 'markdown', value: 'Velar hover' })
+      assert.equal(definitions[0]?.range.start.character, 10)
+      assert.equal(references[0]?.range.start.line, 1)
+      assert.equal(documentHighlights[0]?.range.start.character, 10)
+      assert.equal(rename.changes?.[definitions[0]?.uri ?? '']?.[0]?.newText, 'Shell')
+      assert.equal(symbols[0]?.name, 'App')
+      assert.equal(signature?.signatures[0]?.label, 'mount(node, target) -> none')
+      assert.equal(hints[0]?.label, ': string')
+      assert.equal(edits[0]?.newText, 'component App:\n')
+      await client.dispose()
+    } finally {
+      await lspProcesses.close()
+    }
   })
 
   void test('routes an injected LSP through generic Workbench semantic contracts', async () => {
@@ -2328,7 +2337,7 @@ void describe('shared external LSP client', () => {
       documentLanguageId: 'fixture-language',
       hover: { suppressWords: ['component'] },
     })
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     const request = {
       projectRoot,
       path: 'main.fakevel',
@@ -2424,119 +2433,125 @@ void describe('shared external LSP client', () => {
   })
 
   void test('preserves string diagnostic codes and explains missing toolchains', async () => {
-    const projectRoot = fileURLToPath(new URL('..', import.meta.url))
-    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
-    const missing = new ExternalLspClient(projectRoot, {
-      id: 'velarscript',
-      label: 'VelarScript',
-      installKind: 'builtin',
-      runtime: 'lsp-server',
-      extensions: ['vel'],
-      languages: ['velar'],
-      packageName: '@velarscript/cli',
-      command: '__velar_missing_language_server__',
-      args: ['lsp'],
-      documentLanguageId: 'velar',
-      protocol: {
-        capabilityPath: ['capabilities', 'experimental', 'velar', 'protocolVersion'],
-        version: 1,
-      },
-    })
-
-    await assert.rejects(
-      missing.getDiagnostics(`${projectRoot}/tests/missing.vel`, 'const value = 1\n'),
-      /未找到 '__velar_missing_language_server__'.*@velarscript\/cli/u
-    )
-    await missing.dispose()
-
-    const retryRoot = await mkdtemp(join(tmpdir(), 'workbench-retry-lsp-'))
-    const retryCommand = join(
-      retryRoot,
-      process.platform === 'win32' ? 'retry-lsp.cmd' : 'retry-lsp'
-    )
-    const retriable = new ExternalLspClient(retryRoot, {
-      id: 'retry-language',
-      label: 'Retry Language',
-      installKind: 'builtin',
-      runtime: 'lsp-server',
-      extensions: ['retry'],
-      languages: ['retry'],
-      command: retryCommand,
-      documentLanguageId: 'retry',
-      protocol: {
-        capabilityPath: ['capabilities', 'experimental', 'velar', 'protocolVersion'],
-        version: 1,
-      },
-    })
-    await assert.rejects(
-      retriable.completion(join(retryRoot, 'probe.retry'), 'comp', { line: 0, character: 4 }),
-      /未找到/u
-    )
-    await writeFile(
-      retryCommand,
-      process.platform === 'win32'
-        ? `@echo off\r\n"${process.execPath}" "${fixture}"\r\n`
-        : `#!/bin/sh\nexec "${process.execPath.replaceAll('"', '\\"')}" "${fixture.replaceAll('"', '\\"')}"\n`,
-      'utf8'
-    )
-    if (process.platform !== 'win32') await chmod(retryCommand, 0o755)
-    const recoveredCompletions = await retriable.completion(
-      join(retryRoot, 'probe.retry'),
-      'comp',
-      { line: 0, character: 4 }
-    )
-    assert.equal(recoveredCompletions.items[0]?.label, 'component')
-    await retriable.dispose()
-    await rm(retryRoot, { recursive: true, force: true })
-
-    const oversized = new ExternalLspClient(projectRoot, {
-      id: 'bounded-fixture-language',
-      label: 'Bounded Fixture Language',
-      installKind: 'builtin',
-      runtime: 'lsp-server',
-      extensions: ['bounded'],
-      languages: ['bounded'],
-      command: process.execPath,
-      args: [fixture, 'oversized'],
-      documentLanguageId: 'bounded',
-    })
-    await assert.rejects(
-      oversized.completion(`${projectRoot}/tests/probe.bounded`, 'const value = 1\n', {
-        line: 0,
-        character: 1,
-      }),
-      /16 MiB/u
-    )
-    await oversized.dispose()
-
-    const hanging = new ExternalLspClient(
-      projectRoot,
-      {
-        id: 'hanging-fixture-language',
-        label: 'Hanging Fixture Language',
+    const lspProcesses = new ExternalLspProcessHost()
+    try {
+      const projectRoot = fileURLToPath(new URL('..', import.meta.url))
+      const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+      const missing = new ExternalLspClient(lspProcesses, projectRoot, {
+        id: 'velarscript',
+        label: 'VelarScript',
         installKind: 'builtin',
         runtime: 'lsp-server',
-        extensions: ['hanging'],
-        languages: ['hanging'],
+        extensions: ['vel'],
+        languages: ['velar'],
+        packageName: '@velarscript/cli',
+        command: '__velar_missing_language_server__',
+        args: ['lsp'],
+        documentLanguageId: 'velar',
+        protocol: {
+          capabilityPath: ['capabilities', 'experimental', 'velar', 'protocolVersion'],
+          version: 1,
+        },
+      })
+
+      await assert.rejects(
+        missing.getDiagnostics(`${projectRoot}/tests/missing.vel`, 'const value = 1\n'),
+        /未找到 '__velar_missing_language_server__'.*@velarscript\/cli/u
+      )
+      await missing.dispose()
+
+      const retryRoot = await mkdtemp(join(tmpdir(), 'workbench-retry-lsp-'))
+      const retryCommand = join(
+        retryRoot,
+        process.platform === 'win32' ? 'retry-lsp.cmd' : 'retry-lsp'
+      )
+      const retriable = new ExternalLspClient(lspProcesses, retryRoot, {
+        id: 'retry-language',
+        label: 'Retry Language',
+        installKind: 'builtin',
+        runtime: 'lsp-server',
+        extensions: ['retry'],
+        languages: ['retry'],
+        command: retryCommand,
+        documentLanguageId: 'retry',
+        protocol: {
+          capabilityPath: ['capabilities', 'experimental', 'velar', 'protocolVersion'],
+          version: 1,
+        },
+      })
+      await assert.rejects(
+        retriable.completion(join(retryRoot, 'probe.retry'), 'comp', { line: 0, character: 4 }),
+        /未找到/u
+      )
+      await writeFile(
+        retryCommand,
+        process.platform === 'win32'
+          ? `@echo off\r\n"${process.execPath}" "${fixture}"\r\n`
+          : `#!/bin/sh\nexec "${process.execPath.replaceAll('"', '\\"')}" "${fixture.replaceAll('"', '\\"')}"\n`,
+        'utf8'
+      )
+      if (process.platform !== 'win32') await chmod(retryCommand, 0o755)
+      const recoveredCompletions = await retriable.completion(
+        join(retryRoot, 'probe.retry'),
+        'comp',
+        { line: 0, character: 4 }
+      )
+      assert.equal(recoveredCompletions.items[0]?.label, 'component')
+      await retriable.dispose()
+      await rm(retryRoot, { recursive: true, force: true })
+
+      const oversized = new ExternalLspClient(lspProcesses, projectRoot, {
+        id: 'bounded-fixture-language',
+        label: 'Bounded Fixture Language',
+        installKind: 'builtin',
+        runtime: 'lsp-server',
+        extensions: ['bounded'],
+        languages: ['bounded'],
         command: process.execPath,
-        args: [fixture, 'hang'],
-        documentLanguageId: 'hanging',
-      },
-      500
-    )
-    await assert.rejects(
-      hanging.completion(`${projectRoot}/tests/probe.hanging`, 'const value = 1\n', {
-        line: 0,
-        character: 1,
-      }),
-      /请求超时.*textDocument\/completion/u
-    )
-    await hanging.dispose()
+        args: [fixture, 'oversized'],
+        documentLanguageId: 'bounded',
+      })
+      await assert.rejects(
+        oversized.completion(`${projectRoot}/tests/probe.bounded`, 'const value = 1\n', {
+          line: 0,
+          character: 1,
+        }),
+        /16 MiB/u
+      )
+      await oversized.dispose()
+
+      const hanging = new ExternalLspClient(
+        lspProcesses,
+        projectRoot,
+        {
+          id: 'hanging-fixture-language',
+          label: 'Hanging Fixture Language',
+          installKind: 'builtin',
+          runtime: 'lsp-server',
+          extensions: ['hanging'],
+          languages: ['hanging'],
+          command: process.execPath,
+          args: [fixture, 'hang'],
+          documentLanguageId: 'hanging',
+        },
+        500
+      )
+      await assert.rejects(
+        hanging.completion(`${projectRoot}/tests/probe.hanging`, 'const value = 1\n', {
+          line: 0,
+          character: 1,
+        }),
+        /请求超时.*textDocument\/completion/u
+      )
+      await hanging.dispose()
+    } finally {
+      await lspProcesses.close()
+    }
   })
 
   void test('starts the Workbench-owned Pyright runtime', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-pyright-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     const path = 'pyright-runtime-probe.py'
     const content = 'message: str = 42\n'
 

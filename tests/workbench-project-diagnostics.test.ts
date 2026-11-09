@@ -5,6 +5,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import { clearTypeScriptProjectCache } from '../src/main/workspace/language/TypeScriptProjectHost'
 import {
@@ -65,7 +66,7 @@ async function checkWholeProject(
 void describe('project-wide TypeScript diagnostics', () => {
   void test('checks files that are not open, resumes from a cursor and sees unsaved edits', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-project-diagnostics-')))
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     try {
       await writeFile(join(projectRoot, 'tsconfig.json'), JSON.stringify({
         compilerOptions: { strict: true, noEmit: true },

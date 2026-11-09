@@ -8,6 +8,7 @@ import { describe, test } from 'bun:test'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { Result } from '@velaros-ai/velaros/core/result'
 
+import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import { clearTypeScriptProjectCache } from '../src/main/workspace/language/TypeScriptProjectHost'
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
@@ -143,7 +144,7 @@ void describe('language service edits for files that are not open', () => {
   void test('rename a symbol across a closed CRLF + BOM file on disk and keep its format', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-rename-closed-')))
     const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-rename-data-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
     const parts = createWorkbenchAppParts(dataRoot, { moveToTrash: refuseTrash })
     try {
       await writeFile(

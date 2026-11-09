@@ -16,6 +16,9 @@ import {
 } from 'vscode-markdown-languageservice'
 import { URI } from 'vscode-uri'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isRelativePathInsideRoot } from '../PathContainmentHelper'
 
 const MarkdownExtensions = new Set(['.md', '.markdown', '.mdown'])
@@ -30,11 +33,6 @@ const IgnoredWorkspaceDirectories = new Set([
 ])
 
 type MarkdownCancellationToken = Parameters<IMdLanguageService['getDocumentSymbols']>[2]
-
-const NeverCancelledToken: MarkdownCancellationToken = {
-  isCancellationRequested: false,
-  onCancellationRequested: (() => ({ dispose() {} })) as MarkdownCancellationToken['onCancellationRequested'],
-}
 
 function noOpWorkspaceEvent<T>(): (listener: (event: T) => unknown) => { dispose(): void } {
   return () => ({ dispose() {} })
@@ -56,8 +54,15 @@ class WorkbenchMarkdownWorkspace implements IWorkspace {
 
   private readonly overlays = new Map<string, TextDocument>()
 
-  public constructor(private readonly projectRoot: string) {
+  public constructor(
+    private readonly projectRoot: string,
+    private readonly signal?: AbortSignal
+  ) {
     this.workspaceFolders = [URI.file(projectRoot)]
+  }
+
+  private get cancelled(): boolean {
+    return this.signal?.aborted ?? false
   }
 
   public setOverlay(absolutePath: string, content: string): TextDocument {
@@ -69,22 +74,30 @@ class WorkbenchMarkdownWorkspace implements IWorkspace {
   }
 
   public async getAllMarkdownDocuments(): Promise<Iterable<ITextDocument>> {
+    if (this.cancelled) return []
     const documents = new Map<string, ITextDocument>(this.overlays)
-    for (const absolutePath of await this.collectMarkdownFiles(this.projectRoot)) {
+    const files = await this.collectMarkdownFiles(this.projectRoot)
+    if (this.cancelled) return []
+    for (const absolutePath of files) {
+      if (this.cancelled) return []
       const uri = URI.file(absolutePath).toString()
       if (documents.has(uri)) continue
       const document = await this.openMarkdownDocument(URI.file(absolutePath))
+      if (this.cancelled) return []
       if (document) documents.set(uri, document)
     }
     return documents.values()
   }
 
   public hasMarkdownDocument(resource: URI): boolean {
+    if (this.cancelled) return false
     const absolutePath = this.absolutePath(resource)
     return !!absolutePath && isMarkdownPath(absolutePath) && (this.overlays.has(resource.toString()) || existsSync(absolutePath))
   }
 
   public async openMarkdownDocument(resource: URI): Promise<ITextDocument | undefined> {
+    // SDK caches attach a detached finally to this promise; cancellation must resolve as missing.
+    if (this.cancelled) return undefined
     const absolutePath = this.absolutePath(resource)
     if (!absolutePath || !isMarkdownPath(absolutePath)) return undefined
 
@@ -93,7 +106,9 @@ class WorkbenchMarkdownWorkspace implements IWorkspace {
     if (overlay) return overlay
 
     try {
-      const document = TextDocument.create(uri, 'markdown', 0, await readFile(absolutePath, 'utf8'))
+      const content = await readFile(absolutePath, { encoding: 'utf8', signal: this.signal })
+      if (this.cancelled) return undefined
+      const document = TextDocument.create(uri, 'markdown', 0, content)
       this.overlays.set(uri, document)
       return document
     } catch {
@@ -102,10 +117,12 @@ class WorkbenchMarkdownWorkspace implements IWorkspace {
   }
 
   public async stat(resource: URI): Promise<{ isDirectory: boolean } | undefined> {
+    if (this.cancelled) return undefined
     const absolutePath = this.absolutePath(resource)
     if (!absolutePath) return undefined
     try {
       const metadata = await stat(absolutePath)
+      if (this.cancelled) return undefined
       return { isDirectory: metadata.isDirectory() }
     } catch {
       return undefined
@@ -115,10 +132,12 @@ class WorkbenchMarkdownWorkspace implements IWorkspace {
   public async readDirectory(
     resource: URI
   ): Promise<Iterable<readonly [string, { isDirectory: boolean }]>> {
+    if (this.cancelled) return []
     const absolutePath = this.absolutePath(resource)
     if (!absolutePath) return []
     try {
       const entries = await readdir(absolutePath, { withFileTypes: true })
+      if (this.cancelled) return []
       return entries.map((entry) => [entry.name, { isDirectory: entry.isDirectory() }] as const)
     } catch {
       return []
@@ -132,19 +151,23 @@ class WorkbenchMarkdownWorkspace implements IWorkspace {
   }
 
   private async collectMarkdownFiles(directory: string): Promise<string[]> {
+    if (this.cancelled) return []
     let entries
     try {
       entries = await readdir(directory, { withFileTypes: true })
     } catch {
       return []
     }
+    if (this.cancelled) return []
 
     const files: string[] = []
     for (const entry of entries) {
+      if (this.cancelled) return []
       const absolutePath = resolve(directory, entry.name)
       if (entry.isDirectory()) {
         if (!IgnoredWorkspaceDirectories.has(entry.name)) {
           files.push(...(await this.collectMarkdownFiles(absolutePath)))
+          if (this.cancelled) return []
         }
       } else if (entry.isFile() && isMarkdownPath(entry.name)) {
         files.push(absolutePath)
@@ -166,6 +189,7 @@ interface WorkbenchMarkdownLanguageServiceOptions {
   absolutePath: string
   content: string
   openFiles?: ReadonlyArray<{ absolutePath: string; content: string }>
+  signal?: AbortSignal
 }
 
 /**
@@ -177,7 +201,13 @@ export async function withWorkbenchMarkdownLanguageService<T>(
   options: WorkbenchMarkdownLanguageServiceOptions,
   run: (context: WorkbenchMarkdownLanguageServiceContext) => Promise<T>
 ): Promise<T> {
-  const workspace = new WorkbenchMarkdownWorkspace(options.projectRoot)
+  const { signal } = options
+  const throwIfCancelled = (): void => {
+    if (signal?.aborted)
+      throw new AppError('CANCELLED', workbenchMainText('language.requestCancelledPlain'))
+  }
+  throwIfCancelled()
+  const workspace = new WorkbenchMarkdownWorkspace(options.projectRoot, signal)
   for (const file of options.openFiles ?? []) {
     if (isInsideRoot(options.projectRoot, file.absolutePath) && isMarkdownPath(file.absolutePath)) {
       workspace.setOverlay(file.absolutePath, file.content)
@@ -188,7 +218,9 @@ export async function withWorkbenchMarkdownLanguageService<T>(
   const parser: IMdParser = {
     slugifier: githubSlugifier,
     async tokenize(source): Promise<Token[]> {
-      return markdown.parse(source.getText(), {}) as unknown as Token[]
+      if (signal?.aborted) return []
+      const tokens = markdown.parse(source.getText(), {}) as unknown as Token[]
+      return signal?.aborted ? [] : tokens
     },
   }
   const service = createLanguageService({
@@ -200,12 +232,36 @@ export async function withWorkbenchMarkdownLanguageService<T>(
     },
     markdownFileExtensions: ['md', 'markdown', 'mdown'],
   })
+  const subscriptions = new Set<() => void>()
+  const token: MarkdownCancellationToken = {
+    get isCancellationRequested() {
+      return signal?.aborted ?? false
+    },
+    onCancellationRequested(listener, thisArgs, disposables) {
+      const onAbort = (): void => {
+        listener.call(thisArgs, undefined)
+      }
+      const dispose = (): void => {
+        signal?.removeEventListener('abort', onAbort)
+        subscriptions.delete(dispose)
+      }
+      const subscription = { dispose }
+      subscriptions.add(dispose)
+      if (signal?.aborted)
+        queueMicrotask(() => {
+          if (subscriptions.has(dispose)) onAbort()
+        })
+      else signal?.addEventListener('abort', onAbort, { once: true })
+      disposables?.push(subscription)
+      return subscription
+    },
+  }
 
   try {
-    return await run({
+    const result = await run({
       document,
       service,
-      token: NeverCancelledToken,
+      token,
       toProjectRelativePath: (resource) => {
         if (resource.scheme !== 'file') return null
         const absolutePath = resolve(resource.fsPath)
@@ -214,7 +270,16 @@ export async function withWorkbenchMarkdownLanguageService<T>(
           : null
       },
     })
+    throwIfCancelled()
+    return result
+  } catch (error) {
+    throwIfCancelled()
+    throw error
   } finally {
-    service.dispose()
+    try {
+      service.dispose()
+    } finally {
+      for (const dispose of subscriptions) dispose()
+    }
   }
 }
