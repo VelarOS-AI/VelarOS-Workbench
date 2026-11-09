@@ -701,10 +701,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     onWatchStatus: showWorkspaceWatchStatus,
   })
 
-  async function runTreeMutation<T>(action: () => Promise<T>): Promise<T> {
-    return action()
-  }
-
   async function refreshProjectTree(): Promise<void> {
     await workbench.refreshRootDirectory()
   }
@@ -1268,7 +1264,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     },
     /** 交互动作。 */
     actions: {
-      runTreeMutation,
       refreshGitPanel: gitState.refresh,
       refreshProjectAndGit,
       handleRepositoryChanged,

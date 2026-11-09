@@ -90,7 +90,6 @@ void describe('pre-split Workbench shell parity', () => {
     assert.ok(settingsButton >= 0 && settingsButton < runButton)
     assert.match(adapter, /gitWorkspaceRoot:\s*workbench\.activeProject\?\.rootPath/)
     assert.match(adapter, /onOpenGitCommitTool:[\s\S]*setActiveLeftTool\('commit'\)/)
-    assert.match(adapter, /onOpenGitBottomTool:[\s\S]*openBottomTool\('git'\)/)
     assert.match(control, /switchWorkspaceGitBranch/)
     assert.match(control, /createWorkspaceGitBranch/)
     assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)

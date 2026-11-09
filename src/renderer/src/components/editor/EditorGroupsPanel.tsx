@@ -46,7 +46,6 @@ import type {
   WorkbenchEditorSurfaceBundle,
 } from '../../types/workbenchSurfaceBundles'
 import type { TopToolbarProps } from '../chrome/TopToolbar'
-import { WorkbenchTopBar } from '../chrome/WorkbenchTopBar'
 
 import {
   EditorPanel,
@@ -298,7 +297,6 @@ export function EditorGroupsPanel({
 
   return (
     <div className={styles.editorGroupsPanel}>
-      {showTopBar && <WorkbenchTopBar {...chrome} />}
       <div ref={containerRef} className={styles.editorGroups} data-split={isSplit}>
         {visibleGroups.map((group, index) => (
           <Fragment key={index}>

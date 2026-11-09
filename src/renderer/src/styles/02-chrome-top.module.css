@@ -1,14 +1,5 @@
 @reference "./index.css";
 
-.workbenchTopToolbar {
-  @apply flex shrink-0 items-center justify-between gap-3 border-b;
-  min-height: var(--workbench-topbar-height);
-  padding-inline: 10px 12px;
-  border-color: var(--workbench-border);
-  background: var(--workbench-toolbar);
-  -webkit-app-region: no-drag;
-}
-
 .workbenchShell[data-standalone='true'] .panelHeader,
 .workbenchShell[data-standalone='true'] .leftToolRailColumn {
   -webkit-app-region: drag;
@@ -24,18 +15,8 @@
   -webkit-app-region: no-drag;
 }
 
-.topToolbarLeft,
-.topToolbarRight,
 .topGitControl {
   @apply flex min-w-0 items-center gap-1.5;
-}
-
-.topToolbarLeft {
-  @apply flex-1 justify-start;
-}
-
-.topToolbarRight {
-  @apply shrink-0 justify-end;
 }
 
 .topGitControl {

@@ -42,12 +42,9 @@ export interface TopToolbarProps {
   gitSummary: Nullable<SystemWorkspaceGitSummary>
   onGitRefresh: () => Promise<void>
   gitSshKeyPath?: string
-  hasGitRepository: boolean
   hasUnsavedOpenTabs: boolean
   onRepositoryChanged: () => void | Promise<void>
   onOpenGitCommitTool: () => void
-  onOpenGitBottomTool: () => void
-  onOpenQuickOpen: () => void
   onOpenSettings: () => void
   topRun: WorkbenchTopRunControl
   isRunningCommand: boolean
@@ -68,7 +65,6 @@ export function WorkbenchTopLeading({
   | 'gitSummary'
   | 'onGitRefresh'
   | 'gitSshKeyPath'
-  | 'hasGitRepository'
   | 'hasUnsavedOpenTabs'
   | 'onRepositoryChanged'
   | 'onOpenGitCommitTool'
@@ -540,19 +536,5 @@ function WorkbenchTopIconAction({
         {children}
       </IconButton>
     </BubbleTooltip>
-  )
-}
-
-/** 旧的独立标题行；工作台现在在编辑器面板中组合左侧、标签和右侧区域。 */
-export function TopToolbar(props: TopToolbarProps): ReactElement {
-  return (
-    <header className={styles.workbenchTopToolbar}>
-      <div className={styles.topToolbarLeft}>
-        <WorkbenchTopLeading {...props} />
-      </div>
-      <div className={styles.topToolbarRight}>
-        <WorkbenchTopTrailing {...props} />
-      </div>
-    </header>
   )
 }

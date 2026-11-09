@@ -34,7 +34,6 @@ export function buildStandaloneWorkbenchEditorChrome(
     gitWorkspaceRoot: workbench.activeProject?.rootPath ?? '',
     gitSummary: gitState.topBarSummary,
     gitSshKeyPath: chrome.effectiveGitSshKeyPath,
-    hasGitRepository: gitState.hasGitRepository,
     hasUnsavedOpenTabs: workbench.hasUnsavedOpenTabs,
   }
   const editorChromeProject = {
@@ -48,8 +47,6 @@ export function buildStandaloneWorkbenchEditorChrome(
       model.surface.setActiveLeftTool('commit')
       if (!model.surface.isFilePanelOpen) model.surface.toggleFilePanel()
     },
-    onOpenGitBottomTool: () => model.surface.openBottomTool('git'),
-    onOpenQuickOpen: model.surface.openQuickOpen,
     onOpenSettings: () => model.dialogs.setSettingsOpen(true),
   }
 
@@ -210,16 +207,12 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       },
       handlers: {
         onSelectEntryPath: workbench.selectEntryPath,
-        onCreateEntry: (type, parentEntry, name) =>
-          model.actions.runTreeMutation(() => workbench.createTreeEntry(type, parentEntry, name)),
-        onRenameEntry: (entry, name) =>
-          model.actions.runTreeMutation(() => workbench.renameTreeEntry(entry, name)),
-        onDeleteEntries: (entries) =>
-          model.actions.runTreeMutation(() => workbench.deleteTreeEntries(entries)),
-        onUndoDeleteEntries: () =>
-          model.actions.runTreeMutation(() => workbench.undoLastDeletedEntries()),
+        onCreateEntry: workbench.createTreeEntry,
+        onRenameEntry: workbench.renameTreeEntry,
+        onDeleteEntries: workbench.deleteTreeEntries,
+        onUndoDeleteEntries: workbench.undoLastDeletedEntries,
         onMoveEntries: (entries, parentEntry, _index) =>
-          model.actions.runTreeMutation(() => workbench.moveTreeEntries(entries, parentEntry)),
+          workbench.moveTreeEntries(entries, parentEntry),
         onSearchQueryChange: workbench.setSearchQuery,
         onRefreshProject: () => void model.actions.refreshProjectAndGit(),
         onCloseProject: undefined,
@@ -241,8 +234,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
           void workbench.launchRunSession(buildWorkbenchVelarBuildCommand(path, packageManager))
         },
         onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
-        onCopyEntries: (entries, parentEntry) =>
-          model.actions.runTreeMutation(() => workbench.copyTreeEntries(entries, parentEntry)),
+        onCopyEntries: workbench.copyTreeEntries,
         onRevealEntry: model.actions.revealPathInSystem,
       },
     },
