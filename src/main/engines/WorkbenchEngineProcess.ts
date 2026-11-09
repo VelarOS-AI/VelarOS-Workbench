@@ -200,15 +200,16 @@ export async function withTimeout<T>(
   let abort: (() => void) | undefined
   try {
     return await Promise.race([
-      promise,
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new AppError('TIMEOUT', message)), timeoutMs)
         abort = () =>
           reject(
             signal?.reason ?? new AppError('CANCELLED', workbenchMainText('engines.cancelled'))
           )
-        signal?.addEventListener('abort', abort, { once: true })
+        if (signal?.aborted) abort()
+        else signal?.addEventListener('abort', abort, { once: true })
       }),
+      promise,
     ])
   } finally {
     clearTimeout(timer)

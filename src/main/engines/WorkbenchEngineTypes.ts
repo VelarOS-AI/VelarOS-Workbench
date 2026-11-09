@@ -27,9 +27,9 @@ export interface WorkbenchEngineRunInput {
   /** 这一轮的展示面：正文、工具卡、确认与提问都经它推给窗口。 */
   surface: EngineRunSurface
   /** 引擎开了（或换了）会话：记下来，下一轮接着它。 */
-  sessionStarted(nativeId: string): void
+  sessionStarted(nativeId: string): Promise<void>
   /** 上一轮留下的会话接不上了（引擎那边没了）：忘掉它，这一轮已经另开。 */
-  sessionLost(): void
+  sessionLost(): Promise<void>
   /** 引擎收下了这条输入（界面以此为「已发出」）。 */
   accepted(): void
   signal: AbortSignal

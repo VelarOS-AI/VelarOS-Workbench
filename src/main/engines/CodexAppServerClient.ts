@@ -121,10 +121,6 @@ export class CodexAppServerClient {
     }
   }
 
-  public get isClosed(): boolean {
-    return this.closed
-  }
-
   public request(method: string, params?: unknown): Promise<unknown> {
     if (this.closed)
       return Promise.reject(new AppError('CLOSED', workbenchMainText('engines.codexExited')))

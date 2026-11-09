@@ -113,7 +113,7 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
     } catch (error) {
       if (!(error instanceof ClaudeCodeResumeLost)) throw error
       log.info('Claude Code 接不上上一轮的会话，另开一段', { sessionId: input.ref.sessionId })
-      input.sessionLost()
+      await input.sessionLost()
       return this.runOnce(command, input, null)
     }
   }
@@ -186,12 +186,12 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
       for await (const message of transport.read()) {
         if (message.type === 'system' && message.subtype === 'init') {
           started = true
-          if (isNonBlankString(message.session_id)) input.sessionStarted(message.session_id)
+          if (isNonBlankString(message.session_id)) await input.sessionStarted(message.session_id)
           continue
         }
         if (message.type === 'result') {
           result = message
-          if (isNonBlankString(message.session_id)) input.sessionStarted(message.session_id)
+          if (isNonBlankString(message.session_id)) await input.sessionStarted(message.session_id)
           // 一轮一个进程：这一回合收尾就不再有输入，命令行随即退出。
           transport.endInput()
           continue

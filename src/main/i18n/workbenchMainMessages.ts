@@ -156,6 +156,7 @@ const zhCN = {
   'engines.toolCallFailed': '工具调用失败。',
   'engines.toolResultMissing': '引擎没有报告这次调用的结果。',
   'engines.unknownEngine': '没有这个外部引擎。',
+  'engines.inputNotAccepted': '引擎结束运行，但未确认接纳这条输入。',
   'engines.conversationBusy': '当前会话正在运行，请等它结束或先停止。',
   'engines.commandNotFound': '没有找到 {label} 命令行（{name}）。装好后重新打开这个菜单。',
   'engines.cancelled': '已取消。',
@@ -564,6 +565,7 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'engines.toolCallFailed': 'The tool call failed.',
   'engines.toolResultMissing': 'The engine did not report a result for this call.',
   'engines.unknownEngine': 'There is no such external engine.',
+  'engines.inputNotAccepted': 'The engine ended without confirming that it accepted this input.',
   'engines.conversationBusy':
     'This conversation is running. Wait for it to finish or stop it first.',
   'engines.commandNotFound':

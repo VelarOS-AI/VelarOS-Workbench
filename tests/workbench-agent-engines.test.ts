@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 
@@ -13,6 +13,7 @@ import type {
 import { ClaudeCodeEngine } from '../src/main/engines/ClaudeCodeEngine'
 import { CodexEngine } from '../src/main/engines/CodexEngine'
 import { WorkbenchEngineConversationRuntime } from '../src/main/engines/WorkbenchEngineConversationRuntime'
+import { withTimeout } from '../src/main/engines/WorkbenchEngineProcess'
 import { WorkbenchEngineSessionStore } from '../src/main/engines/WorkbenchEngineSessionStore'
 import {
   ConversationInteractionNotice,
@@ -158,7 +159,10 @@ rl.on('line', (line) => {
     case 'thread/start': return out({ id: message.id, result: { thread: { id: 'thread-1' } } })
     case 'thread/resume': return out({ id: message.id, result: { thread: { id: message.params.threadId } } })
     case 'thread/goal/set':
-    case 'thread/goal/clear': return out({ id: message.id, result: {} })
+    case 'thread/goal/clear':
+      return out(process.env.FAKE_CODEX_GOAL_ERROR
+        ? { id: message.id, error: { code: -32000, message: 'Goal storage unavailable' } }
+        : { id: message.id, result: {} })
     case 'turn/start':
       out({ id: message.id, result: { turn: { id: 'turn-1', status: 'inProgress', items: [] } } })
       return void turn(message.params)
@@ -212,7 +216,10 @@ beforeEach(async () => {
       const { mkdir } = await import('node:fs/promises')
       await mkdir(bin, { recursive: true })
       await mkdir(project, { recursive: true })
-      for (const [name, source] of [['claude', FakeClaude], ['codex', FakeCodex]]) {
+      for (const [name, source] of [
+        ['claude', FakeClaude],
+        ['codex', FakeCodex],
+      ]) {
         if (process.platform === 'win32') {
           await writeFile(join(bin, `${name}.cjs`), source)
           await writeFile(join(bin, `${name}.cmd`), `@echo off\r\nnode "%~dp0${name}.cjs" %*\r\n`)
@@ -268,7 +275,9 @@ interface Recorded {
 
 /** 记下这一轮的通知与状态；有卡在等回答时按 answer 回答。 */
 function record(
-  answer?: (card: ConversationInteractionProjection) => Parameters<WorkbenchEngineConversationRuntime['answer']>[2]
+  answer?: (
+    card: ConversationInteractionProjection
+  ) => Parameters<WorkbenchEngineConversationRuntime['answer']>[2]
 ): Recorded {
   const recorded: Recorded = {
     notices: [],
@@ -350,14 +359,20 @@ describe('Claude Code engine', () => {
         ['accepted', 'Done.'],
       ]
     )
-    const [tool] = latest<ConversationToolCallProjection>(recorded, ConversationToolCallNotice).values()
+    const [tool] = latest<ConversationToolCallProjection>(
+      recorded,
+      ConversationToolCallNotice
+    ).values()
     assert.ok(tool)
     assert.equal(tool.toolName, 'project:run')
     assert.equal(tool.title, 'Say hi')
     assert.deepEqual(tool.args, { command: 'echo hi', description: 'Say hi' })
     assert.equal(tool.isRunning, false)
     assert.equal(tool.result, 'hi')
-    const [card] = latest<ConversationInteractionProjection>(recorded, ConversationInteractionNotice).values()
+    const [card] = latest<ConversationInteractionProjection>(
+      recorded,
+      ConversationInteractionNotice
+    ).values()
     assert.equal(card?.status, 'answered')
     assert.ok(recorded.states.some((state) => state.kind === 'awaiting-confirmation'))
     assert.deepEqual(recorded.states.at(-1), { kind: 'done' })
@@ -366,19 +381,23 @@ describe('Claude Code engine', () => {
     assert.ok(recorded.notices.some((notice) => notice.kind === ConversationProjectActivityNotice))
 
     const log = await readLog()
-    const args = log.find((entry) => Array.isArray(entry.claude) && (entry.claude as string[]).includes('-p'))
-      ?.claude as string[]
+    const args = log.find(
+      (entry) => Array.isArray(entry.claude) && (entry.claude as string[]).includes('-p')
+    )?.claude as string[]
     assert.ok(args.includes('--model') && args[args.indexOf('--model') + 1] === 'opus')
     assert.equal(args[args.indexOf('--permission-mode') + 1], 'default')
-    const initialization = log.find((entry) => entry.initialize)?.initialize as { appendSystemPrompt?: string }
+    const initialization = log.find((entry) => entry.initialize)?.initialize as {
+      appendSystemPrompt?: string
+    }
     assert.ok(initialization.appendSystemPrompt?.includes('\n'))
     assert.equal(args.includes('--append-system-prompt'), false)
     // 没探过模型目录时不知道它能不能调思考力度：不传
     assert.equal(args.includes('--effort'), false)
-    assert.deepEqual(
-      log.find((entry) => entry.permission)?.permission,
-      { behavior: 'allow', updatedInput: { command: 'echo hi', description: 'Say hi' }, toolUseID: 'toolu_1' }
-    )
+    assert.deepEqual(log.find((entry) => entry.permission)?.permission, {
+      behavior: 'allow',
+      updatedInput: { command: 'echo hi', description: 'Say hi' },
+      toolUseID: 'toolu_1',
+    })
     assert.equal(await rig.sessions.get('claude-code', ref()), 'session-1')
   })
 
@@ -405,7 +424,10 @@ describe('Claude Code engine', () => {
       return { declined: true, reason: 'keep my changes' }
     })
     await run(dangerous, request('claude-code', 'danger', 'standard-open'))
-    const [tool] = latest<ConversationToolCallProjection>(dangerous, ConversationToolCallNotice).values()
+    const [tool] = latest<ConversationToolCallProjection>(
+      dangerous,
+      ConversationToolCallNotice
+    ).values()
     assert.equal(tool?.error, 'keep my changes')
     assert.deepEqual(dangerous.states.at(-1), { kind: 'done' })
   })
@@ -415,21 +437,34 @@ describe('Claude Code engine', () => {
       card.kind === 'choice' ? { choices: [card.options![1]!.id] } : { approved: true }
     )
     await run(recorded, request('claude-code', 'ask me', 'never-ask'))
-    const cards = [...latest<ConversationInteractionProjection>(recorded, ConversationInteractionNotice).values()]
+    const cards = [
+      ...latest<ConversationInteractionProjection>(
+        recorded,
+        ConversationInteractionNotice
+      ).values(),
+    ]
     assert.equal(cards.length, 1)
     assert.equal(cards[0]!.message, 'Colour\nWhich colour?')
     assert.deepEqual(
       cards[0]!.options?.map((option) => option.label),
       ['Red', 'Blue']
     )
-    const reply = (await readLog()).find((entry) => entry.askReply)?.askReply as Record<string, unknown>
+    const reply = (await readLog()).find((entry) => entry.askReply)?.askReply as Record<
+      string,
+      unknown
+    >
     assert.equal(reply.behavior, 'allow')
-    assert.deepEqual((reply.updatedInput as Record<string, unknown>).answers, { 'Which colour?': 'Blue' })
+    assert.deepEqual((reply.updatedInput as Record<string, unknown>).answers, {
+      'Which colour?': 'Blue',
+    })
   })
 
   test('stopping interrupts the turn and ends it as stopped', async () => {
     const recorded = record()
-    const { accepted, completed } = rig.runtime.submit(recorded.sink, request('claude-code', 'slow', 'never-ask'))
+    const { accepted, completed } = rig.runtime.submit(
+      recorded.sink,
+      request('claude-code', 'slow', 'never-ask')
+    )
     await accepted
     for (let attempt = 0; attempt < 100; attempt += 1) {
       if (recorded.notices.some((notice) => notice.kind === ConversationTextNotice)) break
@@ -477,17 +512,39 @@ describe('Claude Code engine', () => {
 })
 
 describe('Codex engine', () => {
+  test('a goal setup failure rejects the input before starting a turn', async () => {
+    rig.env.FAKE_CODEX_GOAL_ERROR = '1'
+    const recorded = record()
+    const submitted = rig.runtime.submit(recorded.sink, {
+      ...request('codex', 'finish the task', 'never-ask'),
+      executionModes: ['goal'],
+    })
+    await assert.rejects(submitted.accepted, /Goal storage unavailable/u)
+    await assert.rejects(submitted.completed, /Goal storage unavailable/u)
+    assert.equal(
+      (await readLog()).some((entry) => entry.codex === 'turn/start'),
+      false
+    )
+    assert.deepEqual(recorded.states.at(-1), { kind: 'error', message: 'Goal storage unavailable' })
+  })
+
   test('runs a turn: plan, command, file change and the answer', async () => {
     const recorded = record(() => assert.fail('standard mode should not ask for npm test'))
     await run(recorded, request('codex', 'fix it', 'standard-open', 'gpt-x'))
 
     const texts = [...latest<ConversationTextProjection>(recorded, ConversationTextNotice).values()]
-    assert.deepEqual(texts.map((text) => [text.phase, text.text]), [['accepted', 'All done.']])
+    assert.deepEqual(
+      texts.map((text) => [text.phase, text.text]),
+      [['accepted', 'All done.']]
+    )
     assert.ok(recorded.notices.some((notice) => notice.kind === ConversationThinkingNotice))
     const tools = latest<ConversationToolCallProjection>(recorded, ConversationToolCallNotice)
     const toolList = [...tools.values()]
     const plan = toolList.find((tool) => tool.toolName === 'plan:update')
-    assert.deepEqual(plan?.result, { explanation: undefined, plan: [{ step: 'Run tests', status: 'completed' }] })
+    assert.deepEqual(plan?.result, {
+      explanation: undefined,
+      plan: [{ step: 'Run tests', status: 'completed' }],
+    })
     const command = toolList.find((tool) => tool.toolName === 'project:run')
     assert.equal(command?.title, 'npm test')
     assert.deepEqual(command?.result, { exitCode: 0, output: 'ok\n', durationMs: 5 })
@@ -499,7 +556,10 @@ describe('Codex engine', () => {
 
     const log = await readLog()
     assert.deepEqual(log.find((entry) => entry.approval)?.approval, { decision: 'accept' })
-    const turn = log.find((entry) => entry.codex === 'turn/start')?.params as Record<string, unknown>
+    const turn = log.find((entry) => entry.codex === 'turn/start')?.params as Record<
+      string,
+      unknown
+    >
     assert.equal(turn.approvalPolicy, 'on-request')
     assert.equal((turn.sandboxPolicy as Record<string, unknown>).type, 'workspaceWrite')
     assert.equal(turn.model, 'gpt-x')
@@ -512,21 +572,29 @@ describe('Codex engine', () => {
       return { declined: true }
     })
     await run(recorded, request('codex', 'fix it', 'ask-every-time'))
-    assert.deepEqual((await readLog()).find((entry) => entry.approval)?.approval, { decision: 'decline' })
-    const command = [...latest<ConversationToolCallProjection>(recorded, ConversationToolCallNotice).values()].find(
-      (tool) => tool.toolName === 'project:run'
-    )
+    assert.deepEqual((await readLog()).find((entry) => entry.approval)?.approval, {
+      decision: 'decline',
+    })
+    const command = [
+      ...latest<ConversationToolCallProjection>(recorded, ConversationToolCallNotice).values(),
+    ].find((tool) => tool.toolName === 'project:run')
     assert.equal(command?.error, '用户拒绝了这条命令。')
-    const turn = (await readLog()).find((entry) => entry.codex === 'turn/start')?.params as Record<string, unknown>
+    const turn = (await readLog()).find((entry) => entry.codex === 'turn/start')?.params as Record<
+      string,
+      unknown
+    >
     assert.equal(turn.approvalPolicy, 'untrusted')
   })
 
   test('status lists models; the reasoning level is clamped to what the model supports', async () => {
     const [, codex] = await rig.runtime.status(true)
     assert.equal(codex?.available, true)
-    assert.deepEqual(codex?.models, [{ value: 'gpt-x', label: 'GPT X', description: 'fast', isDefault: true }])
+    assert.deepEqual(codex?.models, [
+      { value: 'gpt-x', label: 'GPT X', description: 'fast', isDefault: true },
+    ])
     await run(record(), request('codex', 'hello', 'never-ask', 'gpt-x'))
-    const turn = (await readLog()).filter((entry) => entry.codex === 'turn/start').at(-1)?.params as Record<string, unknown>
+    const turn = (await readLog()).filter((entry) => entry.codex === 'turn/start').at(-1)
+      ?.params as Record<string, unknown>
     assert.equal(turn.effort, 'high')
     assert.equal(turn.approvalPolicy, 'never')
     assert.deepEqual(turn.sandboxPolicy, { type: 'dangerFullAccess' })
@@ -534,9 +602,84 @@ describe('Codex engine', () => {
     await run(record(), request('codex', 'again', 'never-ask', 'gpt-x'))
     const log = await readLog()
     assert.equal(log.filter((entry) => entry.codex === 'thread/start').length, 1)
-    const resume = log.find((entry) => entry.codex === 'thread/resume')?.params as Record<string, unknown>
+    const resume = log.find((entry) => entry.codex === 'thread/resume')?.params as Record<
+      string,
+      unknown
+    >
     assert.equal(resume.threadId, 'thread-1')
   })
+})
+
+describe('engine session ownership', () => {
+  test('a failed identity write cannot publish a new mapping and retry persists that same identity', async () => {
+    const directory = join(rig.root, 'agent-engines')
+    await mkdir(directory)
+    await mkdir(join(directory, 'sessions.json'))
+    await assert.rejects(rig.sessions.set('codex', ref(), 'retry-thread'))
+    assert.equal(await rig.sessions.get('codex', ref()), null)
+
+    await rm(join(directory, 'sessions.json'), { recursive: true })
+    await rig.sessions.set('codex', ref(), 'retry-thread')
+    assert.equal(
+      await new WorkbenchEngineSessionStore(rig.root).get('codex', ref()),
+      'retry-thread'
+    )
+  })
+
+  test('an engine ending without acceptance rejects both receipts', async () => {
+    const runtime = new WorkbenchEngineConversationRuntime({
+      sessions: rig.sessions,
+      engines: [
+        {
+          id: 'codex',
+          label: 'test engine',
+          status: async () => ({ id: 'codex', available: true, models: [] }),
+          run: async () => ({ status: 'completed' }),
+          close: async () => {},
+        },
+      ],
+    })
+    const recorded = record()
+    const submitted = runtime.submit(recorded.sink, request('codex', 'hello', 'never-ask'))
+    await assert.rejects(submitted.accepted, /未确认接纳/u)
+    await assert.rejects(submitted.completed, /未确认接纳/u)
+    assert.equal(recorded.states.at(-1)?.kind, 'error')
+    await runtime.close()
+  })
+
+  test('deleting a chat removes both engine mappings from disk and keeps other chats', async () => {
+    const other = { ...ref(), sessionId: 'chat-2' }
+    await rig.sessions.set('claude-code', ref(), 'claude-1')
+    await rig.sessions.set('codex', ref(), 'codex-1')
+    await rig.sessions.set('codex', other, 'codex-2')
+
+    await rig.runtime.deleteSession(ref())
+
+    const reopened = new WorkbenchEngineSessionStore(rig.root)
+    assert.equal(await reopened.get('claude-code', ref()), null)
+    assert.equal(await reopened.get('codex', ref()), null)
+    assert.equal(await reopened.get('codex', other), 'codex-2')
+  })
+
+  for (const engine of ['claude-code', 'codex'] as const) {
+    test(`${engine} persists its identity before the completed receipt`, async () => {
+      await run(record(), request(engine, 'hello', 'never-ask'))
+
+      const reopened = new WorkbenchEngineSessionStore(rig.root)
+      assert.equal(
+        await reopened.get(engine, ref()),
+        engine === 'claude-code' ? 'session-1' : 'thread-1'
+      )
+    })
+  }
+})
+
+test('an already cancelled engine wait rejects even when its work has completed', async () => {
+  const reason = new Error('cancelled before waiting')
+  await assert.rejects(
+    withTimeout(Promise.resolve('done'), 1_000, 'timed out', AbortSignal.abort(reason)),
+    (error) => error === reason
+  )
 })
 
 describe('conversation dispatcher', () => {
@@ -546,10 +689,12 @@ describe('conversation dispatcher', () => {
     const platform = new Proxy(
       {},
       {
-        get: (_target, name: string) =>
+        get:
+          (_target, name: string) =>
           (...args: unknown[]) => {
             calls.push(`platform.${name}`)
-            if (name === 'submit') return { accepted: Promise.resolve(), completed: Promise.resolve() }
+            if (name === 'submit')
+              return { accepted: Promise.resolve(), completed: Promise.resolve() }
             return Promise.resolve(args.length ? null : undefined)
           },
       }
@@ -576,13 +721,20 @@ describe('conversation dispatcher', () => {
     const target = { projectRoot: '/work/app', sessionId: 'chat-1' }
 
     dispatcher.submit(sink, { ...request('claude-code', 'hi', 'never-ask'), ...target })
-    dispatcher.submit(sink, { ...request('codex', 'hi', 'never-ask'), ...target, engine: undefined })
+    dispatcher.submit(sink, {
+      ...request('codex', 'hi', 'never-ask'),
+      ...target,
+      engine: undefined,
+    })
     await dispatcher.answer(target, 'card-1', { approved: true })
     engineRunning = true
     await dispatcher.answer(target, 'card-1', { approved: true })
     await dispatcher.input(target, 'yes')
     await dispatcher.cancel(target)
-    await assert.rejects(dispatcher.guidance(target, { inputId: 'g', text: 'more' }), /不支持运行中引导/u)
+    await assert.rejects(
+      dispatcher.guidance(target, { inputId: 'g', text: 'more' }),
+      /不支持运行中引导/u
+    )
     await dispatcher.deleteSession(target)
     await dispatcher.close()
 

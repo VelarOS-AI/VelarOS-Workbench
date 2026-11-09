@@ -44,33 +44,32 @@ export class WorkbenchEngineSessionStore {
     return (await this.load()).get(sessionKey(engine, ref))?.nativeId ?? null
   }
 
-  public async set(
+  public set(
     engine: WorkbenchAgentEngineId,
     ref: WorkbenchConversationRef,
     nativeId: string
   ): Promise<void> {
-    const sessions = await this.load()
-    const key = sessionKey(engine, ref)
-    if (sessions.get(key)?.nativeId === nativeId) return
-    sessions.set(key, {
-      engine,
-      projectRoot: resolve(ref.projectRoot),
-      sessionId: ref.sessionId,
-      nativeId,
-      updatedAt: Date.now(),
+    return this.update((sessions) => {
+      const key = sessionKey(engine, ref)
+      if (sessions.get(key)?.nativeId === nativeId) return false
+      sessions.set(key, {
+        engine,
+        projectRoot: resolve(ref.projectRoot),
+        sessionId: ref.sessionId,
+        nativeId,
+        updatedAt: Date.now(),
+      })
+      return true
     })
-    await this.persist(sessions)
   }
 
   /** 忘掉这个会话在各个引擎里的身份（会话删了，或引擎那边的会话已经接不上了）。 */
-  public async delete(
-    ref: WorkbenchConversationRef,
-    engine?: WorkbenchAgentEngineId
-  ): Promise<void> {
-    const sessions = await this.load()
-    const keys = (engine ? [engine] : WorkbenchAgentEngineIds).map((id) => sessionKey(id, ref))
-    if (!keys.some((key) => sessions.delete(key))) return
-    await this.persist(sessions)
+  public delete(ref: WorkbenchConversationRef, engine?: WorkbenchAgentEngineId): Promise<void> {
+    return this.update((sessions) => {
+      const keys = (engine ? [engine] : WorkbenchAgentEngineIds).map((id) => sessionKey(id, ref))
+      const removed = keys.map((key) => sessions.delete(key))
+      return removed.includes(true)
+    })
   }
 
   private load(): Promise<Map<string, StoredEngineSession>> {
@@ -95,18 +94,23 @@ export class WorkbenchEngineSessionStore {
     }
   }
 
-  /** 写盘排队：先写临时文件再改名，写到一半崩溃不会留下半截 JSON。 */
-  private persist(sessions: Map<string, StoredEngineSession>): Promise<void> {
-    const entries = [...sessions.values()]
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, MaxStoredSessions)
+  /** 读改写共用一条队列：写盘成功才发布新身份，失败后同一个身份仍可重试。 */
+  private update(change: (sessions: Map<string, StoredEngineSession>) => boolean): Promise<void> {
     const next = this.writing
       .catch(() => undefined)
       .then(async () => {
+        const sessions = new Map(await this.load())
+        if (!change(sessions)) return
+        const entries = [...sessions.values()]
+          .sort((left, right) => right.updatedAt - left.updatedAt)
+          .slice(0, MaxStoredSessions)
         await mkdir(dirname(this.path), { recursive: true })
         const temporary = `${this.path}.tmp`
         await writeFile(temporary, `${JSON.stringify({ sessions: entries }, null, 2)}\n`, 'utf8')
         await rename(temporary, this.path)
+        this.loaded = Promise.resolve(
+          new Map(entries.map((entry) => [sessionKey(entry.engine, entry), entry]))
+        )
       })
     this.writing = next
     return next

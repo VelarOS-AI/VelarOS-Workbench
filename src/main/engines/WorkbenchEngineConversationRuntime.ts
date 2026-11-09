@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
-import { Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
@@ -21,8 +20,6 @@ import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/Workben
 import { EngineRunSurface } from './WorkbenchEngineRunSurface'
 import type { WorkbenchEngineSessionStore } from './WorkbenchEngineSessionStore'
 import type { WorkbenchAgentEngine } from './WorkbenchEngineTypes'
-
-const log = Log.tag('WorkbenchEngineConversationRuntime')
 
 /** 引擎在本机的情况缓存这么久：装好、登录之后不用重启 Workbench 就能用上。 */
 const StatusCacheMs = 60_000
@@ -208,20 +205,8 @@ export class WorkbenchEngineConversationRuntime {
           locale: request.locale,
           resume,
           surface: run.surface,
-          sessionStarted: (nativeId) => {
-            void this.options.sessions
-              .set(engine.id, ref, nativeId)
-              .catch((error: unknown) =>
-                log.warn('记不下引擎会话', { error: AppError.getMessage(error) })
-              )
-          },
-          sessionLost: () => {
-            void this.options.sessions
-              .delete(ref, engine.id)
-              .catch((error: unknown) =>
-                log.warn('忘不掉引擎会话', { error: AppError.getMessage(error) })
-              )
-          },
+          sessionStarted: (nativeId) => this.options.sessions.set(engine.id, ref, nativeId),
+          sessionLost: () => this.options.sessions.delete(ref, engine.id),
           accepted: () => {
             if (admitted) return
             admitted = true
@@ -230,6 +215,8 @@ export class WorkbenchEngineConversationRuntime {
           signal,
         })
       ).status
+      if (status === 'completed' && !admitted)
+        throw new AppError('PROTOCOL', workbenchMainText('engines.inputNotAccepted'))
     } catch (error) {
       failure = error
     } finally {
@@ -246,8 +233,6 @@ export class WorkbenchEngineConversationRuntime {
       if (!admitted) throw AppError.from(failure)
       return
     }
-    // 引擎跑完却没报收下输入的（不该发生）：照样算发出去了。
-    if (!admitted) accept()
     sink.state({ kind: 'done' })
   }
 }

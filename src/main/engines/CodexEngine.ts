@@ -153,13 +153,13 @@ export class CodexEngine implements WorkbenchAgentEngine {
         signal.throwIfAborted()
         log.info('Codex 接不上上一轮的 thread，另开一条', { error: AppError.getMessage(error) })
       }
-      if (!threadId) input.sessionLost()
+      if (!threadId) await input.sessionLost()
     }
     threadId ??= readThreadId(
       await client.request('thread/start', { ...settings, ephemeral: false })
     )
     if (!threadId) throw new AppError('PROTOCOL', workbenchMainText('engines.codexNoThread'))
-    input.sessionStarted(threadId)
+    await input.sessionStarted(threadId)
     signal.throwIfAborted()
     await this.applyGoal(client, threadId, input)
 
@@ -306,23 +306,19 @@ export class CodexEngine implements WorkbenchAgentEngine {
     })
   }
 
-  /** 目标模式交给 Codex 自己的目标；没开时清掉上一轮留下的。旧版本没有目标接口时照常跑。 */
+  /** 目标模式交给 Codex 自己的目标；没开时清掉上一轮留下的。 */
   private async applyGoal(
     client: CodexAppServerClient,
     threadId: string,
     input: WorkbenchEngineRunInput
   ): Promise<void> {
-    try {
-      if (input.executionModes.includes('goal') && input.text.trim())
-        await client.request('thread/goal/set', {
-          threadId,
-          objective: input.text,
-          status: 'active',
-        })
-      else await client.request('thread/goal/clear', { threadId })
-    } catch (error) {
-      log.debug('Codex 的目标没设上', { error: AppError.getMessage(error) })
-    }
+    if (input.executionModes.includes('goal') && input.text.trim())
+      await client.request('thread/goal/set', {
+        threadId,
+        objective: input.text,
+        status: 'active',
+      })
+    else await client.request('thread/goal/clear', { threadId })
   }
 
   private notification(method: string, params: Record<string, unknown>): void {
@@ -376,21 +372,18 @@ export class CodexEngine implements WorkbenchAgentEngine {
   /** app-server 问宿主的请求：审批按 Workbench 的权限档，提问变成提问卡，其余一律拒绝。 */
   private async request(request: CodexServerRequest): Promise<unknown> {
     const { params } = request
-    const threadId = [params.threadId, params.conversationId].find(isString)
+    const threadId = isString(params.threadId) ? params.threadId : undefined
     const run = threadId ? this.runs.get(threadId) : undefined
-    const legacy =
-      request.method === 'applyPatchApproval' || request.method === 'execCommandApproval'
     const refuse = (): unknown => {
       if (request.method === 'item/tool/requestUserInput') return { answers: {} }
       if (request.method === 'item/permissions/requestApproval')
         return { permissions: {}, scope: 'turn' }
       if (request.method === 'mcpServer/elicitation/request')
         return { action: 'cancel', content: null, _meta: null }
-      if (legacy) return { decision: { denied: { rejection: 'Workbench 会话已经结束。' } } }
       return { decision: 'decline' }
     }
     if (!run) {
-      if (isApproval(request.method) || legacy || request.method === 'item/tool/requestUserInput')
+      if (isApproval(request.method) || request.method === 'item/tool/requestUserInput')
         return refuse()
       throw new AppError(
         'PROTOCOL',
@@ -404,13 +397,10 @@ export class CodexEngine implements WorkbenchAgentEngine {
     try {
       switch (request.method) {
         case 'item/commandExecution/requestApproval':
-        case 'execCommandApproval':
           return approvalDecision(
-            await this.approve(run, commandAction(params, run.input.ref.projectRoot), signal),
-            legacy
+            await this.approve(run, commandAction(params, run.input.ref.projectRoot), signal)
           )
         case 'item/fileChange/requestApproval':
-        case 'applyPatchApproval':
           return approvalDecision(
             await this.approve(
               run,
@@ -420,8 +410,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
                 reason: stringOf(params.reason),
               },
               signal
-            ),
-            legacy
+            )
           )
         case 'item/permissions/requestApproval':
           return (await this.approve(
@@ -767,19 +756,14 @@ function isApproval(method: string): boolean {
   )
 }
 
-function approvalDecision(approved: boolean, legacy: boolean): unknown {
-  if (legacy)
-    return { decision: approved ? 'approved' : { denied: { rejection: '用户拒绝了这次操作。' } } }
+function approvalDecision(approved: boolean): { decision: 'accept' | 'decline' } {
   return { decision: approved ? 'accept' : 'decline' }
 }
 
 function commandAction(params: Record<string, unknown>, projectRoot: string): EngineAction {
-  const command = isArray(params.command)
-    ? params.command.filter(isString).join(' ')
-    : (stringOf(params.command) ?? '')
   return {
     kind: 'command',
-    command,
+    command: stringOf(params.command) ?? '',
     cwd: stringOf(params.cwd) ?? projectRoot,
     reason: stringOf(params.reason),
   }
