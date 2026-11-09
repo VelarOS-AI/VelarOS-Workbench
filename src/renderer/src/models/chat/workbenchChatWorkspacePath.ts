@@ -17,7 +17,8 @@ export function resolveWorkbenchChatWorkspacePath(
   const normalizedRoot = systemPlatformCompatibility.normalizePathTextForComparison(projectRoot)
 
   if (normalizedPath === normalizedRoot) return '.'
-  if (!normalizedPath.startsWith(`${normalizedRoot}/`)) return null
+  const rootPrefix = normalizedRoot.endsWith('/') ? normalizedRoot : `${normalizedRoot}/`
+  if (!normalizedPath.startsWith(rootPrefix)) return null
 
   return normalizedPath.slice(normalizedRoot.length).replace(/^\/+/, '')
 }

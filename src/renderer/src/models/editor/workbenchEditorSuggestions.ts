@@ -1,5 +1,3 @@
-import { isNumber, optionalWhenLazy } from '@velaros-ai/velaros/core'
-
 import type { WorkbenchProjectContextIndex } from '../project/workbenchProjectContextIndex'
 
 export type WorkbenchEditorSuggestionKind =
@@ -214,13 +212,10 @@ export function buildWorkbenchEditorSuggestionRequest({
 
 export function buildLocalWorkbenchEditorSuggestions(
   request: WorkbenchEditorSuggestionRequest,
-  options: WorkbenchEditorSuggestionOptions | number = {}
+  options: WorkbenchEditorSuggestionOptions = {}
 ): WorkbenchEditorSuggestion[] {
-  const limit = isNumber(options) ? options : (options.limit ?? SUGGESTION_LIMIT)
-  const projectContext = optionalWhenLazy(
-    !isNumber(options),
-    () => (options as WorkbenchEditorSuggestionOptions).projectContext
-  )
+  const limit = options.limit ?? SUGGESTION_LIMIT
+  const { projectContext } = options
   const counts = new Map<string, number>()
 
   for (const match of request.content.matchAll(IDENTIFIER_PATTERN)) {

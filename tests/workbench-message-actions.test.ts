@@ -50,6 +50,7 @@ void describe('Workbench message actions', () => {
 
     assert.equal(resolveWorkbenchChatWorkspacePath('/work/project/src/app.ts', Root), 'src/app.ts')
     assert.equal(resolveWorkbenchChatWorkspacePath('/tmp/report.pdf', Root), null)
+    assert.equal(resolveWorkbenchChatWorkspacePath('/tmp/report.pdf', '/'), 'tmp/report.pdf')
   })
 
   void test('lists the files a run opened or moved under the answer, with project-relative titles', () => {
