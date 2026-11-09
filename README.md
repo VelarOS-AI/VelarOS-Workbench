@@ -93,24 +93,24 @@ apply to engine sessions.
 
 ## Development
 
-当前使用配套的 Velaros / capabilities 0.9.1 固定本机候选，UI 版本为 1.0.0。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+当前使用 Platform `v0.7.3` 正式发布的配套 Velaros / capabilities `0.9.2`，UI 版本为 `1.0.0`。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
 
-`resources/runtime-snapshot.json` 分别记录 Platform 候选和 UI 正式发布的来源、版本与哈希，锁文件固定完整依赖。
-首次使用由 Platform owner 交付的候选目录显式导入；已有缓存时可用 `--verify-only` 离线核验：
+`resources/runtime-snapshot.json` 分别记录 Platform 和 UI 正式发布的来源、版本与哈希，锁文件固定完整依赖。
+首次使用从声明的 GitHub Release 恢复归档；已有缓存时可用 `--verify-only` 离线核验：
 
 ```bash
-bun scripts/release/platformSnapshot.mjs --import-candidate "<Platform candidate.json>"
+bun scripts/release/platformSnapshot.mjs
 bun install --frozen-lockfile
 bun run dev
 ```
 
-普通准备命令只从声明的 GitHub Release 恢复正式包；候选缺失会要求显式导入，不猜 release tag。
-UI 缺少缓存时需要具备其仓库读取权限的 `gh`。Platform 与 UI 改动由对应 owner 构建为固定归档，Workbench
+准备命令只从声明的 GitHub Release 恢复正式包，不猜 release tag。
+缺少缓存时需要具备对应仓库读取权限的 `gh`。Platform 与 UI 改动由对应 owner 构建为固定归档，Workbench
 只消费公开入口，不引用兄弟仓源码或共享 node_modules。基础和扩展必须同版切换。
 
 开发验证按影响范围选择类型/lint 分区和必要行为测试，复用已通过结果；完整 `bun run check` 留给需要全量检查的交付。
 `check:platform-packages` 核对快照、归档、锁元组及 overrides。更新受控清单和快照后用 Bun 刷新锁文件，审查再提交。
-本机候选保留原来源证明；正式发布门只接受已发布来源，当前候选不能被当作正式依赖发布。
+正式发布门只接受已发布来源；此前 0.9.1 的本机候选来源与消费证明保留为历史证据，不再是当前发行状态。
 源码仓库中的旧 CI 与锁文件刷新
 Actions 仍是静态停用哨兵；正式发布由 Desktop 仓库的 `release-workbench.yml` 承载，使用固定 Workbench 提交在各平台原生 runner 上检查与打包。
 

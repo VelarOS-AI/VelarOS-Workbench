@@ -1,6 +1,6 @@
-# Workbench → Platform 0.9.1
+# Workbench → Platform 0.9.2
 
-Workbench 使用配套的基础与扩展固定候选，不引用兄弟仓源码，也不修改依赖包实现。
+Workbench 使用配套的基础与扩展正式固定归档，不引用兄弟仓源码，也不修改依赖包实现。
 
 ## 执行与空闲控制
 
@@ -26,19 +26,23 @@ Workbench 使用配套的基础与扩展固定候选，不引用兄弟仓源码�
 
 ## 一次接入所需归档
 
-安装身份为配套的 `@velaros-ai/velaros@0.9.1` 与 `@velaros-ai/capabilities@0.9.1`。
+安装身份为配套的 `@velaros-ai/velaros@0.9.2` 与 `@velaros-ai/capabilities@0.9.2`。
 Workbench 使用项目/代码/图像、浏览器、网页和产品会话协作，不能仅接基础包。
-来源：Platform commit `e3e157696994a0d667cbd542a809484b93e40e71`。
-来源证明原字节保存于 `resources/runtime-sources/platform-0.9.1/`，schema2 快照固定其哈希。
+正式来源：[Platform v0.7.3](https://github.com/VelarOS-AI/VelarOS-Platform/releases/tag/v0.7.3)，
+commit `ae20dcebf5d086d99ff7d8df1701d71a91574efe`。schema2 快照仅声明正式发布来源，
+核对 Release 公开状态、tag→commit、资源大小/digest、实际下载 SHA256/SHA512 与 tar 内包身份。
 
 | 安装身份 | 版本 | 归档 | SHA256 |
 | --- | --- | --- | --- |
-| @velaros-ai/velaros | 0.9.1 | velaros.tgz | 7845f1e6c90fd93f90faf8d5c52203a7110580054365419acb1c38d72d0e93c2 |
-| @velaros-ai/capabilities | 0.9.1 | capabilities.tgz | 9e29f4b00ee12aa51a2d086b32eaff8ce7c15672041048590cac0dc6ba911a5a |
+| @velaros-ai/velaros | 0.9.2 | [velaros-ai-velaros-0.9.2.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.3/velaros-ai-velaros-0.9.2.tgz) | 285083f64db4f31869af25d2f8cbd944f82eed8bbea03fa08fb1deaea6fec5b2 |
+| @velaros-ai/capabilities | 0.9.2 | [velaros-ai-capabilities-0.9.2.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.3/velaros-ai-capabilities-0.9.2.tgz) | 6627b3fe9969ea5b5faf1726abcd80791df06c010efb823500fa32eac39f813a |
 
-receipt 给出 SHA512 integrity、大小及 658 输入与提交树的核对证明；冻结本地候选保留打包前 dirty 证据，
-不称为已发布的 registry/GitHub Release。导入核对来源证明和归档，复制到本仓哈希目录，缺档不自动走 GH。
-正式 stage 拒绝候选依赖；正式发布来源另核 Release、tag→commit 和资源身份。UI 仍使用原 1.0.0 固定归档。
+两包的大小与 SHA512 integrity 由 `resources/runtime-snapshot.json` 固定，归档位于本仓按哈希分格的缓存。
+UI 仍使用原 1.0.0 正式固定归档。正式来源门继续拒绝本机候选，不把预发布身份伪造成 Release。
+
+0.9.1 的源 commit `e3e157696994a0d667cbd542a809484b93e40e71`、原始候选证明和消费验证已保留：
+接入提交 `f0cd235`，原字节位于 `resources/runtime-sources/platform-0.9.1/`。其 658 输入、dirty 来源事实
+及四个真实 Node 场景仍是历史证据；当前安装与正式发行状态均以 0.9.2 发布来源为准。
 
 切换范围：manifest/lock/快照来源；专项 import → capabilities；Node 工厂 → velaros/node；显式项目端口、
 context source/snapshot、worker/memory/widget 装配；执行身份与授权 scope；新会话数据代际；发行外置包闭包。
@@ -49,14 +53,17 @@ context source/snapshot、worker/memory/widget 装配；执行身份与授权 sc
 - `capabilities/sessions` 的 `SessionTold.status` 仅 `queued`，tell 只给目标活动 run 追加 guidance，空闲拒绝。
   Workbench 先显示 pending guidance 并回执，再 await 真实 steer；不新建运行或检查点，目标换轮会拒绝。
   接纳后来源取消或 UI 通知失败不误报未投递，不自动重放，也不把先到的 applied 降级。
-- 0.9.1 扩展 required peer 为基础精确 `0.9.1`；宿主 optional peer 是 Electron `>=41.0.0`、
+- 0.9.2 扩展 required peer 为基础精确 `0.9.2`；宿主 optional peer 是 Electron `>=41.0.0`、
   React / @types/react `^19.0.0`，与本仓宿主版本一致，无本地依赖补丁或 peer override。
 
 ## 实际公开调用库存
 
-核对当前产品调用与安装的 0.9.1 公开声明：目前没有确认需要 Platform 新增的合同缺口。
+当前产品调用库存从已验证的 0.9.1 接入延续到 0.9.2：目前没有确认需要 Platform 新增的合同缺口。
 空闲 trace/traceBranches 不是 Workbench 当前产品调用；空闲 UI 恢复读取产品 Recovery 日志。
 后续验证若发现真实合同缺口再补充，不恢复已删除字段或导入包内私有实现。
+
+0.9.2 增加独立控制 lease 的两只读 trace 方法，Workbench 当前没有新增消费；执行/空闲控制分流不变。
+内部收尾与错误修复沿用发布方针对同归档的证据；产品补固定身份与受影响静态/类型检查，复用已过四个真实 Node 场景。
 
 | 产品文件 / 公开调用 | 活动或空闲 | 真实语义 |
 | --- | --- | --- |
