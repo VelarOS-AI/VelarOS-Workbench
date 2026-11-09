@@ -7,7 +7,6 @@ import { isNotUndefined, Log, toNullable } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import type { ActPresentation } from '@velaros-ai/velaros/renderer'
 import { createActEventProjector } from '@velaros-ai/velaros/renderer'
-import type { CodeRunnerApi } from '@velaros-ai/velaros/script'
 import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
 import type { SessionAnswer } from '@velaros-ai/velaros/sessions/contracts'
 import type { WebSpacePort } from '@velaros-ai/velaros/web'
@@ -89,8 +88,6 @@ interface ConversationTraceBoards {
 
 interface WorkbenchConversationRuntimeOptions {
   sessions?(request: WorkbenchConversationSendRequest): SessionsSpacePort | undefined
-  /** 宿主明确提供执行进程，主聊天不自行选择进程实现。 */
-  runner?: CodeRunnerApi
   nodeExecutable?: string
   nodePackagesDirectory?: string
   /** 应用共用的本机 shell 宿主：每轮借用，会话删除时停掉它的后台任务。 */
@@ -192,7 +189,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
 
   public constructor(private readonly options: WorkbenchConversationRuntimeOptions) {
     this.session = new WorkbenchConversationSession(
-      options.runner,
       options.shells,
       options.nodeExecutable,
       options.nodePackagesDirectory

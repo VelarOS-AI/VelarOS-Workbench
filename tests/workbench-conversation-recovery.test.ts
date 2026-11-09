@@ -13,14 +13,14 @@ test('durable ordered replay, cursor pagination and restart recovery', async () 
     const journal = new WorkbenchConversationRecovery(directory)
     const run = await journal.begin(ref, 'input', false)
     const writes = Array.from({ length: 140 }, (_, i) =>
-      journal.append(run, { type: 'notice', kind: 'test', payload: i }),
+      journal.append(run, { type: 'notice', kind: 'test', payload: i })
     )
     await Promise.all(writes)
     const page = await journal.read(ref, {}, true)
     expect(page?.events.length).toBe(128)
     expect(page?.hasMore).toBe(true)
     expect(page?.events.map((e) => e.sequence)).toEqual(
-      Array.from({ length: 128 }, (_, i) => i + 1),
+      Array.from({ length: 128 }, (_, i) => i + 1)
     )
     const next = await journal.read(ref, { streamId: run.id, after: 128 }, true)
     expect(next?.events.length).toBe(12)
@@ -33,7 +33,7 @@ test('durable ordered replay, cursor pagination and restart recovery', async () 
       payload: { kind: 'aborted' },
     })
     expect(
-      (await restarted.read(ref, { streamId: run.id, after: 141 }, false))?.events,
+      (await restarted.read(ref, { streamId: run.id, after: 141 }, false))?.events
     ).toHaveLength(0)
     expect(await restarted.read({ ...ref, projectRoot: 'other' }, {}, false)).toBeNull()
   } finally {
@@ -50,15 +50,15 @@ test('completed events survive reopen; deletion rejects late producers; new gene
     expect((await restarted.read(ref, {}, false))?.events).toHaveLength(1)
     const newRun = await journal.begin(ref, 'b', true)
     await expect(
-      journal.append(run, { type: 'state', payload: { kind: 'done' } }),
+      journal.append(run, { type: 'state', payload: { kind: 'done' } })
     ).rejects.toThrow()
     await journal.append(newRun, { type: 'state', payload: { kind: 'done' } })
-    expect(
-      (await journal.read(ref, { streamId: run.id, after: 999 }, false))?.events,
-    ).toHaveLength(1)
+    expect((await journal.read(ref, { streamId: run.id, after: 999 }, false))?.events).toHaveLength(
+      1
+    )
     await journal.remove(ref)
     await expect(
-      journal.append(newRun, { type: 'state', payload: { kind: 'done' } }),
+      journal.append(newRun, { type: 'state', payload: { kind: 'done' } })
     ).rejects.toThrow()
     expect(await journal.read(ref, {}, false)).toBeNull()
   } finally {
@@ -74,7 +74,7 @@ test('ignores a crash-torn uncommitted tail', async () => {
     const [file] = await readdir(directory)
     await appendFile(join(directory, file!), '{"envelope":')
     expect(
-      (await new WorkbenchConversationRecovery(directory).read(ref, {}, false))?.events,
+      (await new WorkbenchConversationRecovery(directory).read(ref, {}, false))?.events
     ).toHaveLength(1)
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -93,7 +93,7 @@ test('concurrent replay and writes preserve every durable event', async () => {
           type: 'notice',
           kind: 'test',
           payload: 'payload'.repeat(10000),
-        }),
+        })
       )
       operations.push(journal.read(ref, {}, true))
     }
@@ -101,6 +101,35 @@ test('concurrent replay and writes preserve every durable event', async () => {
     const page = await new WorkbenchConversationRecovery(directory).read(ref, {}, true)
     expect(page?.events).toHaveLength(30)
     expect(page?.events.at(-1)?.sequence).toBe(30)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('a failed journal write rejects later producers but still permits deletion and a new generation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'workbench-recovery-'))
+  try {
+    const journal = new WorkbenchConversationRecovery(directory)
+    const run = await journal.begin(ref, 'a', false)
+    await rm(directory, { recursive: true, force: true })
+
+    await expect(
+      journal.append(run, { type: 'state', payload: { kind: 'done' } })
+    ).rejects.toThrow()
+    await expect(
+      journal.append(run, { type: 'state', payload: { kind: 'done' } })
+    ).rejects.toThrow()
+    await expect(journal.read(ref, {}, true)).rejects.toThrow()
+    await journal.remove(ref)
+    await expect(
+      journal.append(run, { type: 'state', payload: { kind: 'done' } })
+    ).rejects.toThrow()
+
+    const nextRun = await journal.begin(ref, 'b', false)
+    await journal.append(nextRun, { type: 'state', payload: { kind: 'done' } })
+    const page = await journal.read(ref, {}, false)
+    expect(page?.run.id).toBe(nextRun.id)
+    expect(page?.events.map((event) => event.sequence)).toEqual([1])
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

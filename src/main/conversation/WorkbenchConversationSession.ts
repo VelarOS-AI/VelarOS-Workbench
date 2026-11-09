@@ -33,7 +33,6 @@ import type {
   PreparedInvocation,
   ToolConfirmationDecisionOptions,
 } from '@velaros-ai/velaros/kernel'
-import type { CodeRunnerApi } from '@velaros-ai/velaros/script'
 import { sessionsOperations } from '@velaros-ai/velaros/sessions'
 import { VelarSessionsModule } from '@velaros-ai/velaros/sessions/contracts'
 import { webOperations } from '@velaros-ai/velaros/web'
@@ -72,7 +71,6 @@ export interface WorkbenchConversationSessionApi {
 /** 项目会话按需发现与调用代码能力；标准 Node 进程和后台任务由应用宿主持有。 */
 export class WorkbenchConversationSession implements WorkbenchConversationSessionApi {
   public constructor(
-    private readonly runner: CodeRunnerApi | undefined,
     private readonly shells: WorkbenchShellHostRegistryApi,
     private readonly nodeExecutable?: string,
     private readonly nodePackagesDirectory?: string
@@ -194,7 +192,6 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         )
       }
       runtime = await createRuntime({
-        runner: this.runner,
         node,
         residentModules: [],
         workspace: root,
@@ -291,7 +288,6 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
     options: ConversationControlOptions
   ): Promise<ConversationWorkspaceHandle> {
     const runtime = await createRuntime({
-      runner: this.runner,
       ...options,
       project: false,
       agents: false,

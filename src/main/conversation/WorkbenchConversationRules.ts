@@ -1,6 +1,5 @@
 import type { ActiveContextArtifact, AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import type { GoalState } from '@velaros-ai/velaros/contracts'
-import { isNotUndefined } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
@@ -15,7 +14,6 @@ import type {
   ConversationInput,
   ConversationModelLimits,
   ConversationProjectRule,
-  ConversationSessionEvent,
 } from './WorkbenchConversationTypes'
 
 /** 只投递本次用户输入；图片保持真实多模态数据，历史由 Platform 持有。 */
@@ -57,36 +55,6 @@ export function contextUsageFromProvider(input: {
     timestamp: input.timestamp,
     contextWindowEstimated: input.limits.contextWindowEstimated === true,
   }
-}
-
-/**
- * Platform 一次用量回报 → 用量遥测。带上这一轮的服务商，回答末尾的约价按它计价；服务商报告了前缀缓存
- * 读写才带上那两个数，没报告就不带（不当成零）。
- */
-export function usageTelemetryFromProvider(
-  usage: Pick<
-    Extract<ConversationSessionEvent, { type: 'usage' }>,
-    'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens'
-  >,
-  context: { turn: number; provider?: string; model: string; timestamp: number }
-): Extract<WorkbenchConversationState, { kind: 'usage-telemetry' }> {
-  const telemetry: Extract<WorkbenchConversationState, { kind: 'usage-telemetry' }> = {
-    kind: 'usage-telemetry',
-    timestamp: context.timestamp,
-    turn: context.turn,
-    model: context.model,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    totalTokens: usage.inputTokens + usage.outputTokens,
-    reasoningTokens: null,
-    source: 'provider',
-    confidence: 'high',
-  }
-  if (context.provider) telemetry.provider = context.provider as typeof telemetry.provider
-  if (isNotUndefined(usage.cacheReadTokens)) telemetry.cacheReadInputTokens = usage.cacheReadTokens
-  if (isNotUndefined(usage.cacheWriteTokens))
-    telemetry.cacheWriteInputTokens = usage.cacheWriteTokens
-  return telemetry
 }
 
 /** 运行完成时的结果：目标在这次运行里改过（建立、完成、受阻、暂停）才带上它现在的状态。 */

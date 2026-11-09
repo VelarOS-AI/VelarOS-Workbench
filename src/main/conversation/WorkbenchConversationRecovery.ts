@@ -15,8 +15,7 @@ import type {
 type Lane = {
   run: WorkbenchConversationRecoveryRun
   sequence: number
-  tail: Promise<void>
-  closed: boolean
+  failure?: unknown
 }
 
 /** 与 Desktop 一致：先持久化有序事件再交付。每个会话保留最近一轮，历史正文由聊天快照持有。 */
@@ -77,7 +76,6 @@ export class WorkbenchConversationRecovery {
     goalMode: boolean
   ): Promise<WorkbenchConversationRecoveryRun> {
     const key = this.key(ref)
-    await this.lanes.get(key)?.tail
     const run = {
       ...ref,
       id: randomUUID(),
@@ -96,20 +94,18 @@ export class WorkbenchConversationRecovery {
     this.lanes.set(key, {
       run,
       sequence: 0,
-      tail: Promise.resolve(),
-      closed: false,
     })
     return run
   }
 
-  private appendLocked(
+  private async appendLocked(
     run: WorkbenchConversationRecoveryRun,
     event: WorkbenchConversationStreamEvent
   ): Promise<WorkbenchConversationEventEnvelope> {
     const key = this.key(run)
     const lane = this.lanes.get(key)
-    if (!lane || lane.closed || lane.run.id !== run.id)
-      return Promise.reject(new AppError('UNAVAILABLE', '会话恢复记录已关闭'))
+    if (!lane || lane.run.id !== run.id) throw new AppError('UNAVAILABLE', '会话恢复记录已关闭')
+    if (lane.failure) throw lane.failure
     const envelope = {
       projectRoot: run.projectRoot,
       sessionId: run.sessionId,
@@ -118,7 +114,7 @@ export class WorkbenchConversationRecovery {
       emittedAt: Date.now(),
       sequence: ++lane.sequence,
     }
-    const written = lane.tail.then(async () => {
+    try {
       const file = await open(join(this.directory, `${key}.jsonl`), 'a')
       try {
         await file.writeFile(`${JSON.stringify({ envelope })}\n`)
@@ -126,9 +122,12 @@ export class WorkbenchConversationRecovery {
       } finally {
         await file.close()
       }
-    })
-    lane.tail = written
-    return written.then(() => envelope)
+    } catch (error) {
+      // 这代记录的持久化结果已不确定：拒绝后续读写，仍允许删除或新一轮重建。
+      lane.failure = error
+      throw error
+    }
+    return envelope
   }
 
   private async readLocked(
@@ -137,7 +136,8 @@ export class WorkbenchConversationRecovery {
     active: boolean
   ): Promise<WorkbenchConversationRecoveryPage | null> {
     const key = this.key(ref)
-    await this.lanes.get(key)?.tail
+    const failure = this.lanes.get(key)?.failure
+    if (failure) throw failure
     let source: string
     try {
       source = await readFile(join(this.directory, `${key}.jsonl`), 'utf8')
@@ -174,8 +174,6 @@ export class WorkbenchConversationRecovery {
         this.lanes.set(key, {
           run,
           sequence: all.at(-1)?.sequence ?? 0,
-          tail: Promise.resolve(),
-          closed: false,
         })
       all.push(
         await this.appendLocked(run, {
@@ -201,11 +199,6 @@ export class WorkbenchConversationRecovery {
 
   private async removeLocked(ref: WorkbenchConversationSessionRequest): Promise<void> {
     const key = this.key(ref)
-    const lane = this.lanes.get(key)
-    if (lane) {
-      lane.closed = true
-      await lane.tail
-    }
     this.lanes.delete(key)
     await rm(join(this.directory, `${key}.jsonl`), { force: true })
   }
