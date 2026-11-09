@@ -65,7 +65,7 @@ export function useWorkbenchGitBlame({
     }
   }, [encoding, eol, hostRuntime, path, projectRoot, readContentLatest, revision, savedAt])
 
-  if (!path) return null
+  if (!path || revision === null) return null
   return state && state.projectRoot === projectRoot && state.path === path
     ? state
     : { path, blame: null }
