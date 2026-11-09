@@ -14,7 +14,6 @@ import {
 } from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
 import {
   getWorkbenchLanguageServiceDiagnostics,
-  getWorkbenchLanguageServiceDocumentSymbols,
   getWorkbenchLanguageServiceProjectDiagnostics,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
@@ -23,10 +22,7 @@ import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, Log } from '@velaros-ai/velaros/core'
 
-import {
-  type WorkbenchLanguageServiceDiagnostic,
-  type WorkbenchLanguageServiceDocumentSymbol,
-} from '@shared/contracts/workbench'
+import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts/workbench'
 
 import { useLatest } from '../support/genericHooks'
 
@@ -41,7 +37,6 @@ const log = Log.tag('workbench-language-service-insights')
 export interface WorkbenchLanguageServiceInsights {
   diagnosticsByPath: ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>
   diagnosticsPendingPaths: ReadonlySet<string>
-  documentSymbols: readonly WorkbenchLanguageServiceDocumentSymbol[]
 }
 
 export function useWorkbenchLanguageServiceInsights({
@@ -66,14 +61,9 @@ export function useWorkbenchLanguageServiceInsights({
   const [diagnosticsPendingPaths, setDiagnosticsPendingPaths] = useState<ReadonlySet<string>>(
     () => new Set()
   )
-  const [documentSymbols, setDocumentSymbols] = useState<
-    readonly WorkbenchLanguageServiceDocumentSymbol[]
-  >([])
   const [projectDiagnosticsByPath, setProjectDiagnosticsByPath] = useState<
     ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>
   >(() => new Map())
-  const diagnosticGenerationRef = useRef(0)
-  const symbolGenerationRef = useRef(0)
   const announcedErrorRef = useRef<Nullable<string>>(null)
   const contextRef = useLatest({ projectRoot, openTabs, selectedFilePath, editorContent })
 
@@ -90,7 +80,10 @@ export function useWorkbenchLanguageServiceInsights({
         .join('\u001e'),
     [editorContent, openTabs, selectedFilePath]
   )
-  const scheduledContentByPathRef = useRef(new Map<string, string>())
+  const scheduledDiagnosticsRef = useRef({
+    root: null as Nullable<string>,
+    contentByPath: new Map<string, string>(),
+  })
   const pendingPathsRef = useRef(new Set<string>())
 
   // 内容变了的文件（正在编辑的那个）700ms 后重算；别的打开文件的内容没变，只是可能受它影响（导出改了）
@@ -106,21 +99,24 @@ export function useWorkbenchLanguageServiceInsights({
     const targets = currentTabs.filter((tab) => usesWorkbenchBuiltinLanguageService(tab.path))
     if (!root || isEmpty(targets)) {
       announcedErrorRef.current = null
-      scheduledContentByPathRef.current = new Map()
+      scheduledDiagnosticsRef.current = { root, contentByPath: new Map() }
       pendingPathsRef.current = new Set()
       setDiagnosticsByPath(new Map())
       setDiagnosticsPendingPaths(new Set())
       return undefined
     }
 
-    const generation = ++diagnosticGenerationRef.current
+    let disposed = false
     const contentByPath = new Map(
       targets.map(
         (tab) => [tab.path, tab.path === activePath ? activeContent : tab.content] as const
       )
     )
-    const previousContentByPath = scheduledContentByPathRef.current
-    scheduledContentByPathRef.current = contentByPath
+    const rootChanged = scheduledDiagnosticsRef.current.root !== root
+    const previousContentByPath = rootChanged
+      ? new Map<string, string>()
+      : scheduledDiagnosticsRef.current.contentByPath
+    scheduledDiagnosticsRef.current = { root, contentByPath }
     const changedPaths = new Set(
       [...contentByPath]
         .filter(([path, content]) => previousContentByPath.get(path) !== content)
@@ -141,7 +137,8 @@ export function useWorkbenchLanguageServiceInsights({
     for (const path of changedPaths) pendingPaths.add(path)
     pendingPathsRef.current = pendingPaths
     setDiagnosticsPendingPaths(new Set(pendingPaths))
-    if (changedPaths.size > 0)
+    if (rootChanged) setDiagnosticsByPath(new Map())
+    else if (changedPaths.size > 0)
       setDiagnosticsByPath((current) => omitWorkbenchPendingDiagnostics(current, changedPaths))
 
     // 当前文件的实时缓冲进共享的打开文件覆盖层：别的标签看到的是刚改过的依赖，而不是旧的标签快照。
@@ -149,7 +146,7 @@ export function useWorkbenchLanguageServiceInsights({
       tab.path === activePath ? { ...tab, content: activeContent } : tab
     )
     const request = async (paths: readonly string[]): Promise<void> => {
-      if (isEmpty(paths)) return
+      if (disposed || contextRef.current.projectRoot !== root || isEmpty(paths)) return
       const results = new Map<string, readonly WorkbenchLanguageServiceDiagnostic[]>()
       let failureMessage: Nullable<string> = null
 
@@ -179,7 +176,7 @@ export function useWorkbenchLanguageServiceInsights({
         })
       )
 
-      if (generation !== diagnosticGenerationRef.current) return
+      if (disposed || contextRef.current.projectRoot !== root) return
       const errorKey = failureMessage ? `${root}\0${failureMessage}` : null
       if (failureMessage && announcedErrorRef.current !== errorKey) {
         messageLatest.current.error({
@@ -208,10 +205,19 @@ export function useWorkbenchLanguageServiceInsights({
       : setTimeout(() => void request(siblingPaths), SIBLING_DIAGNOSTIC_DEBOUNCE_MS)
 
     return () => {
+      disposed = true
       clearTimeout(promptTimer)
       if (siblingTimer) clearTimeout(siblingTimer)
     }
-  }, [contextRef, diagnosticContentKey, externalRevision, hostRuntime, messageLatest, tLatest])
+  }, [
+    contextRef,
+    diagnosticContentKey,
+    externalRevision,
+    hostRuntime,
+    messageLatest,
+    projectRoot,
+    tLatest,
+  ])
 
   // 整项目检查的锚点：打开着的 TypeScript 文件，当前文件在前（它所在的项目先查）。
   const projectAnchorKey = useMemo(
@@ -228,49 +234,45 @@ export function useWorkbenchLanguageServiceInsights({
   const projectPassRef = useRef({
     root: null as Nullable<string>,
     anchors: [] as string[],
-    running: false,
-    rerun: false,
-    generation: 0,
-    timer: null as Nullable<ReturnType<typeof setTimeout>>,
+    completion: null as Nullable<Promise<void>>,
   })
 
   // 整项目检查：像 `tsc --noEmit` 一样把项目里没打开的文件也查一遍，问题面板才看得到它们。在 worker 里分批查，
-  // 一轮查完之前又有改动就查完这轮再来一轮（不打断、不并发）；只在打开的 TS 文件、项目或磁盘内容变了时才查，
+  // 新一轮等待上一轮已发请求收束后再开始，不并发；只在打开的 TS 文件、项目或磁盘内容变了时才查，
   // 打字不触发（打开的文件由上面的实时诊断负责）。
   useEffect(() => {
     const pass = projectPassRef.current
     const root = contextRef.current.projectRoot
     const anchors = projectAnchorKey ? projectAnchorKey.split('\n') : []
     if (pass.root !== root) {
-      pass.generation += 1
       pass.root = root
+      pass.anchors = []
       setProjectDiagnosticsByPath(new Map())
     }
     // 关掉所有 TypeScript 标签后仍按上次的锚点查，问题面板里已经发现的问题不因此消失。
     if (!isEmpty(anchors)) pass.anchors = anchors
-    if (!root || isEmpty(pass.anchors)) return undefined
+    const anchorPaths = pass.anchors
+    if (!root || isEmpty(anchorPaths)) return undefined
 
-    const runPass = async (): Promise<void> => {
-      if (pass.running) {
-        pass.rerun = true
-        return
-      }
-      pass.running = true
-      const generation = pass.generation
+    let disposed = false
+    const runPass = async (previous: Nullable<Promise<void>>): Promise<void> => {
       const checked = new Set<string>()
       let cursor: string | undefined
       try {
+        // 按真实完成串行衔接；已失效的 effect 不再派发后续批次。
+        await previous
+        if (disposed || contextRef.current.projectRoot !== root) return
         do {
           const result = await getWorkbenchLanguageServiceProjectDiagnostics(
             {
               projectRoot: root,
-              anchorPaths: pass.anchors,
+              anchorPaths,
               cursor,
               openFiles: buildWorkbenchLanguageServiceOpenFiles(contextRef.current.openTabs),
             },
             hostRuntime
           )
-          if (generation !== pass.generation) return
+          if (disposed || contextRef.current.projectRoot !== root) return
           if (!result.ok) {
             log.debug('project diagnostics pass failed', { root, error: result.error })
             return
@@ -284,20 +286,18 @@ export function useWorkbenchLanguageServiceInsights({
         setProjectDiagnosticsByPath((current) =>
           retainWorkbenchProjectDiagnostics(current, checked)
         )
-      } finally {
-        pass.running = false
-        if (pass.rerun && generation === pass.generation) {
-          pass.rerun = false
-          pass.timer = setTimeout(() => void runPass(), PROJECT_DIAGNOSTIC_DEBOUNCE_MS)
-        }
+      } catch (error) {
+        if (!disposed && contextRef.current.projectRoot === root)
+          log.debug('project diagnostics pass failed', { root, error })
       }
     }
 
-    if (pass.timer) clearTimeout(pass.timer)
-    pass.timer = setTimeout(() => void runPass(), PROJECT_DIAGNOSTIC_DEBOUNCE_MS)
+    const timer = setTimeout(() => {
+      pass.completion = runPass(pass.completion)
+    }, PROJECT_DIAGNOSTIC_DEBOUNCE_MS)
     return () => {
-      if (pass.timer) clearTimeout(pass.timer)
-      pass.timer = null
+      disposed = true
+      clearTimeout(timer)
     }
   }, [contextRef, externalRevision, hostRuntime, projectAnchorKey, projectRoot])
 
@@ -318,37 +318,5 @@ export function useWorkbenchLanguageServiceInsights({
     [diagnosticsByPath, openLanguageServicePaths, projectDiagnosticsByPath]
   )
 
-  useEffect(() => {
-    const root = contextRef.current.projectRoot
-    const path = contextRef.current.selectedFilePath
-    if (!root || !path || !usesWorkbenchTypeScriptLanguageService(path)) {
-      setDocumentSymbols([])
-      return undefined
-    }
-
-    const generation = ++symbolGenerationRef.current
-    const timer = setTimeout(() => {
-      void (async () => {
-        const result = await getWorkbenchLanguageServiceDocumentSymbols(
-          {
-            ...buildWorkbenchLanguageServiceRequestBase({
-              projectRoot: root,
-              path,
-              language: fileLanguage(path),
-              content: contextRef.current.editorContent,
-              openTabs: contextRef.current.openTabs,
-            }),
-          },
-          hostRuntime
-        )
-
-        if (generation !== symbolGenerationRef.current) return
-        setDocumentSymbols(result.ok ? result.data.symbols : [])
-      })()
-    }, 240)
-
-    return () => clearTimeout(timer)
-  }, [contextRef, editorContent, hostRuntime, selectedFilePath])
-
-  return { diagnosticsByPath: mergedDiagnosticsByPath, diagnosticsPendingPaths, documentSymbols }
+  return { diagnosticsByPath: mergedDiagnosticsByPath, diagnosticsPendingPaths }
 }

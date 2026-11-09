@@ -4,7 +4,7 @@
  * 校验与创建都在 main 侧项目枢纽完成，这里只收集输入并把失败原因翻译成提示文案。
  * 挂在应用顶层（起手页与工作台都能经菜单「新建项目…」唤起）。
  */
-import { type ReactElement, useState } from 'react'
+import { type ReactElement, useLayoutEffect, useRef, useState } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import {
@@ -40,9 +40,18 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps):
   const [locationPath, setLocationPath] = useState('')
   const [failure, setFailure] = useState<Nullable<WorkbenchProjectCreateFailureReason>>(null)
   const [submitting, setSubmitting] = useState(false)
+  const requestRef = useRef<Nullable<object>>(null)
+
+  useLayoutEffect(
+    () => () => {
+      requestRef.current = null
+    },
+    [open]
+  )
 
   const resetAndClose = (nextOpen: boolean): void => {
     if (!nextOpen) {
+      requestRef.current = null
       setName('')
       setLocationPath('')
       setFailure(null)
@@ -52,24 +61,44 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps):
   }
 
   const pickLocation = async (): Promise<void> => {
-    const picked = await window.velarosWorkbenchProjectHub.pickNewProjectLocation()
-    if (picked.ok) {
-      setLocationPath(picked.path)
-      setFailure(null)
+    if (!open || requestRef.current) return
+    const request = {}
+    requestRef.current = request
+    try {
+      const picked = await window.velarosWorkbenchProjectHub.pickNewProjectLocation()
+      if (requestRef.current !== request) return
+      if (picked.ok) {
+        setLocationPath(picked.path)
+        setFailure(null)
+      }
+    } catch {
+      if (requestRef.current === request) setFailure('io-error')
+    } finally {
+      if (requestRef.current === request) requestRef.current = null
     }
   }
 
   const submit = async (): Promise<void> => {
+    if (!open || requestRef.current || !name.trim() || !locationPath) return
+    const request = { name, locationPath }
+    requestRef.current = request
     setSubmitting(true)
-    const result = await window.velarosWorkbenchProjectHub.createProject(locationPath, name)
-    setSubmitting(false)
-
-    if (result.ok) {
-      resetAndClose(false)
-      return
+    try {
+      const result = await window.velarosWorkbenchProjectHub.createProject(
+        request.locationPath,
+        request.name
+      )
+      if (requestRef.current !== request) return
+      if (result.ok) resetAndClose(false)
+      else setFailure(result.reason)
+    } catch {
+      if (requestRef.current === request) setFailure('io-error')
+    } finally {
+      if (requestRef.current === request) {
+        requestRef.current = null
+        setSubmitting(false)
+      }
     }
-
-    setFailure(result.reason)
   }
 
   const canSubmit = !submitting && name.trim().length > 0 && locationPath.length > 0
@@ -86,6 +115,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps):
             <Input
               id="workbench-new-project-name"
               value={name}
+              disabled={submitting}
               autoFocus
               placeholder="my-project"
               onChange={(event) => {
@@ -105,7 +135,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps):
                 readOnly
                 placeholder={t('welcome.newProjectLocationPlaceholder')}
               />
-              <Button variant="outline" onClick={() => void pickLocation()}>
+              <Button variant="outline" disabled={submitting} onClick={() => void pickLocation()}>
                 {t('welcome.newProjectBrowse')}
               </Button>
             </div>

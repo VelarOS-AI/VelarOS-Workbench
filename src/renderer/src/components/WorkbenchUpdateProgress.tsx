@@ -46,6 +46,7 @@ export function WorkbenchUpdateProgress(): Nullable<ReactElement> {
     void window.velarosWorkbenchUpdate.cancel()
   }
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.target !== event.currentTarget) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
     toggle()

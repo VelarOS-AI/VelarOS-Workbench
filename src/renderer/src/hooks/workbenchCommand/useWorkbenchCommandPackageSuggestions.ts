@@ -35,6 +35,7 @@ export function useWorkbenchCommandPackageSuggestions({
 }: UseWorkbenchCommandPackageSuggestionsOptions): void {
   const hostRuntime = useWorkbenchHostRuntime()
   useEffect(() => {
+    let permitted = true
     async function loadCommandSuggestions(): Promise<void> {
       if (
         !activeProject ||
@@ -55,7 +56,7 @@ export function useWorkbenchCommandPackageSuggestions({
           })
         )
 
-        if (activeProjectRef.current?.id !== owningProjectId) return
+        if (!permitted || activeProjectRef.current?.id !== owningProjectId) return
 
         const suggestions = buildPackageScriptCommandSuggestions(
           packageJson.content,
@@ -65,18 +66,21 @@ export function useWorkbenchCommandPackageSuggestions({
         setCommandSuggestions(suggestions)
         setCommandInput((current) => current || suggestions[0]?.command || '')
       } catch (error) {
+        if (!permitted || activeProjectRef.current?.id !== owningProjectId) return
+
         log.debug('读取 package.json 命令建议失败，清空建议列表', {
           projectId: owningProjectId,
           rootPath: activeProject.rootPath,
           error: String(error),
         })
-        if (activeProjectRef.current?.id !== owningProjectId) return
-
         setCommandSuggestions((current) => (current.length === 0 ? current : []))
       }
     }
 
     void loadCommandSuggestions()
+    return () => {
+      permitted = false
+    }
   }, [
     activeProject?.id,
     activeProject?.rootPath,

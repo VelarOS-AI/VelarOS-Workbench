@@ -3,6 +3,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -55,7 +56,15 @@ export function useWorkbenchLayoutController(
     height: window.innerHeight,
   }))
   const shellElementRef = useRef<Nullable<HTMLElement>>(null)
+  const resizeGestureRef = useRef<Nullable<{ cancel: () => void }>>(null)
   const latest = useLatest({ layoutSizes, viewportSize, commandPanelOpen, rightToolOpen })
+
+  useLayoutEffect(
+    () => () => {
+      resizeGestureRef.current?.cancel()
+    },
+    []
+  )
 
   useEffect(() => {
     function handleResize(): void {
@@ -111,6 +120,7 @@ export function useWorkbenchLayoutController(
     (pane, event) => {
       if (event.button !== 0) return
       event.preventDefault()
+      resizeGestureRef.current?.cancel()
 
       const pointerId = event.pointerId
       const startX = event.clientX
@@ -123,9 +133,11 @@ export function useWorkbenchLayoutController(
       let pointerX = startX
       let pointerY = startY
       let frame = 0
+      const gesture = { cancel: (): void => finishResize(false) }
 
       const applyDraft = (): void => {
         frame = 0
+        if (resizeGestureRef.current !== gesture) return
         draftSizes = resizeWorkbenchLayoutSizes(startSizes, pane, {
           x: pointerX - startX,
           y: pointerY - startY,
@@ -142,24 +154,32 @@ export function useWorkbenchLayoutController(
       }
 
       const handlePointerMove = (moveEvent: PointerEvent): void => {
-        if (moveEvent.pointerId !== pointerId) return
+        if (moveEvent.pointerId !== pointerId || resizeGestureRef.current !== gesture) return
         pointerX = moveEvent.clientX
         pointerY = moveEvent.clientY
         if (!frame) frame = window.requestAnimationFrame(applyDraft)
       }
 
-      const stopResize = (): void => {
+      function finishResize(commit: boolean): void {
+        if (resizeGestureRef.current !== gesture) return
         window.removeEventListener('pointermove', handlePointerMove)
         window.removeEventListener('pointerup', stopResize)
         window.removeEventListener('pointercancel', stopResize)
         if (frame) window.cancelAnimationFrame(frame)
-        applyDraft()
+        frame = 0
+        if (commit) applyDraft()
+        resizeGestureRef.current = null
         document.body.style.cursor = previousCursor
         document.body.style.userSelect = previousUserSelect
         shell?.removeAttribute('data-pane-resizing')
-        setLayoutSizes(draftSizes)
+        if (commit) setLayoutSizes(draftSizes)
       }
 
+      const stopResize = (stopEvent: PointerEvent): void => {
+        if (stopEvent.pointerId === pointerId) finishResize(true)
+      }
+
+      resizeGestureRef.current = gesture
       document.body.style.cursor = pane === 'command' ? 'row-resize' : 'col-resize'
       document.body.style.userSelect = 'none'
       // 拖拽期间的样式开关：调试浏览器等 webview 不吃指针（否则拖过去就断），分隔条保持高亮。

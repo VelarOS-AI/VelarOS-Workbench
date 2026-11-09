@@ -10,23 +10,31 @@ export function useWorkbenchAgentBrowserSite(
   projectRoot: Nullable<string>,
   sessionId: string
 ): WorkbenchBrowserState['site'] {
-  const [site, setSite] = useState<WorkbenchBrowserState['site']>(null)
+  const [snapshot, setSnapshot] = useState<Nullable<WorkbenchBrowserState>>(null)
 
   useEffect(() => {
-    setSite(null)
+    setSnapshot(null)
     if (!projectRoot) return
     let disposed = false
     let receivedChange = false
     const unsubscribe = window.velarosWorkbenchBrowser.onChanged((state) => {
-      if (state.sessionId !== sessionId || !sameRoot(state.projectRoot, projectRoot)) return
+      if (disposed || state.sessionId !== sessionId || !sameRoot(state.projectRoot, projectRoot))
+        return
       receivedChange = true
-      setSite(state.site)
+      setSnapshot(state)
     })
     void window.velarosWorkbenchBrowser
       .getState({ projectRoot, sessionId })
       .then((result) => {
         // 首次快照在通知之后才回来时，不覆盖已经收到的新站点。
-        if (!disposed && !receivedChange && result.ok) setSite(result.value.site)
+        if (
+          !disposed &&
+          !receivedChange &&
+          result.ok &&
+          result.value.sessionId === sessionId &&
+          sameRoot(result.value.projectRoot, projectRoot)
+        )
+          setSnapshot(result.value)
       })
       .catch(() => undefined)
     return () => {
@@ -35,7 +43,11 @@ export function useWorkbenchAgentBrowserSite(
     }
   }, [projectRoot, sessionId])
 
-  return site
+  return projectRoot &&
+    snapshot?.sessionId === sessionId &&
+    sameRoot(snapshot.projectRoot, projectRoot)
+    ? snapshot.site
+    : null
 }
 
 function sameRoot(left: string, right: string): boolean {

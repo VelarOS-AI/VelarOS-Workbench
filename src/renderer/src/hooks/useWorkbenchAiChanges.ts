@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import type {
   WorkbenchChatRunChangesSummary,
@@ -193,6 +193,14 @@ export function useWorkbenchAiChanges({
   const onShowRef = useLatest(onShow)
   const openGenerationRef = useRef(0)
 
+  // 上下文更换或卸载只撤销展示许可，共享记录读取仍可完成并进入缓存。
+  useLayoutEffect(
+    () => () => {
+      openGenerationRef.current += 1
+    },
+    [projectRoot, currentSessionId]
+  )
+
   // 换项目：面板与标签都是这个项目的，一并清空。
   useEffect(() => {
     knownRoundsRef.current = null
@@ -295,6 +303,7 @@ export function useWorkbenchAiChanges({
       round: WorkbenchAiChangeRound,
       change: { path: string; status: WorkbenchChatRunFileChangeStatus }
     ): void => {
+      openGenerationRef.current += 1
       const id = tabId(round.sessionId, round.recordId, change.path)
       setTabGroup((current) => ({
         tabs: current.tabs.some((tab) => tab.id === id)
@@ -323,6 +332,7 @@ export function useWorkbenchAiChanges({
 
   const selectTab = useCallback(
     (id: string): void => {
+      openGenerationRef.current += 1
       setTabGroup((current) =>
         current.tabs.some((tab) => tab.id === id)
           ? { ...current, activeTabId: id, shown: true }
@@ -334,6 +344,7 @@ export function useWorkbenchAiChanges({
   )
 
   const closeTab = useCallback((id: string): void => {
+    openGenerationRef.current += 1
     setTabGroup((current) => withoutTabs(current, (tab) => tab.id === id))
   }, [])
 
@@ -353,12 +364,14 @@ export function useWorkbenchAiChanges({
     (): void => setSeenUntil(latestCapturedAtRef.current),
     [latestCapturedAtRef]
   )
-  const closeAllTabs = useCallback((): void => setTabGroup(EmptyTabGroup), [])
-  const deactivate = useCallback(
-    (): void =>
-      setTabGroup((current) => (current.shown ? { ...current, shown: false } : current)),
-    []
-  )
+  const closeAllTabs = useCallback((): void => {
+    openGenerationRef.current += 1
+    setTabGroup(EmptyTabGroup)
+  }, [])
+  const deactivate = useCallback((): void => {
+    openGenerationRef.current += 1
+    setTabGroup((current) => (current.shown ? { ...current, shown: false } : current))
+  }, [])
 
   const { tabs } = tabGroup
   const activeTab = tabs.find((tab) => tab.id === tabGroup.activeTabId) ?? null
