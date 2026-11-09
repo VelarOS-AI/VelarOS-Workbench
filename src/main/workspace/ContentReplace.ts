@@ -152,4 +152,4 @@ function changedSinceSearch(): AppError {
   return new AppError('CONFLICT', workbenchMainText('search.changedSinceSearch'))
 }
 
-export { ContentReplace, ContentReplace as WorkbenchContentReplaceService }
+export { ContentReplace }

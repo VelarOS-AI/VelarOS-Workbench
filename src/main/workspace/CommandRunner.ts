@@ -190,4 +190,4 @@ class CommandRunner {
   }
 }
 
-export { CommandRunner, CommandRunner as WorkbenchCommandService }
+export { CommandRunner }

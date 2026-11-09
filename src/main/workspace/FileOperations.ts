@@ -782,4 +782,4 @@ function mayContainHistory(stats: Stats): boolean {
   return stats.isDirectory() || stats.isSymbolicLink()
 }
 
-export { FileOperations, FileOperations as WorkbenchFileOperationService }
+export { FileOperations }

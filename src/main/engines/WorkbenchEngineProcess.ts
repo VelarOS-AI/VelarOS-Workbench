@@ -12,7 +12,7 @@ import type {
   WorkbenchAgentEngineStatus,
 } from '../../shared/workbenchConversation'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
-import { WorkbenchCommandHelper } from '../workspace/CommandHelper'
+import { CommandHelper } from '../workspace/CommandHelper'
 
 const log = Log.tag('WorkbenchEngineProcess')
 
@@ -109,7 +109,7 @@ export function spawnEngineProcess(
   return spawn(spec.file, spec.args, {
     cwd,
     env: engineEnvironment(command.env),
-    detached: new WorkbenchCommandHelper().shouldDetachForegroundProcess(),
+    detached: new CommandHelper().shouldDetachForegroundProcess(),
     windowsVerbatimArguments: spec.windowsVerbatimArguments,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
@@ -220,7 +220,7 @@ export async function withTimeout<T>(
 /** 停下引擎进程连同它起的命令：先礼后兵，给它一秒收尾。 */
 export function terminateEngineProcess(child: ChildProcessWithoutNullStreams): void {
   if (child.exitCode !== null || child.signalCode !== null) return
-  const helper = new WorkbenchCommandHelper()
+  const helper = new CommandHelper()
   helper.terminateForegroundProcess(child.pid, 'SIGTERM')
   const timer = setTimeout(() => {
     if (child.exitCode === null && child.signalCode === null)

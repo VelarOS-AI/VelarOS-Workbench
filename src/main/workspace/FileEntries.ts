@@ -134,4 +134,4 @@ class DirectoryEntries {
   }
 }
 
-export { DirectoryEntries, DirectoryEntries as WorkbenchDirectoryEntryHelper }
+export { DirectoryEntries }

@@ -37,28 +37,6 @@ export interface SystemGitConfig {
   privateKeyPath: string
 }
 
-export interface WorkspaceRootEntry {
-  path: string
-  active: boolean
-  exists: boolean
-  removable: boolean
-  source: string
-}
-
-export interface SystemIntegrationDescriptor {
-  id: string
-  label: string
-  description: string
-  capabilities: string[]
-}
-
-export interface SystemOverview {
-  providers: SystemIntegrationDescriptor[]
-  workspaceRoots: WorkspaceRootEntry[]
-  activeWorkspaceRoot: Nullable<string>
-  browserSiteContext: Nullable<Record<string, unknown>>
-}
-
 export interface SystemWorkspaceFilesChangedEvent {
   kind: 'velaros.systemWorkspaceFilesChanged'
   source?: 'filesystem-watch' | 'file-change-transaction'
@@ -66,12 +44,6 @@ export interface SystemWorkspaceFilesChangedEvent {
   paths: string[]
   sessionIds: string[]
   changedAt: number
-}
-
-export type SystemWorkspaceRootScope = 'project'
-
-export interface SystemWorkspaceRootAddOptions {
-  activate?: boolean
 }
 
 export interface SystemWorkspaceGitSummary {
@@ -208,15 +180,6 @@ export interface SystemWorkspaceGitActionResult {
   summary: SystemWorkspaceGitSummary
 }
 
-export interface SystemLocalAttachmentFileRequest {
-  sessionId: string
-  path: string
-  name?: string
-  mediaType?: string
-  expectedSize?: number
-  expectedLastModified?: number
-}
-
 export interface SystemLocalAttachmentFileResult {
   path: string
   name: string
@@ -261,20 +224,6 @@ export interface SystemFileChangePreviewResult {
   revertAvailable?: boolean
   beforeContent: string
   afterContent: string
-}
-
-export interface SystemRollbackFileChangeResult {
-  changeId: string
-  path: string
-  rolledBack: boolean
-  alreadyRolledBack: boolean
-}
-
-export interface SystemRestoreFileChangeResult {
-  changeId: string
-  path: string
-  rolledBack: boolean
-  alreadyRestored: boolean
 }
 
 export type {

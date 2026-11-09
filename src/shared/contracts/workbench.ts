@@ -1140,20 +1140,6 @@ export interface WorkbenchTerminalOutputEvent {
   signal?: LooseOptional<string>
 }
 
-/** Renderer → main：同步 Workbench 当前焦点文件与选区，供 Agent prompt 轻量提示。 */
-export interface WorkbenchReportAgentWorkspaceSignalsRequest {
-  projectRoot: string
-  /** 当前侧栏选中的 chat session；非 chat（如 dev console）可为 null，避免串会话。 */
-  chatSessionId?: LooseOptional<string>
-  focusedRelativePath?: LooseOptional<string>
-  selection?: {
-    startLine: number
-    endLine: number
-    startColumn?: number
-    endColumn?: number
-  }
-}
-
 /** Renderer → main：请求编辑器 Tab 内联补全（Cursor 式 ghost text）。 */
 export interface WorkbenchInlineCompletionRequest {
   projectRoot: string

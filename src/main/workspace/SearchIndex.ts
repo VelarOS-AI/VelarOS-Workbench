@@ -472,5 +472,5 @@ function compareCodeUnits(left: string, right: string): number {
   return 0
 }
 
-export { SearchIndex, SearchIndex as WorkbenchSearchIndexService }
+export { SearchIndex }
 export type { WorkbenchContentSearchRunOptions }

@@ -208,4 +208,4 @@ class CommandHelper {
   }
 }
 
-export { CommandHelper, CommandHelper as WorkbenchCommandHelper }
+export { CommandHelper }
