@@ -31,18 +31,12 @@ import {
   type WorkbenchLanguageServiceRenameRequest,
   type WorkbenchLanguageServiceRenameResult,
   type WorkbenchLanguageServiceRequest,
-  type WorkbenchLanguageServiceResolveResult,
   type WorkbenchLanguageServiceSemanticTokensResult,
   type WorkbenchLanguageServiceSignatureHelpQueryResult,
 } from '@shared/contracts/workbench'
 
 export interface WorkbenchLanguageServiceProjectRequest {
   projectRoot: string
-}
-
-export interface WorkbenchLanguageServiceProjectFileRequest extends WorkbenchLanguageServiceProjectRequest {
-  path: string
-  content: Nullable<string>
 }
 
 export interface WorkbenchLanguageServiceProjectFilesChangedRequest extends WorkbenchLanguageServiceProjectRequest {
@@ -52,10 +46,6 @@ export interface WorkbenchLanguageServiceProjectFilesChangedRequest extends Work
 export interface WorkbenchLanguageServiceWorkerOperationMap {
   shutdown: {
     request: Record<string, never>
-    result: void
-  }
-  synchronizeProjectFile: {
-    request: WorkbenchLanguageServiceProjectFileRequest
     result: void
   }
   invalidateProject: {
@@ -69,10 +59,6 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   requestExtension: {
     request: WorkbenchLanguageServiceExtensionRequest
     result: WorkbenchLanguageServiceExtensionResult
-  }
-  resolveLanguageService: {
-    request: WorkbenchLanguageServiceRequest
-    result: WorkbenchLanguageServiceResolveResult
   }
   getDefinition: {
     request: WorkbenchLanguageServicePositionRequest

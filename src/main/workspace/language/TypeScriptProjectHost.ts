@@ -848,7 +848,7 @@ function isTypeScriptProjectMetadataPath(projectRoot: string, absolutePath: stri
 /**
  * 一个磁盘文件的最新内容（null = 已不存在）写进项目缓存与已建的服务。
  * `keepOverlay`：正被编辑器覆盖（有未保存改动）的文件只更新磁盘版本，编辑缓冲仍是权威；
- * 否则这份内容就是权威（显式同步），覆盖层一并撤掉。
+ * 旧位置退出项目时则撤下覆盖层。
  * 版本号只增不减：文件删了再建也不能回到旧版本号，否则 TypeScript 会当成没变过而沿用旧文本。
  */
 function applyDiskFileToProjects(
@@ -892,21 +892,6 @@ function applyDiskFileToProjects(
       project.fileVersions.set(absolutePath, (project.fileVersions.get(absolutePath) ?? 0) + 1)
     } else setPooledFile(project, absolutePath, content)
   }
-}
-
-export function synchronizeTypeScriptProjectFile(
-  projectRoot: string,
-  absolutePath: string,
-  content: Nullable<string>
-): void {
-  if (!isPathInside(projectRoot, absolutePath)) return
-  if (isTypeScriptProjectMetadataPath(projectRoot, absolutePath)) {
-    clearTypeScriptProjectCache(projectRoot)
-    return
-  }
-  if (!TypeScriptExtensions.has(extensionWithDot(absolutePath))) return
-
-  applyDiskFileToProjects(projectRoot, absolutePath, content, false)
 }
 
 /**

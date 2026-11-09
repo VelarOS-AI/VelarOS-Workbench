@@ -89,10 +89,7 @@ import {
   hoverBlockPlainText,
   parseLanguageServiceHoverMarkdown,
 } from './LanguageServiceHoverMarkdown'
-import type {
-  WorkbenchLanguageServiceProjectFileRequest,
-  WorkbenchLanguageServiceProjectRequest,
-} from './LanguageServiceWorkerProtocol'
+import type { WorkbenchLanguageServiceProjectRequest } from './LanguageServiceWorkerProtocol'
 import {
   withWorkbenchMarkdownLanguageService,
   type WorkbenchMarkdownLanguageServiceContext,
@@ -138,7 +135,6 @@ import {
   refreshTypeScriptProjectFilesFromDisk,
   resolveTypeScriptProjectKey,
   safeReadFile,
-  synchronizeTypeScriptProjectFile,
   trimTypeScriptProjects,
   TypeScriptExtensions,
   type WorkbenchTypeScriptTrimLevel,
@@ -473,18 +469,6 @@ class WorkbenchLanguageServices {
   private readonly externalLsp = new ExternalLspManager()
 
   constructor(private readonly pathResolver: WorkbenchLanguagePathResolver) {}
-
-  public async synchronizeProjectFile(
-    request: WorkbenchLanguageServiceProjectFileRequest
-  ): Promise<void> {
-    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
-    synchronizeTypeScriptProjectFile(projectRoot, absolutePath, request.content)
-    clearWorkbenchProjectEslintResults(projectRoot)
-    if (isPresent(request.content))
-      await this.externalLsp.save(projectRoot, absolutePath, request.content)
-    await this.invalidateProjectToolConfiguration(projectRoot, [absolutePath])
-  }
 
   public async invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
@@ -1915,17 +1899,22 @@ class WorkbenchLanguageServices {
     const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
     const runtimeRoot = resolveExternalLspRuntimeRoot(projectRoot, absolutePath, descriptor)
     const client = await this.externalLsp.client(projectRoot, descriptor, absolutePath)
+    const documents = new Map<string, string>()
     for (const openFile of request.openFiles ?? []) {
       const absoluteOpenPath = this.resolveAbsoluteProjectPath(projectRoot, openFile.path)
       if (!client.accepts(absoluteOpenPath)) continue
       if (resolveExternalLspRuntimeRoot(projectRoot, absoluteOpenPath, descriptor) !== runtimeRoot)
         continue
-      await client.synchronize(absoluteOpenPath, openFile.content)
+      documents.set(absoluteOpenPath, openFile.content)
     }
+    if (request.content !== undefined) documents.set(absolutePath, request.content)
+    // 空列表是最新的 dirty 集合；省略列表则复用已有缓冲（滚动 inlay / 无正文扩展查询）。
+    if (request.openFiles !== undefined) client.retainDocuments(documents.keys())
+    for (const [path, content] of documents) await client.synchronize(path, content)
     return {
       client,
       absolutePath,
-      content: request.content ?? safeReadFile(absolutePath) ?? '',
+      content: documents.get(absolutePath) ?? safeReadFile(absolutePath) ?? '',
     }
   }
 

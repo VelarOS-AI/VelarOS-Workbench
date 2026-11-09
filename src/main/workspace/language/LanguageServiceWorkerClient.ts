@@ -34,7 +34,6 @@ import {
   createWorkbenchLanguageServiceCancellationBuffer,
   getWorkbenchLanguageServiceWorkerPriority,
   markWorkbenchLanguageServiceRequestCancelled,
-  type WorkbenchLanguageServiceProjectFileRequest,
   type WorkbenchLanguageServiceProjectFilesChangedRequest,
   type WorkbenchLanguageServiceProjectRequest,
   type WorkbenchLanguageServiceWorkerLocale,
@@ -229,13 +228,6 @@ export class WorkbenchLanguageServiceWorkerClient {
     )
   }
 
-  public synchronizeProjectFile(
-    request: WorkbenchLanguageServiceProjectFileRequest
-  ): Promise<void> {
-    if (!this.worker) return Promise.resolve()
-    return this.call('synchronizeProjectFile', request)
-  }
-
   public invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     if (!this.worker) return Promise.resolve()
     return this.call('invalidateProject', request)
@@ -250,10 +242,6 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public requestExtension(request: WorkbenchLanguageServiceExtensionRequest) {
     return this.call('requestExtension', request)
-  }
-
-  public resolveLanguageService(request: WorkbenchLanguageServiceRequest) {
-    return this.call('resolveLanguageService', request)
   }
 
   public getDefinition(request: WorkbenchLanguageServicePositionRequest) {
@@ -421,11 +409,7 @@ export class WorkbenchLanguageServiceWorkerClient {
   ): Promise<WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']> {
     if (operation !== 'getDiagnostics') {
       // 项目文件变了：还在飞的诊断是照旧文件算的，之后同样的请求不能再搭它的便车。
-      if (
-        operation === 'projectFilesChanged' ||
-        operation === 'synchronizeProjectFile' ||
-        operation === 'invalidateProject'
-      )
+      if (operation === 'projectFilesChanged' || operation === 'invalidateProject')
         this.inFlightDiagnostics.splice(0)
       return this.send(operation, request, supersedeKey)
     }
@@ -485,7 +469,11 @@ export class WorkbenchLanguageServiceWorkerClient {
         this.scheduleRestart()
         return
       }
-      this.post(pending, this.ensureWorker())
+      try {
+        this.post(pending, this.ensureWorker())
+      } catch (error) {
+        this.settle(pending, AppError.from(error, 'IPC'))
+      }
     })
   }
 
@@ -714,7 +702,14 @@ export class WorkbenchLanguageServiceWorkerClient {
         }
         const waiting = [...this.pending.values()].filter((pending) => !pending.worker)
         if (waiting.length === 0) return
-        const worker = this.ensureWorker()
+        let worker: LanguageServiceWorkerInstance
+        try {
+          worker = this.ensureWorker()
+        } catch (error) {
+          const failure = AppError.from(error, 'IPC')
+          for (const pending of waiting) this.settle(pending, failure)
+          return
+        }
         for (const pending of waiting) this.post(pending, worker)
       },
       Math.max(0, this.restartNotBefore - Date.now())

@@ -1522,7 +1522,83 @@ void describe('focused Workbench language surface', () => {
 })
 
 void describe('shared external LSP client', () => {
-  void test('isolates nested runtime roots and their save/change lifecycle inside one workspace', async () => {
+  void test('retracts a discarded dirty buffer from the server while omitted snapshots keep it', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-lsp-discard-')))
+    const discardedPath = join(projectRoot, 'discarded.overlay')
+    const discardedUri = pathToFileURL(discardedPath).toString()
+    const remove = registerWorkbenchLanguageService({
+      id: 'discarded-overlay-fixture',
+      label: 'Discarded Overlay Fixture',
+      installKind: 'builtin',
+      runtime: 'lsp-server',
+      extensions: ['overlay'],
+      languages: ['discarded-overlay-fixture'],
+      command: process.execPath,
+      args: [fixture, 'documents'],
+    })
+    const services = new WorkbenchLanguageServices(languagePathResolver)
+    const probe = async (request: Parameters<WorkbenchLanguageServices['getCompletions']>[0]) => {
+      const result = await services.getCompletions(request)
+      const detail = result.items[0]?.detail
+      assert.ok(detail)
+      return JSON.parse(detail) as {
+        pid: number
+        closedUris: string[]
+        documents: Record<string, string>
+      }
+    }
+    const activeRequest = {
+      projectRoot,
+      path: 'active.overlay',
+      content: 'active buffer',
+      position: { line: 1, column: 1 },
+    }
+    try {
+      await writeFile(discardedPath, 'saved on disk', 'utf8')
+      const dirty = await probe({
+        ...activeRequest,
+        openFiles: [{ path: 'discarded.overlay', content: 'discarded edit' }],
+      })
+      assert.equal(dirty.documents[discardedUri], 'discarded edit')
+
+      // 滚动 inlay 省略快照：仍保留上次已同步的兄弟文件。
+      const reused = await probe(activeRequest)
+      assert.equal(reused.documents[discardedUri], 'discarded edit')
+      assert.deepEqual(reused.closedUris, [])
+
+      // 关闭并丢弃后，空 dirty 快照须让同一个服务器撤销旧文档。
+      const discarded = await probe({ ...activeRequest, openFiles: [] })
+      assert.equal(discarded.pid, dirty.pid)
+      assert.equal(discarded.documents[discardedUri], undefined)
+      assert.deepEqual(discarded.closedUris, [discardedUri])
+
+      const reopened = await probe({
+        projectRoot,
+        path: 'discarded.overlay',
+        position: { line: 1, column: 1 },
+        openFiles: [],
+      })
+      assert.equal(reopened.pid, dirty.pid)
+      assert.equal(reopened.documents[discardedUri], 'saved on disk')
+      const diagnostics = await services.getDiagnostics({
+        projectRoot,
+        path: 'discarded.overlay',
+        content: 'saved on disk',
+        openFiles: [],
+      })
+      assert.deepEqual(
+        diagnostics.diagnostics.map((diagnostic) => diagnostic.message),
+        ['fake diagnostic']
+      )
+    } finally {
+      await services.dispose()
+      remove()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('isolates nested runtime roots and their file changes inside one workspace', async () => {
     const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
     const fixtureRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-nested-lsp-')))
     const workspaceRoot = join(fixtureRoot, 'workspace')
@@ -1557,7 +1633,6 @@ void describe('shared external LSP client', () => {
       rootUri: string
       workspaceFolders: Array<{ uri: string; name: string }>
       pid: number
-      savedUris: string[]
       watchedUris: string[]
     }> => {
       const detail = (await client.completion(path, 'comp', { line: 0, character: 4 })).items[0]
@@ -1568,7 +1643,6 @@ void describe('shared external LSP client', () => {
         rootUri: string
         workspaceFolders: Array<{ uri: string; name: string }>
         pid: number
-        savedUris: string[]
         watchedUris: string[]
       }
     }
@@ -1661,12 +1735,9 @@ void describe('shared external LSP client', () => {
       assert.equal(await realpath(secondInitial.cwd), await realpath(secondRoot))
       assert.equal(secondInitial.rootUri, pathToFileURL(await realpath(secondRoot)).toString())
 
-      await manager.save(workspaceRoot, firstPath, 'component First:\n')
       await manager.filesChanged(workspaceRoot, [firstPath, secondPath])
       const firstAfterChanges = await probe(first, firstPath)
       const secondAfterChanges = await probe(second, secondPath)
-      assert.deepEqual(firstAfterChanges.savedUris, [pathToFileURL(firstPath).toString()])
-      assert.deepEqual(secondAfterChanges.savedUris, [])
       assert.deepEqual(firstAfterChanges.watchedUris, [pathToFileURL(firstPath).toString()])
       assert.deepEqual(secondAfterChanges.watchedUris, [pathToFileURL(secondPath).toString()])
 

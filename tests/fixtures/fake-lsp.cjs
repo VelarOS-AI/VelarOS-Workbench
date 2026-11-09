@@ -2,9 +2,10 @@ let buffer = Buffer.alloc(0)
 let initialized = false
 let initializeRootUri = null
 let initializeWorkspaceFolders = []
-const savedUris = []
 const closedUris = []
 const watchedUris = []
+const documents = new Map()
+let closedDocument = null
 const mode = process.argv[2]
 
 function send(message) {
@@ -56,6 +57,15 @@ function handle(message) {
     case 'textDocument/didOpen':
     case 'textDocument/didChange': {
       const document = message.params.textDocument
+      documents.set(
+        document.uri,
+        {
+          version: document.version,
+          text: message.method === 'textDocument/didOpen'
+            ? document.text
+            : message.params.contentChanges[0].text,
+        }
+      )
       send({
         jsonrpc: '2.0',
         method: 'textDocument/publishDiagnostics',
@@ -71,13 +81,35 @@ function handle(message) {
           }],
         },
       })
+      if (mode === 'documents' && closedDocument?.uri === document.uri) {
+        // 同一 URI 再打开之后，旧缓冲的晚到诊断不能冒充新文档的诊断。
+        send({
+          jsonrpc: '2.0',
+          method: 'textDocument/publishDiagnostics',
+          params: {
+            uri: document.uri,
+            version: closedDocument.version,
+            diagnostics: [{
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+              severity: 1,
+              source: 'fake-velar',
+              message: 'discarded diagnostic',
+            }],
+          },
+        })
+        closedDocument = null
+      }
       break
     }
-    case 'textDocument/didSave':
-      savedUris.push(message.params.textDocument.uri)
-      break
     case 'textDocument/didClose':
       closedUris.push(message.params.textDocument.uri)
+      if (mode === 'documents' && !closedDocument) {
+        closedDocument = {
+          uri: message.params.textDocument.uri,
+          ...documents.get(message.params.textDocument.uri),
+        }
+      }
+      documents.delete(message.params.textDocument.uri)
       break
     case 'workspace/didChangeWatchedFiles':
       watchedUris.push(...message.params.changes.map((change) => change.uri))
@@ -96,16 +128,18 @@ function handle(message) {
             : [{
                 label: 'component',
                 kind: 14,
-                ...(mode === 'runtime-root'
+                ...(mode === 'runtime-root' || mode === 'documents'
                   ? {
                       detail: JSON.stringify({
                         cwd: process.cwd(),
                         rootUri: initializeRootUri,
                         workspaceFolders: initializeWorkspaceFolders,
                         pid: process.pid,
-                        savedUris,
                         closedUris,
                         watchedUris,
+                        documents: Object.fromEntries(
+                          [...documents].map(([uri, document]) => [uri, document.text])
+                        ),
                       }),
                     }
                   : {}),

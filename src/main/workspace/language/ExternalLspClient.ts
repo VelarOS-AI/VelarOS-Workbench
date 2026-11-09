@@ -2,7 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { URI } from 'vscode-uri'
 
@@ -618,6 +618,8 @@ export class ExternalLspClient {
   private outboundLength = 0
   private outboundPaused = false
   private nextRequestId = 1
+  /** 同 URI 关闭再打开仍比旧诊断新；不为已关闭文档保留正文或版本历史表。 */
+  private nextDocumentVersion = 1
   private readonly pending = new Map<number, PendingRequest>()
   private readonly documents = new Map<string, OpenDocument>()
   private readonly diagnostics = new Map<string, DiagnosticSnapshot>()
@@ -652,7 +654,11 @@ export class ExternalLspClient {
     const uri = pathToFileURL(path).toString()
     const current = this.documents.get(uri)
     if (!current) {
-      const document = { content, languageId: languageIdFor(this.descriptor), version: 1 }
+      const document = {
+        content,
+        languageId: languageIdFor(this.descriptor),
+        version: this.nextDocumentVersion++,
+      }
       this.documents.set(uri, document)
       this.notify('textDocument/didOpen', {
         textDocument: {
@@ -666,7 +672,7 @@ export class ExternalLspClient {
     }
 
     if (current.content === content) return { uri, version: current.version }
-    const next = { ...current, content, version: current.version + 1 }
+    const next = { ...current, content, version: this.nextDocumentVersion++ }
     this.documents.set(uri, next)
     this.notify('textDocument/didChange', {
       textDocument: { uri, version: next.version },
@@ -675,9 +681,12 @@ export class ExternalLspClient {
     return { uri, version: next.version }
   }
 
-  public async save(path: string, content: string): Promise<void> {
-    const document = await this.synchronize(path, content)
-    this.notify('textDocument/didSave', { textDocument: { uri: document.uri }, text: content })
+  /** 一份完整 dirty 快照撤销已经丢弃的缓冲，让服务器回到磁盘内容。 */
+  public retainDocuments(paths: Iterable<string>): void {
+    // 与 synchronize 使用同一个 URI producer；未落盘文件不能靠 realpath 重建身份。
+    const retained = new Set([...paths].map((path) => pathToFileURL(path).toString()))
+    for (const uri of this.documents.keys())
+      if (!retained.has(uri)) this.close(fileURLToPath(uri))
   }
 
   public close(path: string): void {
@@ -1518,6 +1527,7 @@ export class ExternalLspClient {
         }) ?? receivedUri)
     const openVersion = this.documents.get(uri)?.version ?? 0
     const version = typeof params?.['version'] === 'number' ? params['version'] : openVersion
+    if (version < openVersion) return
     const diagnostics = Array.isArray(params?.['diagnostics'])
       ? (params['diagnostics'] as ExternalLspDiagnostic[])
       : []
@@ -1676,14 +1686,6 @@ export class ExternalLspManager {
     } finally {
       if (this.refreshes.get(key)?.promise === refresh) this.refreshes.delete(key)
     }
-  }
-
-  public async save(workspaceRoot: string, path: string, content: string): Promise<void> {
-    await this.reconcileOwnership(canonicalPath(workspaceRoot))
-    const clients = this.closestClientsForPath(workspaceRoot, path)
-      .filter(({ client }) => client.accepts(path))
-      .map(({ client }) => client)
-    await Promise.all(clients.map((client) => client.save(path, content)))
   }
 
   public async filesChanged(workspaceRoot: string, paths: readonly string[]): Promise<void> {

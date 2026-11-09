@@ -45,16 +45,12 @@ async function dispatch(
   switch (request.operation) {
     case 'shutdown':
       return languageServices.dispose()
-    case 'synchronizeProjectFile':
-      return languageServices.synchronizeProjectFile(request.request)
     case 'invalidateProject':
       return languageServices.invalidateProject(request.request)
     case 'projectFilesChanged':
       return languageServices.projectFilesChanged(request.request)
     case 'requestExtension':
       return languageServices.requestExtension(request.request)
-    case 'resolveLanguageService':
-      return languageServices.resolveLanguageService(request.request)
     case 'getDefinition':
       return languageServices.getDefinition(request.request)
     case 'getCompletions':

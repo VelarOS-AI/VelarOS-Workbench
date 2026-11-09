@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import { Worker } from 'node:worker_threads'
 
 import { describe, test } from 'bun:test'
 
@@ -94,6 +95,54 @@ function sleep(ms: number): Promise<void> {
 }
 
 void describe('language worker client', () => {
+  void test('real worker initialization failures settle without replaying requests', async () => {
+    const workers: FakeLanguageServiceWorker[] = []
+    let attempts = 0
+    const client = new WorkbenchLanguageServiceWorkerClient(
+      (options) => {
+        attempts++
+        // Node 与 Bun 都在创建线程前按公开 filename 合同同步拒绝这种路径。
+        if (attempts === 1 || attempts === 4) return new Worker('bare-worker-path')
+        const worker = new FakeLanguageServiceWorker('alive-but-slow', options)
+        workers.push(worker)
+        return worker
+      },
+      () => 5_000,
+      { restartBackoffMs: 40, restartBackoffMaxMs: 40, restartBackoffResetMs: 60_000 }
+    )
+    const invalidPath = /filename.*absolute path/iu
+    try {
+      await assert.rejects(client.getDefinition({ ...request, path: 'failed.ts' }), invalidPath)
+      const firstRequest = { ...request, path: 'first.ts' }
+      const first = client.getDefinition(firstRequest)
+      assert.deepEqual(workers[0]!.requests.map((message) => message.request), [firstRequest])
+      workers[0]!.reply(workers[0]!.requests[0]!)
+      await first
+      workers[0]!.crash()
+      await sleep(0)
+      assert.equal(attempts, 2, 'the failed cold request must not trigger a restart or replay')
+
+      const second = client.getDefinition({ ...request, path: 'second.ts' })
+      workers[1]!.crash()
+      await assert.rejects(second, /worker crashed/u)
+      const waiting = client.getDefinition({ ...request, path: 'waiting.ts' })
+      assert.equal(attempts, 3, 'the request must wait through the existing restart backoff')
+      await assert.rejects(waiting, invalidPath)
+      assert.equal(attempts, 4)
+
+      const recoveredRequest = { ...request, path: 'recovered.ts' }
+      const recovered = client.getDefinition(recoveredRequest)
+      assert.deepEqual(workers[2]!.requests.map((message) => message.request), [recoveredRequest])
+      workers[2]!.reply(workers[2]!.requests[0]!)
+      await recovered
+      await client.dispose()
+      assert.equal(workers[2]!.requests.at(-1)?.operation, 'shutdown')
+      assert.equal(workers[2]!.terminated, true)
+    } finally {
+      await client.dispose()
+    }
+  })
+
   void test('language worker timeouts keep interactive requests bounded', () => {
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDefinition'), 12_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDiagnostics'), 90_000)
