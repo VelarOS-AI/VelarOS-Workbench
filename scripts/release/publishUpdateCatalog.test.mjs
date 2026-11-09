@@ -12,6 +12,7 @@ import {
   completionManifest,
   publishReleaseTransaction,
   readCompletedRelease,
+  readVerifiedStagedArtifacts,
   releaseManifestNames,
   releaseSigningConfig,
   sortCanonicalValue,
@@ -478,6 +479,82 @@ test("Workbench resumes a verified catalog uploaded before its completion receip
   assert.equal(fixture.assets.has(fixture.names.completion), true);
 });
 
+test("Workbench recovers every verified platform after catalog replacement fails across runs", async (t) => {
+  const fixture = await releaseFixture(t, ["windows"]);
+  const staged = await readVerifiedStagedArtifacts({
+    releaseDirectory: fixture.input.releaseDirectory,
+    version: fixture.input.identity.version,
+    sourceCommit: fixture.input.identity.sourceCommit,
+  });
+  const { prior, catalog } = addPartialCurrentCatalog(fixture);
+  fixture.addRemoteAsset(
+    fixture.names.completion,
+    Buffer.from(JSON.stringify(completionManifest(catalog.artifacts, fixture.input.identity))),
+  );
+  const readAsset = fixture.client.readAsset;
+  let priorReads = 0;
+  fixture.client.readAsset = (release, name) => {
+    if (name === prior.fileName) priorReads += 1;
+    return readAsset(release, name);
+  };
+  const readRemoteState = () => readCompletedRelease({
+    client: fixture.client,
+    release: structuredClone(fixture.input.release),
+    identity: fixture.input.identity,
+    signing: fixture.input.signing,
+  });
+  const completed = await readRemoteState();
+  assert.equal(completed.partial, false);
+
+  const deleteAsset = fixture.client.delete;
+  let sawPendingUnion = false;
+  fixture.client.delete = async (release, name) => {
+    if (name === fixture.names.completion && !sawPendingUnion) {
+      sawPendingUnion = true;
+      // The durable union already exists while the old canonical pair still agrees.
+      const beforeRead = priorReads;
+      const pending = await readRemoteState();
+      assert.equal(priorReads - beforeRead, 1);
+      assert.equal(pending.partial, true);
+      assert.deepEqual(pending.catalog.artifacts, catalog.artifacts);
+      assert.deepEqual(
+        [...new Set(pending.artifacts.map(({ platform }) => platform))].sort(),
+        ["darwin", "win32"],
+      );
+    }
+    return deleteAsset(release, name);
+  };
+  fixture.client.failUpload = fixture.names.catalog;
+  await assert.rejects(publishReleaseTransaction({
+    ...fixture.input,
+    staged,
+    existingArtifacts: completed.artifacts,
+  }), /catalog upload failed/u);
+  assert.equal(sawPendingUnion, true);
+  assert.equal(fixture.assets.has(fixture.names.catalog), false);
+  assert.equal(fixture.assets.has(fixture.names.completion), false);
+
+  // A new run reads only remote assets: discard both the prior union and local metadata files.
+  await rm(path.join(fixture.input.releaseDirectory, fixture.names.catalog));
+  const recovered = await readRemoteState();
+  assert.equal(recovered.catalog, null);
+  assert.equal(recovered.completion, null);
+  assert.equal(recovered.partial, true);
+  assert.deepEqual(recovered.artifacts.find(({ fileName }) => fileName === prior.fileName), prior);
+  fixture.client.failUpload = null;
+  const result = await publishReleaseTransaction({
+    ...fixture.input,
+    staged,
+    existingArtifacts: recovered.artifacts,
+  });
+  assert.deepEqual(result.completion.platforms, ["darwin-arm64", "win32-x64"]);
+  assert.equal(
+    result.catalog.artifacts.find(({ fileName }) => fileName === prior.fileName).assetId,
+    prior.assetId,
+  );
+  assert.equal((await readRemoteState()).partial, false);
+});
+
 test("Workbench rejects an unknown, modified, or byte-mismatched partial catalog", async (t) => {
   const fixture = await releaseFixture(t, ["windows"]);
   const { prior, priorBody, catalog, catalogBytes } = addPartialCurrentCatalog(fixture);
@@ -577,6 +654,7 @@ async function releaseFixture(t, selectedPlatforms = ["windows"]) {
   const assets = new Map();
   const uploads = [];
   const deletions = [];
+  let nextAssetId = 1;
   const release = { id: 7, tag_name: `workbench-v${version}`, assets: [] };
   const client = {
     failUpload: null,
@@ -591,7 +669,7 @@ async function releaseFixture(t, selectedPlatforms = ["windows"]) {
         assert.equal(existing.bytes.equals(bytes), true);
         return String(existing.asset.id);
       }
-      const asset = { id: release.assets.length + 1, name };
+      const asset = { id: nextAssetId++, name };
       const entry = { asset, bytes: Buffer.from(bytes) };
       release.assets.push(asset);
       assets.set(name, entry);
@@ -622,8 +700,10 @@ async function releaseFixture(t, selectedPlatforms = ["windows"]) {
     deletions,
     names,
     client,
-    addRemoteAsset(name, bytes, id = String(release.assets.length + 1)) {
-      const asset = { id, name };
+    addRemoteAsset(name, bytes, id) {
+      const assetId = id ?? nextAssetId++;
+      nextAssetId = Math.max(nextAssetId, Number(assetId) + 1);
+      const asset = { id: assetId, name };
       release.assets.push(asset);
       assets.set(name, { asset, bytes: Buffer.from(bytes) });
     },

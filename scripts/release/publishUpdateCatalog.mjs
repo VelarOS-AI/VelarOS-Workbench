@@ -296,6 +296,28 @@ function releaseManifestNames(version, channel) {
   };
 }
 
+function transactionCatalogPrefix(identity) {
+  return `transaction-workbench-v${identity.version}-${identity.channel}-`;
+}
+
+function mergeCatalogArtifacts(records) {
+  const artifacts = new Map();
+  for (const artifact of records) {
+    const previous = artifacts.get(artifact.fileName);
+    if (
+      previous &&
+      JSON.stringify(sortCanonicalValue(previous)) !==
+        JSON.stringify(sortCanonicalValue(artifact))
+    ) {
+      throw new Error(`Workbench platform addition changed ${artifact.fileName}`);
+    }
+    artifacts.set(artifact.fileName, artifact);
+  }
+  return [...artifacts.values()].sort((left, right) =>
+    left.fileName.localeCompare(right.fileName),
+  );
+}
+
 function releaseNotesForIdentity(identity) {
   if (!identity.releaseNote) {
     throw new Error(`Workbench v${identity.version} is missing release notes`);
@@ -444,22 +466,46 @@ async function readCompletedRelease({
   const names = releaseManifestNames(identity.version, identity.channel);
   const completionAsset = await client.readAsset(release, names.completion);
   const catalogAsset = await client.readAsset(release, names.catalog);
-  if (!catalogAsset) return null;
-  const catalog = JSON.parse(catalogAsset.bytes.toString("utf8"));
-  if (!completionAsset) {
-    const hasReleaseNotes = assertCatalogMatchesIdentity(catalog, identity, signing);
-    await verifyRemoteArtifacts(client, release, catalog.artifacts);
-    return { catalog, completion: null, hasReleaseNotes, partial: true };
+  const catalog = catalogAsset
+    ? JSON.parse(catalogAsset.bytes.toString("utf8"))
+    : null;
+  const completion = catalog && completionAsset
+    ? JSON.parse(completionAsset.bytes.toString("utf8"))
+    : null;
+  const hasReleaseNotes = catalog
+    ? completion
+      ? assertCatalogMatchesCompletion(catalog, completion, identity, signing)
+      : assertCatalogMatchesIdentity(catalog, identity, signing)
+    : false;
+  const catalogs = catalog ? [catalog] : [];
+  const prefix = transactionCatalogPrefix(identity);
+  for (const { name } of release.assets) {
+    if (!name.startsWith(prefix)) continue;
+    const digest = name.slice(prefix.length, -".json".length);
+    if (!name.endsWith(".json") || !/^[a-f0-9]{64}$/u.test(digest)) {
+      throw new Error(`Invalid Workbench transaction catalog name: ${name}`);
+    }
+    const transaction = await client.readAsset(release, name);
+    if (
+      !transaction ||
+      createHash("sha256").update(transaction.bytes).digest("hex") !== digest
+    ) {
+      throw new Error(`Workbench transaction catalog bytes changed: ${name}`);
+    }
+    const savedCatalog = JSON.parse(transaction.bytes.toString("utf8"));
+    if (savedCatalog?.schemaVersion !== 2) {
+      throw new Error(`Invalid Workbench transaction catalog schema: ${name}`);
+    }
+    assertCatalogMatchesIdentity(savedCatalog, identity, signing);
+    catalogs.push(savedCatalog);
   }
-  const completion = JSON.parse(completionAsset.bytes.toString("utf8"));
-  const hasReleaseNotes = assertCatalogMatchesCompletion(
-    catalog,
-    completion,
-    identity,
-    signing,
-  );
-  await verifyRemoteArtifacts(client, release, catalog.artifacts);
-  return { catalog, completion, hasReleaseNotes, partial: false };
+  if (catalogs.length === 0) return null;
+  const artifacts = mergeCatalogArtifacts(catalogs.flatMap((entry) => entry.artifacts));
+  await verifyRemoteArtifacts(client, release, artifacts);
+  const partial = !catalog || !completion ||
+    JSON.stringify(sortCanonicalValue(mergeCatalogArtifacts(catalog.artifacts))) !==
+      JSON.stringify(sortCanonicalValue(artifacts));
+  return { catalog, artifacts, completion, hasReleaseNotes, partial };
 }
 
 async function verifyCompletedRelease(input) {
@@ -542,15 +588,7 @@ async function publishReleaseTransaction({
   });
   const { completion: completionName, catalog: catalogName } =
     releaseManifestNames(identity.version, identity.channel);
-  if (await client.readAsset(release, completionName)) {
-    await client.delete(release, completionName);
-    console.info(
-      `Removed incomplete Workbench completion receipt ${completionName} before retrying.`,
-    );
-  }
-  const artifactsByName = new Map(
-    existingArtifacts.map((artifact) => [artifact.fileName, artifact]),
-  );
+  const stagedArtifacts = [];
   for (const { record, body } of staged.artifacts) {
     if (
       !Number.isSafeInteger(record.sizeBytes) ||
@@ -575,19 +613,9 @@ async function publishReleaseTransaction({
       githubTag: identity.tag,
       sourceCommit: identity.sourceCommit,
     };
-    const previous = artifactsByName.get(artifact.fileName);
-    if (
-      previous &&
-      JSON.stringify(sortCanonicalValue(previous)) !==
-        JSON.stringify(sortCanonicalValue(artifact))
-    ) {
-      throw new Error(`Workbench platform addition changed ${artifact.fileName}`);
-    }
-    artifactsByName.set(artifact.fileName, artifact);
+    stagedArtifacts.push(artifact);
   }
-  const artifacts = [...artifactsByName.values()].sort((left, right) =>
-    left.fileName.localeCompare(right.fileName),
-  );
+  const artifacts = mergeCatalogArtifacts([...existingArtifacts, ...stagedArtifacts]);
   const catalog = signCatalog(
     { schemaVersion: 2, releaseNotes, artifacts },
     signing,
@@ -595,6 +623,17 @@ async function publishReleaseTransaction({
   const completion = completionManifest(artifacts, identity);
   const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`);
   await writeFile(path.join(releaseDirectory, catalogName), catalogBytes);
+  const catalogDigest = createHash("sha256").update(catalogBytes).digest("hex");
+  const transactionName = `${transactionCatalogPrefix(identity)}${catalogDigest}.json`;
+  // GitHub asset replacement is not atomic. Keep the signed union remotely before removing
+  // either public manifest, so a new process can recover without this machine's stage files.
+  await client.upload(release, transactionName, catalogBytes);
+  if (await client.readAsset(release, completionName)) {
+    await client.delete(release, completionName);
+    console.info(
+      `Removed prior Workbench completion receipt ${completionName} before updating its catalog.`,
+    );
+  }
   if (await client.readAsset(release, catalogName)) {
     await client.delete(release, catalogName);
     console.info(`Removed prior Workbench catalog ${catalogName} before additive update.`);
@@ -655,6 +694,7 @@ async function run() {
   const completedPlatforms = new Set(completed?.completion?.platforms ?? []);
   if (
     completed?.completion &&
+    !completed.partial &&
     completed?.hasReleaseNotes &&
     [...stagedPlatforms].every((platform) => completedPlatforms.has(platform))
   ) {
@@ -668,7 +708,7 @@ async function run() {
     identity,
     signing,
     staged,
-    existingArtifacts: completed?.catalog.artifacts ?? [],
+    existingArtifacts: completed?.artifacts ?? [],
   });
 }
 
@@ -689,6 +729,7 @@ export {
   completionManifest,
   publishReleaseTransaction,
   readCompletedRelease,
+  readVerifiedStagedArtifacts,
   releaseManifestNames,
   releaseSigningConfig,
   resolveLocalReleaseRequest,

@@ -163,3 +163,15 @@ If finalization is interrupted after a signed catalog upload but before the comp
 next local run treats that catalog as partial state. It preserves the referenced platforms only after
 the catalog signature, release identity, current release note, and every remote byte verify, then
 rebuilds the completion receipt. Partial state is never reported as a completed release.
+
+Before replacing either public manifest, finalization also uploads the complete signed schema-2
+catalog bytes as an immutable `transaction-workbench-v<version>-<channel>-<sha256>.json` Release asset.
+The digest in its name binds those exact bytes. These assets remain as recovery evidence; they are
+neither the public catalog nor completion receipts. Every new run enumerates this version and
+channel's transaction assets, checks their byte digests, signatures, source identity and release note,
+then merges their verified artifact identities with the canonical catalog. Conflicting identities
+fail, and each distinct remote artifact is checked once. Missing canonical metadata, or a verified
+transaction union larger than the canonical completion, remains partial and must be finalized again.
+This recovers platform identities even if interruption follows deletion of the old catalog, without
+depending on another process's memory or local stage metadata. Unreferenced binary names never
+supply release identity.
