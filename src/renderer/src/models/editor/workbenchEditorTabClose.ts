@@ -6,6 +6,7 @@
  */
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
+import { isSameOrChildPath } from '../shared/workbenchUtils'
 
 import { isDirtyTab } from './workbenchEditorTabs'
 
@@ -58,6 +59,25 @@ export function resolveWorkbenchEditorSelectionAfterClose(
  */
 export function collectWorkbenchEditorUnsavedPaths(tabs: Iterable<WorkbenchOpenEditorTab>): string[] {
   return [...tabs].filter(isDirtyTab).map((tab) => tab.path)
+}
+
+/** 删除已落盘：clean标签可关，等待删除期间产生的草稿留给现有已删文件恢复流程。 */
+export function resolveWorkbenchEditorDeletedEntry(
+  tabs: Iterable<WorkbenchOpenEditorTab>,
+  deletedPath: string,
+  detectedAt: number
+): { closingPaths: string[]; retainedTabs: WorkbenchOpenEditorTab[] } {
+  const closingPaths: string[] = []
+  const retainedTabs: WorkbenchOpenEditorTab[] = []
+  for (const tab of tabs) {
+    if (!isSameOrChildPath(tab.path, deletedPath)) continue
+    if (isDirtyTab(tab)) {
+      retainedTabs.push({ ...tab, externalChange: { status: 'deleted', detectedAt } })
+    } else {
+      closingPaths.push(tab.path)
+    }
+  }
+  return { closingPaths, retainedTabs }
 }
 
 /** 「重新打开关闭的标签」最多记住多少个。 */

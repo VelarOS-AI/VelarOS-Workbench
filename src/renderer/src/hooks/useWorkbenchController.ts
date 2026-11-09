@@ -151,7 +151,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions) {
       await selectFile(path)
     },
     moveOpenEntryPath,
-    closeOpenEntryPath: editor.closeOpenEntryPath,
+    handleDeletedEntryPath: editor.handleDeletedEntryPath,
     setSelectedEntryPath: tree.setSelectedEntryPath,
     refreshMutationParent: tree.refreshMutationParent,
     pruneTreeCache: tree.pruneTreeCache,

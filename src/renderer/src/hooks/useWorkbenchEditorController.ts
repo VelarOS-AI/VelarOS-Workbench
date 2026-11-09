@@ -39,6 +39,7 @@ import {
   collectWorkbenchEditorUnsavedPaths,
   popWorkbenchClosedEditorTab,
   pushWorkbenchClosedEditorTabs,
+  resolveWorkbenchEditorDeletedEntry,
   type WorkbenchEditorCloseChoice,
   type WorkbenchEditorCloseRequest,
   type WorkbenchEditorWindowCloseReason,
@@ -787,12 +788,21 @@ export function useWorkbenchEditorController({
     if (!previewTabsEnabled) commitLayout(keepWorkbenchEditorPreviewTabs(layoutRef.current))
   }, [commitLayout, layoutRef, previewTabsEnabled])
 
-  /** 文件（或它所在的目录）在文件树里被删掉、挪走了：它的标签跟着关掉，不问、也不记进「重新打开」。 */
-  const closeOpenEntryPath = useMemoizedFn((path: string): void => {
-    const removedPaths = listWorkbenchEditorLayoutPaths(layoutRef.current).filter((tabPath) =>
-      isSameOrChildPath(tabPath, path)
+  /** 文件树删除已落盘：只关此刻clean的标签，新草稿保留并进入已删文件的恢复保存流程。 */
+  const handleDeletedEntryPath = useMemoizedFn((path: string): void => {
+    const { closingPaths, retainedTabs } = resolveWorkbenchEditorDeletedEntry(
+      openTabsByPathLatest.current.values(),
+      path,
+      Date.now()
     )
-    if (!isEmpty(removedPaths)) dropOpenTabs(removedPaths)
+    if (!isEmpty(retainedTabs)) {
+      setOpenTabsByPath((current) => {
+        const next = new Map(current)
+        for (const tab of retainedTabs) next.set(tab.path, tab)
+        return next
+      })
+    }
+    if (!isEmpty(closingPaths)) dropOpenTabs(closingPaths)
   })
 
   /** 真正关掉这些标签（不再过问未保存改动），关的是当前标签时按关闭前的顺序选好下一个。 */
@@ -1735,7 +1745,7 @@ export function useWorkbenchEditorController({
     moveOpenFileToGroup,
     setEditorSplitRatio,
     moveOpenEntryPath,
-    closeOpenEntryPath,
+    handleDeletedEntryPath,
     saveSelectedFile,
     saveAllOpenFiles,
     convertSelectedFileTextFormat,

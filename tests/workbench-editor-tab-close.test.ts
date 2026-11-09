@@ -4,14 +4,19 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { isWorkbenchEditorTabAutosavable } from '../src/renderer/src/models/editor/workbenchEditorAutosave'
+import { mergeWorkbenchEditorSavedTab } from '../src/renderer/src/models/editor/workbenchEditorSaving'
 import {
   collectWorkbenchEditorTabsToRight,
   popWorkbenchClosedEditorTab,
   pushWorkbenchClosedEditorTabs,
+  resolveWorkbenchEditorDeletedEntry,
   resolveWorkbenchEditorSelectionAfterClose,
   WORKBENCH_CLOSED_EDITOR_TAB_LIMIT,
   workbenchEditorTabFileName,
 } from '../src/renderer/src/models/editor/workbenchEditorTabClose'
+import { isDirtyTab } from '../src/renderer/src/models/editor/workbenchEditorTabs'
+import type { WorkbenchOpenEditorTab } from '../src/renderer/src/types/workbenchTypes'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
@@ -69,6 +74,72 @@ void describe('closing editor tabs', () => {
     assert.equal(many[0], 'file-10.ts')
   })
 
+  void test('deletion keeps drafts created while waiting and only closes tabs still clean', async () => {
+    const makeTab = (path: string): WorkbenchOpenEditorTab => ({
+      path,
+      content: 'on disk',
+      file: {
+        projectRoot: '/project',
+        path,
+        content: 'on disk',
+        size: 7,
+        modifiedAt: 1,
+        totalLines: 1,
+        truncated: false,
+        encoding: 'utf-8',
+        eol: 'lf',
+      },
+    })
+    const direct = makeTab('src/direct.ts')
+    const nested = makeTab('src/lib/edited.ts')
+    const converted = makeTab('src/lib/converted.ts')
+    const clean = makeTab('src/lib/clean.ts')
+    const outside = makeTab('src/library.ts')
+    const current = new Map([direct, nested, converted, clean, outside].map((tab) => [tab.path, tab]))
+    assert.equal([...current.values()].some(isDirtyTab), false)
+    const deletion = Promise.withResolvers<string[]>()
+    const afterDeletion = deletion.promise.then((deletedPaths) =>
+      deletedPaths.map((deletedPath) =>
+        resolveWorkbenchEditorDeletedEntry(current.values(), deletedPath, 42)
+      )
+    )
+
+    // 删除开始时没有草稿；await期间既有新正文，也有只改变格式的标签。
+    current.set(direct.path, { ...direct, content: 'new direct draft' })
+    current.set(nested.path, { ...nested, content: 'new nested draft' })
+    current.set(converted.path, {
+      ...converted,
+      textConversion: { encoding: 'utf-8', eol: 'crlf' },
+    })
+    deletion.resolve([direct.path, 'src/lib'])
+    const [fileResult, directoryResult] = await afterDeletion
+
+    assert.deepEqual(fileResult.closingPaths, [])
+    assert.deepEqual(directoryResult.closingPaths, [clean.path])
+    const retained = [...fileResult.retainedTabs, ...directoryResult.retainedTabs]
+    assert.deepEqual(retained.map((tab) => tab.path), [direct.path, nested.path, converted.path])
+    assert.equal(retained[0].file, direct.file)
+    assert.equal(retained[0].content, 'new direct draft')
+    assert.equal(retained[1].content, 'new nested draft')
+    assert.deepEqual(retained[2].textConversion, { encoding: 'utf-8', eol: 'crlf' })
+    assert.equal(current.get(outside.path), outside)
+    for (const tab of retained) {
+      assert.deepEqual(tab.externalChange, { status: 'deleted', detectedAt: 42 })
+      assert.equal(isDirtyTab(tab), true)
+      // 已删草稿不被自动保存悄悄重建；用户明确恢复后才确认新的磁盘快照。
+      assert.equal(isWorkbenchEditorTabAutosavable(tab), false)
+      const restored = mergeWorkbenchEditorSavedTab(tab, tab, {
+        ...tab.file,
+        content: tab.content,
+        size: tab.content.length,
+        modifiedAt: 3,
+        eol: tab.textConversion?.eol ?? tab.file.eol,
+      })
+      assert.equal(restored.externalChange, undefined)
+      assert.equal(isDirtyTab(restored), false)
+    }
+  })
+
   void test('reopening, closing to the right and middle-click are wired to the tabs', () => {
     const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
@@ -79,7 +150,7 @@ void describe('closing editor tabs', () => {
     const commitClose = sliceBetween(controller, 'const commitCloseOpenFiles', 'const requestCloseOpenFiles')
     assert.match(commitClose, /pushWorkbenchClosedEditorTabs\(/u)
     assert.doesNotMatch(
-      sliceBetween(controller, 'const closeOpenEntryPath', 'const commitCloseOpenFiles'),
+      sliceBetween(controller, 'const handleDeletedEntryPath', 'const commitCloseOpenFiles'),
       /closedTabPathsRef/u
     )
     assert.match(
@@ -117,7 +188,7 @@ void describe('closing editor tabs', () => {
     // 不保存：丢掉改动直接关；保存：存不下的（冲突、失败）留着，其余关掉。
     assert.match(resolving, /choice === 'discard'[\s\S]*?commitCloseOpenFiles\(request\.paths\)/u)
     assert.match(resolving, /saveTabsBeforeClose\(request\.dirtyPaths\)/u)
-    assert.match(resolving, /status === 'conflict' \|\| status === 'failed'/u)
+    assert.match(resolving, /collectWorkbenchEditorUnsavedPaths\(openTabsByPathLatest\.current\.values\(\)\)/u)
     assert.match(resolving, /commitCloseOpenFiles\(request\.paths\.filter\(\(path\) => !unsavedPaths\.has\(path\)\)\)/u)
 
     // 磁盘上已被删掉的文件，保存就是按标签内容重新建出来。

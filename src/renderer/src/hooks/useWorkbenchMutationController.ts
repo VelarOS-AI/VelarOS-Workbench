@@ -47,7 +47,7 @@ interface UseWorkbenchMutationControllerOptions {
     nextPath: string,
     modifiedAt?: LooseOptional<number>
   ) => void
-  closeOpenEntryPath: (path: string) => void
+  handleDeletedEntryPath: (path: string) => void
   setSelectedEntryPath: (path: Nullable<string>) => void
   refreshMutationParent: (parentPath: string) => Promise<void>
   pruneTreeCache: (path: string) => void
@@ -70,7 +70,7 @@ export function useWorkbenchMutationController({
   ensureNoUnsavedFilesInPath,
   selectFile,
   moveOpenEntryPath,
-  closeOpenEntryPath,
+  handleDeletedEntryPath,
   setSelectedEntryPath,
   refreshMutationParent,
   pruneTreeCache,
@@ -81,7 +81,7 @@ export function useWorkbenchMutationController({
   const commentStore = useWorkbenchCommentStore()
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const activeProjectRef = useLatest(activeProject)
-  const closeOpenEntryPathLatest = useLatest(closeOpenEntryPath)
+  const handleDeletedEntryPathLatest = useLatest(handleDeletedEntryPath)
   const moveOpenEntryPathLatest = useLatest(moveOpenEntryPath)
   const onTreeChangedLatest = useLatest(onTreeChanged)
   const onEntriesMovedLatest = useLatest(onEntriesMoved)
@@ -567,7 +567,7 @@ export function useWorkbenchMutationController({
 
       if (activeProjectRef.current?.id !== owningProjectId) return
 
-      // 一项一项地移到废纸篓：某一项没成不挡住其余的；移走了的都要关掉标签、进撤销栈。
+      // 一项一项地移到废纸篓：某一项没成不挡住其余的；移走了的进撤销栈，标签按回执时的草稿处理。
       const deleted = await runTreeMutationPerEntry(
         deletePreviews,
         ({ entry }) => entry.path,
@@ -594,7 +594,7 @@ export function useWorkbenchMutationController({
         for (const result of deletedResults) {
           parentsToRefresh.add(result.parentPath)
           pruneTreeCacheLatest.current(result.deletedPath)
-          closeOpenEntryPathLatest.current(result.deletedPath)
+          handleDeletedEntryPathLatest.current(result.deletedPath)
           commentStore.removeUnderPath(owningProject.rootPath, result.deletedPath)
         }
 
