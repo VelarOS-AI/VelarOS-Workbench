@@ -5,6 +5,7 @@
 逐批行为与验证证据见 [refactoring-progress.md](./refactoring-progress.md)，底座来源及公开调用库存见
 [workbench-platform-migration.md](./workbench-platform-migration.md)。
 当前实施、待验收项及运行矩阵分别列在 [refactoring-remaining.md](./refactoring-remaining.md)。
+0.9.5 基线上的下一轮语义与职责复审另见 [本轮记录](./refactoring-round-20261110.md)，不重置旧全文阅读账本。
 
 ## 阅读覆盖
 

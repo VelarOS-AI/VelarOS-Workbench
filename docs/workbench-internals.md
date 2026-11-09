@@ -30,7 +30,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - 跨产品共享的无状态组件继续归属 `@velaros-ai/ui`，不复制进 Workbench。
 - 通用语言宿主不包含 VelarScript 特判；editor 贡献归 renderer，服务描述归 shared。
 - Workbench 不依赖 VelarOS Desktop 内部源码，仍作为独立应用构建和发布。
-- 账号会话与 Desktop 共用 VelarOS 组织级共享目录，目录布局归 `@velaros-ai/core/platform/shared-resources`，
+- 账号会话与 Desktop 共用 VelarOS 组织级共享目录，目录布局归 `@velaros-ai/velaros/core/platform/shared-resources`，
   Workbench 不留自己的一份。访问凭据临近过期时自动续期，同一凭据的并发请求共用一次续期；回写前比较共享凭据，避免覆盖 Desktop 的新会话或恢复已退出的账号。
 
 ## 会话运行时
@@ -926,7 +926,7 @@ main、renderer 总体积与最大功能块。
 `bun run format` 只格式化 Git 中本次修改和新增的受支持文件。回归仍用 `bun run test`
 逐文件隔离执行，完整门禁使用 `bun run check`。
 
-运行时消费 Platform v0.6.107 的合并包：Core、Model、Kernel、Script 等均通过
+运行时消费 `resources/runtime-snapshot.json` 固定的 Platform 正式归档：Core、Model、Kernel、Script 等均通过
 `@velaros-ai/velaros` 的公开子入口导入，不再并装旧的分包。默认 Agent 子任务继承当前
 模型连接、项目规则与宿主能力范围；主任务、上下文维护和 worker 不设置累计模型用量额度，
 单次 worker 激活上限四小时，父任务取消、真实模型窗口和授权检查继续生效。
