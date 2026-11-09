@@ -1327,12 +1327,20 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
 
     const projectRootRef = useLatest(projectRoot)
-    const completionModel = useStandaloneWorkbenchModelConfig().completionModel
+    const modelConfig = useStandaloneWorkbenchModelConfig()
+    const completionModel = modelConfig.completionModel
     // 只读、禁用或补全模型为“无”时不请求内联补全；ViewPlugin 每次调用时实时读取。
     const inlineCompletionEnabledRef = useLatest(!!completionModel.trim() && !readOnly && !disabled)
+    // 配置快照含 provider / endpoint / 凭据：只保留身份令牌，不把它序列化成 key。
+    const inlineCompletionContext = useMemo(
+      () => ({ modelConfig, projectRoot, path }),
+      [modelConfig, path, projectRoot]
+    )
+    const inlineCompletionContextRef = useLatest(inlineCompletionContext)
     const inlineCompletionRuntime = useMemo<WorkbenchInlineCompletionRuntime>(
       () => ({
         isEnabled: () => inlineCompletionEnabledRef.current,
+        getContextToken: () => inlineCompletionContextRef.current,
         request: async ({ prefix, suffix }) => {
           const result = await getWorkbenchInlineCompletion(
             {
@@ -1347,7 +1355,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           return result.ok ? result.data.completion || null : null
         },
       }),
-      [hostRuntimeRef, inlineCompletionEnabledRef, languageSupportRef, pathRef, projectRootRef]
+      [
+        hostRuntimeRef,
+        inlineCompletionContextRef,
+        inlineCompletionEnabledRef,
+        languageSupportRef,
+        pathRef,
+        projectRootRef,
+      ]
     )
     const completionSource = useMemo(
       () =>

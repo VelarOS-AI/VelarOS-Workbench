@@ -25,6 +25,8 @@ const InlineCompletionDebounceMs = 300
 export interface WorkbenchInlineCompletionRuntime {
   /** 是否启用补全（编辑器设置里的开关，实时读取）。 */
   isEnabled: () => boolean
+  /** 当前项目、文件和模型配置的身份；只比较对象，不序列化其中的配置。 */
+  getContextToken: () => object
   /** 向主进程请求补全；返回要插入的文本，无建议时返回 null。 */
   request: (context: { prefix: string; suffix: string }) => Promise<string | null>
 }
@@ -137,10 +139,15 @@ function buildInlineSuggestionPlugin(runtime: WorkbenchInlineCompletionRuntime):
       private timer: ReturnType<typeof setTimeout> | null = null
       /** 单调递增的请求令牌，用来丢弃过期（已被新输入取代）的补全响应。 */
       private token = 0
+      private destroyed = false
 
       constructor(private readonly view: EditorView) {}
 
       public update(update: ViewUpdate): void {
+        if (!update.docChanged && !update.selectionSet) return
+
+        this.token += 1
+        this.clearTimer()
         if (!update.docChanged) return
 
         // 只对用户真实输入/删除触发，跳过外部同步、程序化写入和接受补全本身。
@@ -153,12 +160,12 @@ function buildInlineSuggestionPlugin(runtime: WorkbenchInlineCompletionRuntime):
       }
 
       private schedule(): void {
-        this.clearTimer()
         if (!runtime.isEnabled()) return
 
+        const contextToken = runtime.getContextToken()
         this.timer = setTimeout(() => {
           this.timer = null
-          void this.run()
+          void this.run(contextToken)
         }, InlineCompletionDebounceMs)
       }
 
@@ -169,8 +176,8 @@ function buildInlineSuggestionPlugin(runtime: WorkbenchInlineCompletionRuntime):
         }
       }
 
-      private async run(): Promise<void> {
-        if (!runtime.isEnabled()) return
+      private async run(contextToken: object): Promise<void> {
+        if (this.destroyed || !runtime.isEnabled() || runtime.getContextToken() !== contextToken) return
 
         const state = this.view.state
         const selection = state.selection.main
@@ -192,8 +199,15 @@ function buildInlineSuggestionPlugin(runtime: WorkbenchInlineCompletionRuntime):
         }
 
         // 期间又输入了/换了模型/光标移动了，丢弃这次结果。
-        if (requestToken !== this.token) return
-        if (this.view.state.selection.main.head !== pos) return
+        if (
+          this.destroyed ||
+          requestToken !== this.token ||
+          !runtime.isEnabled() ||
+          runtime.getContextToken() !== contextToken ||
+          this.view.state.doc !== state.doc ||
+          !this.view.state.selection.eq(state.selection)
+        )
+          return
         if (!text || isBlank(text)) return
 
         // 建议开头与光标后文完全一致时没意义（模型只是把后文复述了一遍）。
@@ -203,6 +217,8 @@ function buildInlineSuggestionPlugin(runtime: WorkbenchInlineCompletionRuntime):
       }
 
       public destroy(): void {
+        this.destroyed = true
+        this.token += 1
         this.clearTimer()
       }
     }
