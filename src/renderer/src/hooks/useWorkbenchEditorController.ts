@@ -1529,18 +1529,19 @@ export function useWorkbenchEditorController({
   /**
    * 保存全部已修改的标签。每个文件各存各的：一个文件外部改过或写不进去，不挡其它文件；
    * 存好的文件只在正文仍是保存那一刻的内容时才换成磁盘版本，保存期间接着打的字不会被冲掉。
+   * 返回当前 owner 是否已没有草稿，供读取磁盘的运行/调试决定是否继续。
    */
-  const saveAllOpenFiles = useMemoizedFn(async (): Promise<void> => {
-    if (!activeProject) return
+  const saveAllOpenFiles = useMemoizedFn(async (): Promise<boolean> => {
+    if (!activeProject) return false
 
     const owningProjectId = activeProject.id
     const dirtyTabs = [...openTabsByPathLatest.current.values()].filter(
       (tab) => canSaveWorkbenchTabContent(tab) && isDirtyTab(tab)
     )
-    if (isEmpty(dirtyTabs)) return
+    if (isEmpty(dirtyTabs)) return ![...openTabsByPathLatest.current.values()].some(isDirtyTab)
 
     const summary = summarizeWorkbenchEditorSaveResults(await saveEditorTabs(dirtyTabs))
-    if (activeProjectRef.current?.id !== owningProjectId) return
+    if (activeProjectRef.current?.id !== owningProjectId) return false
 
     if (!isEmpty(summary.savedPaths)) {
       messageLatest.current.success({
@@ -1548,6 +1549,7 @@ export function useWorkbenchEditorController({
       })
     }
     reportUnsavedResults(summary)
+    return ![...openTabsByPathLatest.current.values()].some(isDirtyTab)
   })
 
   /**

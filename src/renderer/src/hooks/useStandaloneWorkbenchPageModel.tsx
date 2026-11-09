@@ -311,7 +311,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
   // 编辑区里起的运行（测试的 ▶）：先把没存的改动存盘——运行器读的是磁盘上的文件——再起运行卡。
   const launchRunSessionFromEditor = useMemoizedFn(
     async (...launch: Parameters<typeof workbench.launchRunSession>): Promise<Nullable<string>> => {
-      await workbench.saveAllOpenFiles()
+      if (!(await workbench.saveAllOpenFiles())) return null
       return workbench.launchRunSession(...launch)
     }
   )
