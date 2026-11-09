@@ -80,6 +80,13 @@ ADR 0028 已读，产品装配方案：
 | 380a550 | 跨包 TS 删除/重建与项目配置缓存 |
 | 649bd9f | 死项目桥与旧 AI 索引合同 |
 | 2353c7a | 内联补全的文档、选区、配置与生命周期归属 |
+| 6f5dd47 / 07762db | Apache-2.0 开源、公开构建说明与许可证行尾 |
+| 4dea2a5 | 丢弃 LSP overlay、旧诊断及 worker 初始化失败回执 |
+| 3efe38d | signature 插件 owner、snippet 实际语言身份与死 textarea 链 |
+| ff86bc4 | brace 展开前收束剩余预算 |
+| b5defa2 | 无消费 System 合同与 workspace 旧导出别名 |
+| 3c969dc | 图片后缀查找不再读取对象原型 |
+| 578c6bf | 搜索 owner 取消并等待替换旧请求及匿名请求 |
 
 统一底座接入批：配套 0.9.1 基础/扩展显式装配、产品不可变执行凭据、foundation-v1 数据代际、
 无执行空闲控制、active-only tell 与错误回执、schema2 来源和正式候选拒绝门；来源 commit、
@@ -111,8 +118,8 @@ LSP 关闭共用实际 Promise，真实退出未确认时保留进程引用并�
 Terminal 准备取消、Debug 晚交清理失败、真实 LSP 协议/共享 dispose）。沿用原分区预算与已有绿项，未跑全量或生产构建。
 
 后续 Git 顺序、argv、退役字段，跨包 TS 磁盘版本与数据配置缓存，renderer 调试确认及启动接纳均已继续收口。
-仍未完成的明确项：语言 worker 硬终止时跨线程子进程 owner、丢弃后 LSP overlay 撤销、Markdown 计算取消，
-代码型配置及依赖模块完整热重载，搜索 owner 释放、signature help 迟到回执及其余覆盖表空白。
+仍未完成的明确项：语言 worker 硬终止时跨线程子进程 owner、Markdown 计算取消，
+代码型配置及依赖模块完整热重载；renderer 历史读取失效、异步保存/关窗/删除期间的新草稿与其余覆盖表空白。
 worker 必须有真实资源所有权方案，不能靠加大 8s 预算或 best-effort PID 通知宣称解决。
 正式资产已交付：Platform v0.7.3 双包 0.9.2 已经 Release/tag→commit/asset digest/实际下载 SHA
 核验并安装，Bun 锁只变更双包 spec、integrity 与 required peer。0.9.2 的 idle trace/traceBranches 是新增只读口，
@@ -136,3 +143,20 @@ Workbench 开源准备沿用公开 Platform / UI 的 Apache-2.0：加入完整�
 实际处理 560 个有内容的提交、约 13.15 MB，默认规则及忽略注释禁用、输出完全脱敏，未发现凭据匹配。
 当前跟踪树没有本地数据库、密钥、依赖归档、可执行程序或 symlink；本机缓存、用户数据及进行中的未提交清理不进入本次提交。
 该扫描是发布内容检查，不代表全仓模块审计已经完成，也不替代依赖各自的许可证。
+
+开源已执行：`VelarOS-AI/VelarOS-Workbench` 的 `main` 已推送至 `07762db`，GitHub 管理接口及
+无授权头的匿名 API 均确认 `private: false`、Apache-2.0；Desktop 仍由独立私有仓库管理。
+
+公开后的第一组模块清理已分批提交：搜索所有请求同步取得窗口 owner，同 id 被替换的旧请求仍握完成票，
+崩溃、项目释放及应用关闭取消并等待；匿名搜索保持一次性结果，取消批不再送旧流。
+LSP 完整 dirty 快照撤销丢弃的正文，省略快照继续保留；同 URI 重开使用递增版本，拒收明确过期的版本诊断。
+首次 Windows 用例揭示未落盘文件经不同 URI 库往返造成盘符身份漂移，改为同一 Node URI producer，原断言保留并只重跑失败项。
+Worker 冷启动与退避创建同步抛错都会 settle 待请求，后续请求能重试且不重放失败请求；没有增加预算或新测试注入口。
+signature help 的 tooltip 与代际归具体 plugin，destroy 撤销晚回执；snippet 两缓存共用编辑器的真实特殊文件名优先 token。
+brace 展开达到 64 项就停止访问后续分支；图片类型改用 Map，`.constructor` / `.__proto__` 不再被误认图片。
+删除零消费的旧 textarea 编辑链、System 旧合同及七个别名；EngineProcess 的真实 CommandHelper 消费改为 canonical 类名。
+
+本组 11 个必要场景通过：搜索 IPC 3、LSP 3、Worker 真实构造拒绝 1、snippet 1、glob 2、图片识别 1。
+Worker 的重试/关闭部分复用现有测试 transport，未宣称启动真实线程。node/web 类型通过，20 node / 5 web / 6 测试
+文件 scoped lint 已通过；唯一测试数组类型规则修正后只复查该文件，所有其他绿项复用。原 45s / 2GiB 预算不变。
+未执行全量回归、生产构建或安装包发布；模块覆盖表仍分别记完整、局部及未读，不能以这些批次代表全仓完成。
