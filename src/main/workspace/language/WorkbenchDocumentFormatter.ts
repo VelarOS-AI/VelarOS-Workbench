@@ -14,6 +14,7 @@ import { type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceT
  */
 
 interface PrettierModuleLike {
+  clearConfigCache(): Promise<void> | void
   resolveConfig(
     filepath: string,
     options?: { editorconfig?: boolean }
@@ -76,15 +77,15 @@ function loadProjectPrettier(
   return module
 }
 
-export function clearWorkbenchProjectPrettierCache(projectRoot?: string): void {
-  if (!projectRoot) {
-    projectPrettierCache.clear()
-    return
+export async function clearWorkbenchProjectPrettierCache(projectRoot?: string): Promise<void> {
+  const modules = new Set<PrettierModuleLike>()
+  for (const [packageJsonPath, prettier] of projectPrettierCache) {
+    if (projectRoot && !isPathInside(projectRoot, packageJsonPath)) continue
+    if (prettier) modules.add(prettier)
+    projectPrettierCache.delete(packageJsonPath)
   }
-
-  for (const packageJsonPath of projectPrettierCache.keys()) {
-    if (isPathInside(projectRoot, packageJsonPath)) projectPrettierCache.delete(packageJsonPath)
-  }
+  // require 会继续返回同一模块；配置解析与 EditorConfig 的缓存也必须经公开 API 清掉。
+  await Promise.all([...modules].map((prettier) => prettier.clearConfigCache()))
 }
 
 /**

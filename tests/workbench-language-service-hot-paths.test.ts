@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -155,10 +155,11 @@ void describe('language service hot paths', () => {
     }
   })
 
-  void test('reuses ESLint results for unchanged text until a project file changes on disk', async () => {
+  void test('reuses ESLint results until disk changes and reloads changed project rules', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-eslint-cache-')))
     const eslintPackage = resolve(process.cwd(), 'node_modules', 'eslint')
     const absolutePath = join(projectRoot, 'main.js')
+    const services = new WorkbenchLanguageServices(new PathResolver())
     const input = (content: string) => ({ projectRoot, absolutePath, relativePath: 'main.js', content })
     try {
       await mkdir(join(projectRoot, 'node_modules'), { recursive: true })
@@ -184,8 +185,65 @@ void describe('language service hot paths', () => {
       const afterChange = await getWorkbenchJavaScriptLintDiagnostics(input('const unused = 1\n'))
       assert.notEqual(afterChange, first, 'a disk change must invalidate the cached result')
       assert.deepEqual(afterChange, first)
+
+      const configPath = join(projectRoot, 'eslint.config.js')
+      await writeFile(configPath, "export default [{ files: ['**/*.js'], rules: {} }]\n", 'utf8')
+      // ESLint 以毫秒 mtime 标记配置模块；保证这次编辑与首次读取是两个版本。
+      const changedAt = new Date(Date.now() + 1_000)
+      await utimes(configPath, changedAt, changedAt)
+      await services.projectFilesChanged({ projectRoot, paths: ['eslint.config.js'] })
+      assert.deepEqual(await getWorkbenchJavaScriptLintDiagnostics(input('const unused = 1\n')), [])
     } finally {
+      await services.dispose()
       clearWorkbenchProjectEslintCache(projectRoot)
+      clearTypeScriptProjectCache(projectRoot)
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('a workspace rescan reloads Prettier data configuration and EditorConfig', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-prettier-cache-')))
+    const services = new WorkbenchLanguageServices(new PathResolver())
+    const configPath = join(projectRoot, '.prettierrc.json')
+    const editorConfigPath = join(projectRoot, '.editorconfig')
+    const request = {
+      projectRoot,
+      path: 'main.ts',
+      content: 'const x={alpha:1,beta:2}\n',
+    }
+    const formatted = async () =>
+      (await services.getFormat(request)).changes[0]?.edits[0]?.newText ?? ''
+    try {
+      await mkdir(join(projectRoot, 'node_modules'), { recursive: true })
+      await symlink(
+        resolve(process.cwd(), 'node_modules', 'prettier'),
+        join(projectRoot, 'node_modules', 'prettier'),
+        'dir'
+      )
+      await writeFile(join(projectRoot, 'package.json'), JSON.stringify({ type: 'module' }), 'utf8')
+      await writeFile(configPath, JSON.stringify({ printWidth: 20, semi: true }), 'utf8')
+      await writeFile(
+        editorConfigPath,
+        'root = true\n[*]\nindent_style = space\nindent_size = 2\n',
+        'utf8'
+      )
+      const before = await formatted()
+      assert.match(before, /\n {2}alpha: 1/u)
+      assert.ok(before.endsWith('};\n'))
+
+      await writeFile(configPath, JSON.stringify({ printWidth: 20, semi: false }), 'utf8')
+      await writeFile(
+        editorConfigPath,
+        'root = true\n[*]\nindent_style = space\nindent_size = 4\n',
+        'utf8'
+      )
+      await services.projectFilesChanged({ projectRoot, paths: ['.'] })
+      const after = await formatted()
+      assert.match(after, /\n {4}alpha: 1/u)
+      assert.ok(after.endsWith('}\n'))
+    } finally {
+      await services.invalidateProject({ projectRoot })
+      await services.dispose()
       await rm(projectRoot, { recursive: true, force: true })
     }
   })

@@ -855,27 +855,42 @@ function applyDiskFileToProjects(
   projectRoot: string,
   inputPath: string,
   content: Nullable<string>,
-  keepOverlay: boolean
+  keepOverlay: boolean,
+  consumingProjects?: ReadonlySet<string>
 ): void {
   const absolutePath = normalizeTypeScriptFileName(inputPath)
   for (const [key, cacheEntry] of projectCache) {
     if (!key.startsWith(`${projectRoot}\0`)) continue
-    if (!isPathInside(cacheEntry.config.projectDirectory, absolutePath)) continue
+    if (
+      !isPathInside(cacheEntry.config.projectDirectory, absolutePath) &&
+      !cacheEntry.diskFiles.has(absolutePath) &&
+      !consumingProjects?.has(key)
+    )
+      continue
     if (content == null) cacheEntry.diskFiles.delete(absolutePath)
     else cacheEntry.diskFiles.set(absolutePath, content)
   }
 
   for (const [key, project] of pooledProjects) {
     if (!key.startsWith(`${projectRoot}\0`)) continue
-    if (!isPathInside(project.projectDirectory, absolutePath)) continue
+    if (
+      !isPathInside(project.projectDirectory, absolutePath) &&
+      !project.liveFiles.has(absolutePath) &&
+      !project.diskFiles.has(absolutePath) &&
+      !consumingProjects?.has(key)
+    )
+      continue
 
     if (content == null) project.diskFiles.delete(absolutePath)
     else project.diskFiles.set(absolutePath, content)
     if (keepOverlay && project.overlayPaths.has(absolutePath)) continue
 
     project.overlayPaths.delete(absolutePath)
-    if (content == null) project.liveFiles.delete(absolutePath)
-    else setPooledFile(project, absolutePath, content)
+    if (content == null) {
+      project.liveFiles.delete(absolutePath)
+      // import 拉进来的文件未必是根文件；删除也要撤销 TypeScript 缓存的 SourceFile。
+      project.fileVersions.set(absolutePath, (project.fileVersions.get(absolutePath) ?? 0) + 1)
+    } else setPooledFile(project, absolutePath, content)
   }
 }
 
@@ -917,11 +932,16 @@ export function refreshTypeScriptProjectFilesFromDisk(
   }
   if (scriptPaths.size === 0) return
 
-  const knownPaths = new Set<string>()
+  const consumersByPath = new Map<string, Set<string>>()
+  const rememberConsumer = (absolutePath: string, projectKey: string): void => {
+    const consumers = consumersByPath.get(absolutePath) ?? new Set<string>()
+    consumers.add(projectKey)
+    consumersByPath.set(absolutePath, consumers)
+  }
   for (const [key, cacheEntry] of projectCache) {
     if (!key.startsWith(`${projectRoot}\0`)) continue
     for (const absolutePath of scriptPaths)
-      if (cacheEntry.diskFiles.has(absolutePath)) knownPaths.add(absolutePath)
+      if (cacheEntry.diskFiles.has(absolutePath)) rememberConsumer(absolutePath, key)
   }
   for (const [key, project] of pooledProjects) {
     if (!key.startsWith(`${projectRoot}\0`)) continue
@@ -929,22 +949,30 @@ export function refreshTypeScriptProjectFilesFromDisk(
     const program = currentTypeScriptProgram(project)
     for (const absolutePath of scriptPaths) {
       if (project.liveFiles.has(absolutePath) || program?.getSourceFile(absolutePath))
-        knownPaths.add(absolutePath)
+        rememberConsumer(absolutePath, key)
     }
   }
 
   // 认得的文件没了、不认得的文件出现了：文件清单可能变了，记住的配置作废（只重新解析，不重建服务）。
   let fileListMayHaveChanged = false
   for (const absolutePath of scriptPaths) {
-    if (knownPaths.has(absolutePath)) {
+    const consumers = consumersByPath.get(absolutePath)
+    if (consumers) {
       const content = safeReadFile(absolutePath)
       if (content == null) fileListMayHaveChanged = true
-      applyDiskFileToProjects(projectRoot, absolutePath, content, true)
+      // 被兄弟包 import 的文件也属于实际消费者；不能只按 tsconfig 所在目录判断。
+      applyDiskFileToProjects(projectRoot, absolutePath, content, true, consumers)
     } else if (existsSync(absolutePath)) {
       fileListMayHaveChanged = true
     }
   }
-  if (fileListMayHaveChanged) invalidateTypeScriptProjectConfigs(projectRoot)
+  if (fileListMayHaveChanged) {
+    invalidateTypeScriptProjectConfigs(projectRoot)
+    // 缺过的跨包文件重新出现时，配置的根文件清单可能不变；不能沿用旧 Program 的失败解析。
+    // 只清结构变化后的 Program，保留 service、覆盖层与版本；普通正文更新继续增量复用。
+    for (const [key, project] of pooledProjects)
+      if (key.startsWith(`${projectRoot}\0`)) project.service.cleanupSemanticCache()
+  }
 }
 
 /**

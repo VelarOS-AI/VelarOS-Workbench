@@ -63,6 +63,50 @@ function semanticMessages(projectRoot: string, mainPath: string, overlay: Map<st
 }
 
 void describe('language service freshness after files change on disk', () => {
+  void test('a hot package refreshes an imported source outside its tsconfig directory', async () => {
+    const { projectRoot, dependencyPath } = await createProject()
+    const packageRoot = join(projectRoot, 'packages', 'app')
+    await mkdir(packageRoot, { recursive: true })
+    await writeFile(
+      join(packageRoot, 'tsconfig.json'),
+      JSON.stringify({ compilerOptions: { strict: true }, include: ['main.ts'] }),
+      'utf8'
+    )
+    const mainPath = join(packageRoot, 'main.ts')
+    const content =
+      "import { value } from '../../src/dependency'\nexport const copied: number = value\n"
+    await writeFile(mainPath, content, 'utf8')
+    const acquire = () =>
+      acquireTypeScriptLanguageService(
+        projectRoot,
+        mainPath,
+        [mainPath],
+        new Map([[mainPath, content]])
+      )
+    const services = new WorkbenchLanguageServices(new PathResolver())
+    try {
+      const before = acquire()
+      assert.equal(before.service.getSemanticDiagnostics(mainPath).length, 1)
+      await rm(dependencyPath)
+      await services.projectFilesChanged({ projectRoot, paths: ['src/dependency.ts'] })
+      const missing = acquire().service.getSemanticDiagnostics(mainPath)
+      assert.equal(missing.length, 1)
+      assert.match(String(missing[0]!.messageText), /Cannot find module/u)
+      await writeFile(dependencyPath, 'export const value = 21\n', 'utf8')
+      await services.projectFilesChanged({ projectRoot, paths: ['src/dependency.ts'] })
+      const after = acquire()
+      assert.equal(after.service, before.service)
+      const messages = after.service
+        .getSemanticDiagnostics(mainPath)
+        .map((diagnostic) => String(diagnostic.messageText).split('\n')[0] ?? '')
+      assert.equal(messages.length, 0, messages.join('\n'))
+    } finally {
+      await services.dispose()
+      clearTypeScriptProjectCache(projectRoot)
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('a dependency rewritten on disk changes the diagnostics of the file importing it', async () => {
     const { projectRoot, mainPath, dependencyPath } = await createProject()
     const mainSource = readFileSync(mainPath, 'utf8')

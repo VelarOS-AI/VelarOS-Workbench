@@ -164,6 +164,10 @@ const MaxLocationPreviewLength = 200
 // external-language boundary bounded without dropping valid contextual
 // completions before CodeMirror can filter and rank them.
 const MaximumExternalLspCompletionItems = 512
+const EslintConfigFilePattern =
+  /^(?:eslint\.config\.[cm]?[jt]s|\.eslintrc(?:\.(?:c?js|json|ya?ml))?|\.eslintignore)$/u
+const PrettierConfigFilePattern =
+  /^(?:\.prettierrc(?:\.(?:json5?|ya?ml|toml|[cm]?[jt]s))?|prettier\.config\.[cm]?[jt]s|\.editorconfig|package\.yaml)$/u
 
 function textFromLspContent(value: unknown): string {
   if (typeof value === 'string') return value
@@ -479,23 +483,21 @@ class WorkbenchLanguageServices {
     clearWorkbenchProjectEslintResults(projectRoot)
     if (isPresent(request.content))
       await this.externalLsp.save(projectRoot, absolutePath, request.content)
-    if (basename(absolutePath) === 'package.json') {
-      clearWorkbenchProjectEslintCache(projectRoot)
-      clearWorkbenchProjectPrettierCache(projectRoot)
-    }
+    await this.invalidateProjectToolConfiguration(projectRoot, [absolutePath])
   }
 
   public async invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     clearTypeScriptProjectCache(projectRoot)
     clearWorkbenchProjectEslintCache(projectRoot)
-    clearWorkbenchProjectPrettierCache(projectRoot)
+    await clearWorkbenchProjectPrettierCache(projectRoot)
     await this.externalLsp.invalidate(projectRoot)
   }
 
   /**
    * 磁盘上这些文件变了（文件监听、Agent 的写文件工具、用户在编辑器与文件树里的写入）：内置 TypeScript 项目按
-   * 磁盘内容更新，项目级 ESLint / Prettier 缓存随 package.json 作废，外部语言服务器收到标准的文件变更通知。
+   * 磁盘内容更新，项目级 ESLint / Prettier 配置改变时清缓存，外部语言服务器收到标准的文件变更通知。
+   * 监听只能报告整个项目有变化时，项目与配置缓存整体作废。
    * 路径相对项目根或绝对都收；项目之外的一律忽略，不让一个越界路径把整批通知打掉。
    */
   public async projectFilesChanged(request: {
@@ -508,13 +510,23 @@ class WorkbenchLanguageServices {
       .filter((absolutePath) => this.pathResolver.isAllowedProjectPath(projectRoot, absolutePath))
     if (paths.length === 0) return
 
-    refreshTypeScriptProjectFilesFromDisk(projectRoot, paths)
+    if (paths.includes(projectRoot)) clearTypeScriptProjectCache(projectRoot)
+    else refreshTypeScriptProjectFilesFromDisk(projectRoot, paths)
     clearWorkbenchProjectEslintResults(projectRoot)
-    if (paths.some((absolutePath) => basename(absolutePath) === 'package.json')) {
-      clearWorkbenchProjectEslintCache(projectRoot)
-      clearWorkbenchProjectPrettierCache(projectRoot)
-    }
+    await this.invalidateProjectToolConfiguration(projectRoot, paths)
     await this.externalLsp.filesChanged(projectRoot, paths)
+  }
+
+  private async invalidateProjectToolConfiguration(
+    projectRoot: string,
+    paths: readonly string[]
+  ): Promise<void> {
+    const fileNames = paths.map((path) => basename(path))
+    const refreshAll = paths.includes(projectRoot) || fileNames.includes('package.json')
+    if (refreshAll || fileNames.some((name) => EslintConfigFilePattern.test(name)))
+      clearWorkbenchProjectEslintCache(projectRoot)
+    if (refreshAll || fileNames.some((name) => PrettierConfigFilePattern.test(name)))
+      await clearWorkbenchProjectPrettierCache(projectRoot)
   }
 
   /**
