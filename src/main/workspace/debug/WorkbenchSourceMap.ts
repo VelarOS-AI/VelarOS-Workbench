@@ -7,13 +7,15 @@
 import { isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** 一段映射：生成代码里从 `generatedColumn` 起的这一段，来自 `source` 的 `originalLine:originalColumn`。 */
-interface SourceMapSegment {
-  generatedColumn: number
-  source: number
-  originalLine: number
-  originalColumn: number
-}
+/** 从 `generatedColumn` 起到下一段之前的映射；单字段片段没有对应源码。 */
+type SourceMapSegment =
+  | { generatedColumn: number; source: null }
+  | {
+      generatedColumn: number
+      source: number
+      originalLine: number
+      originalColumn: number
+    }
 
 export interface WorkbenchSourceMapPosition {
   line: number
@@ -53,7 +55,7 @@ function decodeSegmentFields(segment: string): number[] {
   return fields
 }
 
-/** `mappings` 解成按生成行分组、行内按列排好的段；只留指向某个源文件的段。 */
+/** `mappings` 解成按生成行分组、行内按列排好的段，保留无源码片段的列边界。 */
 function decodeMappings(mappings: string): SourceMapSegment[][] {
   const lines: SourceMapSegment[][] = []
   let source = 0
@@ -69,6 +71,10 @@ function decodeMappings(mappings: string): SourceMapSegment[][] {
       if (fields.length === 0) continue
 
       generatedColumn += fields[0]!
+      if (fields.length === 1) {
+        segments.push({ generatedColumn, source: null })
+        continue
+      }
       if (fields.length < 4) continue
       source += fields[1]!
       originalLine += fields[2]!
@@ -147,8 +153,8 @@ export class WorkbenchSourceMap {
   }
 
   /**
-   * 生成代码里的一个位置对应源码的哪里：取这一行上起点不超过它的最后一段。这一行在它之前没有段——转换器自己
-   * 加在前面的代码（esbuild 的辅助函数、外面包的一层函数）——返回 null：那不是用户写的任何一行。
+   * 生成代码里的一个位置对应源码的哪里：取这一行上起点不超过它的最后一段。落在单字段片段里，或这一行在它之前
+   * 没有段（转换器加的代码），都返回 null：那不是用户写的任何一行。
    */
   public originalPositionFor(
     position: WorkbenchSourceMapPosition
@@ -165,6 +171,7 @@ export class WorkbenchSourceMap {
       else high = middle - 1
     }
     const segment = segments[low]!
+    if (segment.source === null) return null
     const path = this.sourcePaths[segment.source]
     return path ? { path, line: segment.originalLine, column: segment.originalColumn } : null
   }
@@ -184,7 +191,8 @@ export class WorkbenchSourceMap {
     let best: Nullable<WorkbenchSourceMapPosition & { originalLine: number }> = null
     for (const [generatedLine, segments] of this.lines().entries()) {
       for (const segment of segments) {
-        if (segment.source !== source || segment.originalLine < line) continue
+        if (segment.source === null || segment.source !== source || segment.originalLine < line)
+          continue
         // 先比落到源码的哪一行（越靠近要的那一行越好），同一行再比生成位置（越靠前越好）。
         if (
           !best ||

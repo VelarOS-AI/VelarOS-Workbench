@@ -74,7 +74,10 @@ void describe('debugger source maps', () => {
     assert.equal(original(2, 0), 'none')
     assert.equal(original(2, 1), 'none')
     assert.equal(original(2, 2), `${resolve('/project/src/a.ts')}:3:0`)
-    assert.equal(original(2, 7), `${resolve('/project/src/a.ts')}:3:0`)
+    assert.equal(original(2, 6), `${resolve('/project/src/a.ts')}:3:0`)
+    // 单字段 K 从列 7 起截断前面的映射，直到列 10 再次出现源码位置。
+    assert.equal(original(2, 7), 'none')
+    assert.equal(original(2, 9), 'none')
     assert.equal(original(2, 10), `${resolve('/abs/c.ts')}:1:1`)
     assert.equal(original(3, 16), `${resolve('/project/src/a.ts')}:40:0`)
     assert.equal(original(9, 0), 'none')
