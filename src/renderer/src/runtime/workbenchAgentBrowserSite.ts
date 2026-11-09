@@ -16,13 +16,17 @@ export function useWorkbenchAgentBrowserSite(
     setSite(null)
     if (!projectRoot) return
     let disposed = false
+    let receivedChange = false
     const unsubscribe = window.velarosWorkbenchBrowser.onChanged((state) => {
-      if (state.sessionId === sessionId && sameRoot(state.projectRoot, projectRoot)) setSite(state.site)
+      if (state.sessionId !== sessionId || !sameRoot(state.projectRoot, projectRoot)) return
+      receivedChange = true
+      setSite(state.site)
     })
     void window.velarosWorkbenchBrowser
       .getState({ projectRoot, sessionId })
       .then((result) => {
-        if (!disposed && result.ok) setSite(result.value.site)
+        // 首次快照在通知之后才回来时，不覆盖已经收到的新站点。
+        if (!disposed && !receivedChange && result.ok) setSite(result.value.site)
       })
       .catch(() => undefined)
     return () => {
