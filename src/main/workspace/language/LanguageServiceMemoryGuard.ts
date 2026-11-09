@@ -7,6 +7,7 @@
  *
  * 两层保护：worker 建时给 `resourceLimits`——堆耗尽时 Node 只终止 worker（ERR_WORKER_OUT_OF_MEMORY），
  * 主进程活着、下一次请求重建；worker 里定期看堆用量，逼近上限先自己减负，避免反复撞墙重启。
+ * 项目 ESLint / Prettier 现归 main 持有的短命 Tools Worker，不再计作这个 isolate 的常驻缓存。
  */
 
 const MiB = 1024 * 1024
@@ -58,7 +59,6 @@ export interface WorkbenchLanguageMemoryNotification {
   rssMb: number
   projects: number
   files: number
-  eslintInstances: number
   action: WorkbenchLanguageMemoryAction
   reason: 'pressure' | 'idle' | 'heartbeat'
 }

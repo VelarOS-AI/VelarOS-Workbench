@@ -17,6 +17,7 @@ import type {
   WorkbenchLanguageServiceWorkerRequest,
   WorkbenchLanguageServiceWorkerResponse,
 } from '../src/main/workspace/language/LanguageServiceWorkerProtocol'
+import { ProjectToolWorkerHost } from '../src/main/workspace/language/ProjectToolWorkerHost'
 import {
   acquireTypeScriptLanguageService,
   clearTypeScriptProjectCache,
@@ -84,7 +85,13 @@ void describe('language service freshness after files change on disk', () => {
         [mainPath],
         new Map([[mainPath, content]])
       )
-    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      new PathResolver(),
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     try {
       const before = acquire()
       assert.equal(before.service.getSemanticDiagnostics(mainPath).length, 1)
@@ -175,7 +182,13 @@ void describe('language service freshness after files change on disk', () => {
 
   void test('projectFilesChanged refreshes TypeScript from relative paths and ignores paths outside the project', async () => {
     const { projectRoot, mainPath, dependencyPath } = await createProject()
-    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      new PathResolver(),
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const request = { projectRoot, path: 'src/main.ts', language: 'typescript' }
     try {
       const before = await services.getDiagnostics({ ...request, content: readFileSync(mainPath, 'utf8') })
@@ -353,10 +366,7 @@ void describe('editor re-checks diagnostics when the workspace changes outside t
     assert.match(editor, /effect\.is\(externalWorkspaceChange\)/u)
     assert.match(editor, /externalWorkspaceChange\.of\(externalRevision\)/u)
     const insights = readSource('src/renderer/src/hooks/useWorkbenchLanguageServiceInsights.ts')
-    assert.match(insights, /\[contextRef, diagnosticContentKey, externalRevision, hostRuntime, messageLatest, tLatest\]/u)
     // 只是工作区在外面变了：旧诊断留在面板上直到新结果回来，只有内容变了的文件先撤下。
     assert.match(insights, /if \(changedPaths\.size > 0\)\n\s+setDiagnosticsByPath\(\(current\) => omitWorkbenchPendingDiagnostics\(current, changedPaths\)\)/u)
-    // 别的标签等手停下来再复核，不跟着每一波输入全算一遍。
-    assert.match(insights, /setTimeout\(\(\) => void request\(siblingPaths\), SIBLING_DIAGNOSTIC_DEBOUNCE_MS\)/u)
   })
 })

@@ -33,6 +33,7 @@ import {
   buildExternalHoverResult,
   WorkbenchLanguageServices,
 } from '../src/main/workspace/language/LanguageServices'
+import { ProjectToolWorkerHost } from '../src/main/workspace/language/ProjectToolWorkerHost'
 import {
   acquireTypeScriptLanguageService,
   clearTypeScriptProjectCache,
@@ -180,7 +181,13 @@ void describe('focused Workbench language surface', () => {
     assert.equal(resolveWorkbenchCodeMirrorLanguage('styles/app.sass', '').mode, 'builtin')
 
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-sass-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      languagePathResolver,
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     try {
       const sass = await services.getDiagnostics({
         projectRoot,
@@ -723,7 +730,13 @@ void describe('focused Workbench language surface', () => {
 
   void test('adds semantic roles and useful hover behavior to TypeScript and JavaScript', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-script-semantics-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      languagePathResolver,
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const typeScript = [
       'interface User { readonly name: string; format(prefix: string): string }',
       'class Greeter implements User {',
@@ -1531,7 +1544,13 @@ void describe('shared external LSP client', () => {
       command: process.execPath,
       args: [fixture, 'documents'],
     })
-    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      languagePathResolver,
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const probe = async (request: Parameters<WorkbenchLanguageServices['getCompletions']>[0]) => {
       const result = await services.getCompletions(request)
       const detail = result.items[0]?.detail
@@ -2337,7 +2356,13 @@ void describe('shared external LSP client', () => {
       documentLanguageId: 'fixture-language',
       hover: { suppressWords: ['component'] },
     })
-    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      languagePathResolver,
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const request = {
       projectRoot,
       path: 'main.fakevel',
@@ -2551,7 +2576,13 @@ void describe('shared external LSP client', () => {
 
   void test('starts the Workbench-owned Pyright runtime', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-pyright-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      languagePathResolver,
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const path = 'pyright-runtime-probe.py'
     const content = 'message: str = 42\n'
 

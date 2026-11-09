@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -7,12 +7,8 @@ import { describe, test } from 'bun:test'
 import * as ts from 'typescript'
 
 import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
-import {
-  clearWorkbenchProjectEslintCache,
-  clearWorkbenchProjectEslintResults,
-  getWorkbenchJavaScriptLintDiagnostics,
-} from '../src/main/workspace/language/JavaScriptLinting'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
+import { ProjectToolWorkerHost } from '../src/main/workspace/language/ProjectToolWorkerHost'
 import {
   buildTypeScriptDocumentSymbols,
   rangeFromTextSpanInContent,
@@ -91,7 +87,13 @@ void describe('language service hot paths', () => {
 
   void test('returns TypeScript document highlights instead of failing on the files-to-search argument', async () => {
     const { projectRoot } = await createTypeScriptProject()
-    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      new PathResolver(),
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     try {
       const result = await services.getDocumentHighlights({
         projectRoot,
@@ -156,55 +158,76 @@ void describe('language service hot paths', () => {
     }
   })
 
-  void test('reuses ESLint results until disk changes and reloads changed project rules', async () => {
-    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-eslint-cache-')))
-    const eslintPackage = resolve(process.cwd(), 'node_modules', 'eslint')
-    const absolutePath = join(projectRoot, 'main.js')
-    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
-    const input = (content: string) => ({ projectRoot, absolutePath, relativePath: 'main.js', content })
-    try {
-      await mkdir(join(projectRoot, 'node_modules'), { recursive: true })
-      await symlink(eslintPackage, join(projectRoot, 'node_modules', 'eslint'), 'dir')
-      await writeFile(join(projectRoot, 'package.json'), JSON.stringify({ type: 'module' }), 'utf8')
-      await writeFile(
-        join(projectRoot, 'eslint.config.js'),
-        "export default [{ files: ['**/*.js'], rules: { 'no-unused-vars': 'error' } }]\n",
-        'utf8'
+  void test('reloads transitive code configuration outside the project between settled requests', async () => {
+    const temporary = await realpath(await mkdtemp(join(tmpdir(), 'workbench-tool-dependencies-')))
+    const projectRoot = join(temporary, 'project')
+    const policyRoot = join(temporary, 'policy')
+    const absolutePath = join(projectRoot, 'main.ts')
+    const policyPath = join(policyRoot, 'policy.cjs')
+    const eslintConfig = join(projectRoot, 'eslint.config.mjs')
+    const prettierConfig = join(projectRoot, 'prettier.config.cjs')
+    const content = 'const unused={alpha:1}\n'
+    const services = new WorkbenchLanguageServices(
+      new PathResolver(),
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
       )
+    )
+    const request = { projectRoot, path: 'main.ts', language: 'typescript', content }
+    const lint = async () => (await services.getDiagnostics(request)).diagnostics.filter((diagnostic) => diagnostic.source === 'eslint')
+    const formatted = async () => (await services.getFormat(request)).changes[0]?.edits[0]?.newText ?? ''
+    const configurationIdentity = async () => Promise.all([eslintConfig, prettierConfig].map(async (file) => ({
+      content: await readFile(file, 'utf8'),
+      mtime: (await stat(file)).mtimeMs,
+    })))
+    try {
+      await Promise.all([
+        mkdir(join(projectRoot, 'node_modules'), { recursive: true }),
+        mkdir(policyRoot, { recursive: true }),
+      ])
+      await Promise.all([
+        symlink(resolve(process.cwd(), 'node_modules', 'eslint'), join(projectRoot, 'node_modules', 'eslint'), 'dir'),
+        symlink(resolve(process.cwd(), 'node_modules', 'prettier'), join(projectRoot, 'node_modules', 'prettier'), 'dir'),
+        writeFile(join(projectRoot, 'package.json'), JSON.stringify({ type: 'module' })),
+        writeFile(join(projectRoot, 'tsconfig.json'), JSON.stringify({ compilerOptions: { noLib: true, types: [] }, include: ['main.ts'] })),
+        writeFile(absolutePath, content),
+        writeFile(policyPath, 'module.exports = { unused: "error", semi: true }\n'),
+        writeFile(join(policyRoot, 'policy.mjs'), "import policy from './policy.cjs'\nexport default policy\n"),
+        writeFile(eslintConfig, "import policy from '../policy/policy.mjs'\nexport default [{ files: ['**/*.ts'], rules: { 'no-unused-vars': policy.unused } }]\n"),
+        writeFile(prettierConfig, "const policy = require('../policy/policy.cjs')\nmodule.exports = { semi: policy.semi }\n"),
+      ])
+      const acquire = () => acquireTypeScriptLanguageService(projectRoot, absolutePath, [absolutePath], new Map([[absolutePath, content]]))
+      const hotService = acquire().service
+      const before = await lint()
+      assert.equal(before.length, 1, before.map((diagnostic) => diagnostic.message).join('; '))
+      assert.match(before[0]!.message, /no-unused-vars/u)
+      assert.ok((await formatted()).endsWith(';\n'))
+      const configurationBefore = await configurationIdentity()
 
-      const first = await getWorkbenchJavaScriptLintDiagnostics(input('const unused = 1\n'))
-      assert.equal(first.length, 1, JSON.stringify(first))
-      assert.match(first[0]!.message, /no-unused-vars/u)
-
-      const repeated = await getWorkbenchJavaScriptLintDiagnostics(input('const unused = 1\n'))
-      assert.equal(repeated, first, 'identical text must hit the cache')
-
-      const edited = await getWorkbenchJavaScriptLintDiagnostics(input('export const used = 1\n'))
-      assert.deepEqual(edited, [])
-
-      clearWorkbenchProjectEslintResults(projectRoot)
-      const afterChange = await getWorkbenchJavaScriptLintDiagnostics(input('const unused = 1\n'))
-      assert.notEqual(afterChange, first, 'a disk change must invalidate the cached result')
-      assert.deepEqual(afterChange, first)
-
-      const configPath = join(projectRoot, 'eslint.config.js')
-      await writeFile(configPath, "export default [{ files: ['**/*.js'], rules: {} }]\n", 'utf8')
-      // ESLint 以毫秒 mtime 标记配置模块；保证这次编辑与首次读取是两个版本。
-      const changedAt = new Date(Date.now() + 1_000)
-      await utimes(configPath, changedAt, changedAt)
-      await services.projectFilesChanged({ projectRoot, paths: ['eslint.config.js'] })
-      assert.deepEqual(await getWorkbenchJavaScriptLintDiagnostics(input('const unused = 1\n')), [])
+      // Change only the dependency outside the project; do not notify a watcher.
+      await writeFile(policyPath, 'module.exports = { unused: "off", semi: false }\n')
+      const after = await lint()
+      assert.equal(after.length, 0, after.map((diagnostic) => diagnostic.message).join('; '))
+      assert.ok((await formatted()).endsWith('}\n'))
+      assert.deepEqual(await configurationIdentity(), configurationBefore)
+      assert.equal(acquire().service, hotService, 'the hot TypeScript service must survive tool isolation')
     } finally {
       await services.dispose()
-      clearWorkbenchProjectEslintCache(projectRoot)
       clearTypeScriptProjectCache(projectRoot)
-      await rm(projectRoot, { recursive: true, force: true })
+      await rm(temporary, { recursive: true, force: true })
     }
   })
 
   void test('a workspace rescan reloads Prettier data configuration and EditorConfig', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-prettier-cache-')))
-    const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      new PathResolver(),
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const configPath = join(projectRoot, '.prettierrc.json')
     const editorConfigPath = join(projectRoot, '.editorconfig')
     const request = {

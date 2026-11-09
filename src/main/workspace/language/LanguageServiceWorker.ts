@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import * as v8 from 'node:v8'
 import { MessagePort, parentPort, workerData } from 'node:worker_threads'
 
+import { Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { VelarWorkbenchLanguageService } from '@shared/contributions/velar/service'
@@ -27,6 +28,8 @@ import {
   type WorkbenchLanguageServiceWorkerRequest,
 } from './LanguageServiceWorkerProtocol'
 import { WorkbenchLanguageServiceWorkerScheduler } from './LanguageServiceWorkerScheduler'
+import { ProjectToolWorkerEndpoint } from './ProjectToolWorkerEndpoint'
+import type { ProjectToolEndpointResponse } from './ProjectToolWorkerHost'
 import {
   configureTypeScriptCancellation,
   configureTypeScriptProjectPool,
@@ -42,9 +45,11 @@ configureTypeScriptProjectPool(v8.getHeapStatistics().heap_size_limit)
 if (!(workerData?.processPort instanceof MessagePort))
   throw new AppError('INVARIANT', 'Language worker needs its main-owned process transport')
 const projects = new AsyncLocalStorage<ExternalLspProjectLease | undefined>()
+const projectTools = new ProjectToolWorkerEndpoint((message) => port.postMessage(message))
 const languageServices = new WorkbenchLanguageServices(
   new PathResolver(),
-  new ExternalLspWorkerTransport(workerData.processPort, () => projects.getStore())
+  new ExternalLspWorkerTransport(workerData.processPort, () => projects.getStore()),
+  projectTools
 )
 
 async function dispatch(
@@ -107,7 +112,9 @@ const cancellation =
     : undefined
 const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
   dispatch: (request, signal) =>
-    projects.run(request.projectLease, () => dispatch(request, signal)),
+    projects.run(request.projectLease, () =>
+      projectTools.withRequest(request, () => dispatch(request, signal))
+    ),
   post: (message) => port.postMessage(message),
   cancellation,
 })
@@ -118,7 +125,8 @@ if (isWorkbenchAppLocale(workerData?.locale)) setWorkbenchMainLocale(workerData.
 
 port.on(
   'message',
-  (message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale) => {
+  (message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale | ProjectToolEndpointResponse) => {
+    if (projectTools.receive(message)) return
     if (isWorkbenchLanguageServiceWorkerLocale(message)) {
       if (isWorkbenchAppLocale(message.locale)) setWorkbenchMainLocale(message.locale)
       return
@@ -151,7 +159,6 @@ function reportMemory(
     rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
     projects: summary.projects,
     files: summary.files,
-    eslintInstances: summary.eslintInstances,
     action,
     reason,
   }
@@ -189,5 +196,8 @@ memoryGuard.unref()
 
 port.on('close', () => {
   clearInterval(memoryGuard)
-  void languageServices.dispose()
+  projectTools.lose(new AppError('CLOSED', 'Language worker owner disconnected'))
+  void languageServices.dispose().catch((error: unknown) =>
+    Log.tag('WorkbenchLanguageService').warn('language_worker_close_failed', { error })
+  )
 })

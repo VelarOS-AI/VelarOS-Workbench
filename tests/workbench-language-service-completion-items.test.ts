@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, test } from 'bun:test'
 
 import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
+import { ProjectToolWorkerHost } from '../src/main/workspace/language/ProjectToolWorkerHost'
 import { clearTypeScriptProjectCache } from '../src/main/workspace/language/TypeScriptProjectHost'
 
 function isInside(projectRoot: string, absolutePath: string): boolean {
@@ -56,7 +57,13 @@ beforeAll(async () => {
   }))
   await mkdir(join(projectRoot, 'src'))
   await writeFile(join(projectRoot, 'src/theme.ts'), 'export function useTheme(): string { return "x" }\n')
-  services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+  services = new WorkbenchLanguageServices(
+    languagePathResolver,
+    new ExternalLspProcessHost(),
+    new ProjectToolWorkerHost(
+      new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+    )
+  )
 })
 
 afterAll(async () => {

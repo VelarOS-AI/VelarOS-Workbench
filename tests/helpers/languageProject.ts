@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 
 import { ExternalLspProcessHost } from '../../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../../src/main/workspace/language/LanguageServices'
+import { ProjectToolWorkerHost } from '../../src/main/workspace/language/ProjectToolWorkerHost'
 import { clearTypeScriptProjectCache } from '../../src/main/workspace/language/TypeScriptProjectHost'
 import { PathResolver } from '../../src/main/workspace/PathResolver'
 import { applyWorkbenchLanguageServiceEditsToContent } from '../../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
@@ -60,7 +61,13 @@ export async function createLanguageProject(
     await writeFile(join(projectRoot, path), content, 'utf8')
   }
   for (const [path, content] of Object.entries(files)) await write(path, content)
-  const services = new WorkbenchLanguageServices(new PathResolver(), new ExternalLspProcessHost())
+  const services = new WorkbenchLanguageServices(
+    new PathResolver(),
+    new ExternalLspProcessHost(),
+    new ProjectToolWorkerHost(
+      new URL('../../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+    )
+  )
 
   return {
     projectRoot,

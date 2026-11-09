@@ -39,25 +39,6 @@ interface EslintModuleLike {
   ESLint?: EslintConstructorLike
 }
 
-interface ProjectEslintEntry {
-  packageJsonPath: string
-  instance: Nullable<EslintInstanceLike>
-}
-
-interface CachedLintResult {
-  content: string
-  diagnostics: WorkbenchLanguageServiceDiagnostic[]
-}
-
-const MaxCachedLintResults = 64
-const projectEslintCache = new Map<string, ProjectEslintEntry>()
-/**
- * 按文件缓存最近一次的 lint 结果：编辑器的 linter 与问题面板、外部改动后的复核会拿同一份文本再问一遍，
- * 类型感知的 ESLint 一次要几十到几百毫秒。磁盘上任何文件变了就整体作废（{@link clearWorkbenchProjectEslintResults}），
- * 别的标签里没保存的改动不作废——VS Code 的 ESLint 也只在文档自己变了时重新 lint。
- */
-const lintResultCache = new Map<string, CachedLintResult>()
-
 function isPathInside(parentPath: string, childPath: string): boolean {
   const childRelativePath = relative(parentPath, childPath)
   return (
@@ -84,10 +65,8 @@ function findNearestPackageJsonPath(projectRoot: string, absolutePath: string): 
   return join(projectRoot, 'package.json')
 }
 
-function loadProjectEslint(projectRoot: string, absolutePath: string): ProjectEslintEntry {
+function loadProjectEslint(projectRoot: string, absolutePath: string): Nullable<EslintInstanceLike> {
   const packageJsonPath = findNearestPackageJsonPath(projectRoot, absolutePath)
-  const cached = projectEslintCache.get(packageJsonPath)
-  if (cached) return cached
 
   let instance: Nullable<EslintInstanceLike> = null
   try {
@@ -106,76 +85,7 @@ function loadProjectEslint(projectRoot: string, absolutePath: string): ProjectEs
     instance = null
   }
 
-  const entry = { packageJsonPath, instance }
-  projectEslintCache.set(packageJsonPath, entry)
-  return entry
-}
-
-export function clearWorkbenchProjectEslintCache(projectRoot?: string): void {
-  clearWorkbenchProjectEslintResults(projectRoot)
-  if (!projectRoot) {
-    projectEslintCache.clear()
-    return
-  }
-
-  for (const packageJsonPath of projectEslintCache.keys()) {
-    if (isPathInside(projectRoot, packageJsonPath)) projectEslintCache.delete(packageJsonPath)
-  }
-}
-
-/**
- * 把项目自己的 ESLint 连同它的类型程序一起放掉。
- *
- * 类型感知规则让 typescript-eslint 为整个仓库建一个 TypeScript 程序（VelarOS-Platform 实测 600MB），
- * 缓存在**项目那份** `@typescript-eslint/typescript-estree` 模块里——扔掉我们的 ESLint 实例它还在。
- * 那个包公开了 `clearCaches()`，能找到就调；找不到（老版本）只能等 worker 重启。下一次 lint 会重建（几秒）。
- */
-export function releaseWorkbenchProjectEslint(): number {
-  const released = projectEslintCache.size
-  for (const entry of projectEslintCache.values()) {
-    try {
-      const projectRequire = createRequire(entry.packageJsonPath)
-      const estree = projectRequire('@typescript-eslint/typescript-estree') as {
-        clearCaches?: () => void
-      }
-      estree.clearCaches?.()
-    } catch {
-      // arch-guard:silent-catch-ok 项目没装 typescript-eslint：没有类型程序可放。
-    }
-  }
-  projectEslintCache.clear()
-  lintResultCache.clear()
-  return released
-}
-
-export function describeWorkbenchProjectEslint(): { instances: number; cachedResults: number } {
-  return { instances: projectEslintCache.size, cachedResults: lintResultCache.size }
-}
-
-/** 项目里有文件在磁盘上变了：缓存的 lint 结果可能已经过时（类型感知规则看得到别的文件），整体作废。 */
-export function clearWorkbenchProjectEslintResults(projectRoot?: string): void {
-  if (!projectRoot) {
-    lintResultCache.clear()
-    return
-  }
-
-  for (const absolutePath of lintResultCache.keys()) {
-    if (isPathInside(projectRoot, absolutePath)) lintResultCache.delete(absolutePath)
-  }
-}
-
-function rememberLintResult(
-  absolutePath: string,
-  content: string,
-  diagnostics: WorkbenchLanguageServiceDiagnostic[]
-): WorkbenchLanguageServiceDiagnostic[] {
-  lintResultCache.delete(absolutePath)
-  lintResultCache.set(absolutePath, { content, diagnostics })
-  if (lintResultCache.size > MaxCachedLintResults) {
-    const oldest = lintResultCache.keys().next().value
-    if (oldest !== undefined) lintResultCache.delete(oldest)
-  }
-  return diagnostics
+  return instance
 }
 
 export async function getWorkbenchJavaScriptLintDiagnostics(input: {
@@ -184,18 +94,15 @@ export async function getWorkbenchJavaScriptLintDiagnostics(input: {
   relativePath: string
   content: string
 }): Promise<WorkbenchLanguageServiceDiagnostic[]> {
-  const eslint = loadProjectEslint(input.projectRoot, input.absolutePath).instance
+  const eslint = loadProjectEslint(input.projectRoot, input.absolutePath)
   if (!eslint) return []
-
-  const cached = lintResultCache.get(input.absolutePath)
-  if (cached && cached.content === input.content) return cached.diagnostics
 
   try {
     const results = await eslint.lintText(input.content, {
       filePath: input.absolutePath,
       warnIgnored: false,
     })
-    return rememberLintResult(input.absolutePath, input.content, results.flatMap((result) =>
+    return results.flatMap((result) =>
       result.messages.map((message) => {
         const startLine = Math.max(1, message.line ?? 1)
         const startColumn = Math.max(1, message.column ?? 1)
@@ -204,10 +111,12 @@ export async function getWorkbenchJavaScriptLintDiagnostics(input: {
           endLine === startLine ? startColumn + 1 : 1,
           message.endColumn ?? startColumn + 1
         )
+        const severity: WorkbenchLanguageServiceDiagnostic['severity'] =
+          message.fatal || message.severity >= 2 ? 'error' : 'warning'
 
         return {
           path: input.relativePath,
-          severity: message.fatal || message.severity >= 2 ? 'error' : 'warning',
+          severity,
           message: message.ruleId ? `${message.message} (${message.ruleId})` : message.message,
           source: 'eslint',
           range: {
@@ -218,9 +127,9 @@ export async function getWorkbenchJavaScriptLintDiagnostics(input: {
           },
         }
       })
-    ))
+    )
   } catch {
     // 项目可能没有 ESLint 配置，或其插件与当前 Node 运行时不兼容；TS 诊断仍然可用。
-    return rememberLintResult(input.absolutePath, input.content, [])
+    return []
   }
 }

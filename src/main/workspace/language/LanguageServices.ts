@@ -1,4 +1,4 @@
-import { basename, resolve } from 'node:path'
+import { resolve } from 'node:path'
 
 import * as ts from 'typescript'
 import {
@@ -83,21 +83,15 @@ import {
 } from './ExternalLspClient'
 import type { ExternalLspLauncherGroup } from './ExternalLspTransport'
 import {
-  clearWorkbenchProjectEslintCache,
-  clearWorkbenchProjectEslintResults,
-  describeWorkbenchProjectEslint,
-  getWorkbenchJavaScriptLintDiagnostics,
-  releaseWorkbenchProjectEslint,
-} from './JavaScriptLinting'
-import {
   hoverBlockPlainText,
   parseLanguageServiceHoverMarkdown,
 } from './LanguageServiceHoverMarkdown'
-import type { WorkbenchLanguageServiceProjectRequest } from './LanguageServiceWorkerProtocol'
+import { getWorkbenchLanguageServiceRequestTimeoutMs, type WorkbenchLanguageServiceProjectRequest } from './LanguageServiceWorkerProtocol'
 import {
   withWorkbenchMarkdownLanguageService,
   type WorkbenchMarkdownLanguageServiceContext,
 } from './MarkdownLanguageService'
+import type { ProjectToolOperations, ProjectToolRunner } from './ProjectToolWorkerHost'
 import { buildTypeScriptCallHierarchy } from './TypeScriptCallHierarchy'
 import {
   buildTypeScriptOrganizeImportsEdits,
@@ -145,9 +139,7 @@ import {
 } from './TypeScriptProjectHost'
 import {
   buildWholeDocumentReplaceEdit,
-  clearWorkbenchProjectPrettierCache,
   formatWorkbenchDocumentBuiltin,
-  formatWorkbenchDocumentWithProjectPrettier,
 } from './WorkbenchDocumentFormatter'
 
 export interface WorkbenchLanguagePathResolver {
@@ -164,10 +156,6 @@ const MaxLocationPreviewLength = 200
 // external-language boundary bounded without dropping valid contextual
 // completions before CodeMirror can filter and rank them.
 const MaximumExternalLspCompletionItems = 512
-const EslintConfigFilePattern =
-  /^(?:eslint\.config\.[cm]?[jt]s|\.eslintrc(?:\.(?:c?js|json|ya?ml))?|\.eslintignore)$/u
-const PrettierConfigFilePattern =
-  /^(?:\.prettierrc(?:\.(?:json5?|ya?ml|toml|[cm]?[jt]s))?|prettier\.config\.[cm]?[jt]s|\.editorconfig|package\.yaml)$/u
 
 function textFromLspContent(value: unknown): string {
   if (typeof value === 'string') return value
@@ -474,7 +462,8 @@ class WorkbenchLanguageServices {
 
   constructor(
     private readonly pathResolver: WorkbenchLanguagePathResolver,
-    launcher: ExternalLspLauncherGroup
+    launcher: ExternalLspLauncherGroup,
+    private readonly projectTools: ProjectToolRunner
   ) {
     this.externalLsp = new ExternalLspManager(launcher)
   }
@@ -482,15 +471,13 @@ class WorkbenchLanguageServices {
   public async invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     clearTypeScriptProjectCache(projectRoot)
-    clearWorkbenchProjectEslintCache(projectRoot)
-    await clearWorkbenchProjectPrettierCache(projectRoot)
     await this.externalLsp.invalidate(projectRoot)
   }
 
   /**
    * 磁盘上这些文件变了（文件监听、Agent 的写文件工具、用户在编辑器与文件树里的写入）：内置 TypeScript 项目按
-   * 磁盘内容更新，项目级 ESLint / Prettier 配置改变时清缓存，外部语言服务器收到标准的文件变更通知。
-   * 监听只能报告整个项目有变化时，项目与配置缓存整体作废。
+   * 磁盘内容更新，外部语言服务器收到标准的文件变更通知。ESLint / Prettier 使用每请求冷工具线程。
+   * 监听只能报告整个项目有变化时，TypeScript 项目缓存整体作废。
    * 路径相对项目根或绝对都收；项目之外的一律忽略，不让一个越界路径把整批通知打掉。
    */
   public async projectFilesChanged(request: {
@@ -505,47 +492,32 @@ class WorkbenchLanguageServices {
 
     if (paths.includes(projectRoot)) clearTypeScriptProjectCache(projectRoot)
     else refreshTypeScriptProjectFilesFromDisk(projectRoot, paths)
-    clearWorkbenchProjectEslintResults(projectRoot)
-    await this.invalidateProjectToolConfiguration(projectRoot, paths)
     await this.externalLsp.filesChanged(projectRoot, paths)
   }
 
-  private async invalidateProjectToolConfiguration(
-    projectRoot: string,
-    paths: readonly string[]
-  ): Promise<void> {
-    const fileNames = paths.map((path) => basename(path))
-    const refreshAll = paths.includes(projectRoot) || fileNames.includes('package.json')
-    if (refreshAll || fileNames.some((name) => EslintConfigFilePattern.test(name)))
-      clearWorkbenchProjectEslintCache(projectRoot)
-    if (refreshAll || fileNames.some((name) => PrettierConfigFilePattern.test(name)))
-      await clearWorkbenchProjectPrettierCache(projectRoot)
-  }
-
   /**
-   * 主动释放内存（见 LanguageServiceMemoryGuard）。`semantic` 只丢类型检查缓存；`inactive` / `all` 连服务带
-   * ESLint 的类型程序一起放掉，下一次请求重建。外部语言服务器是独立进程，不在这里管。
+   * 主动释放内存（见 LanguageServiceMemoryGuard）。`semantic` 只丢类型检查缓存；`inactive` / `all`
+   * 连项目服务放掉，下一次请求重建。项目工具归单次 Tools Worker，不占这个 isolate 的缓存。
    */
-  public trimMemory(level: WorkbenchTypeScriptTrimLevel): { projects: number; eslint: number } {
-    const projects = trimTypeScriptProjects(level)
-    if (level === 'semantic') {
-      clearWorkbenchProjectEslintResults()
-      return { projects, eslint: 0 }
-    }
-    return { projects, eslint: releaseWorkbenchProjectEslint() }
+  public trimMemory(level: WorkbenchTypeScriptTrimLevel): number {
+    return trimTypeScriptProjects(level)
   }
 
-  public describeMemory(): { projects: number; files: number; eslintInstances: number } {
+  public describeMemory(): { projects: number; files: number } {
     const typescript = describeTypeScriptProjects()
     return {
       projects: typescript.projects,
       files: typescript.files,
-      eslintInstances: describeWorkbenchProjectEslint().instances,
     }
   }
 
   public async dispose(): Promise<void> {
-    await this.externalLsp.dispose()
+    const results = await Promise.allSettled([
+      this.externalLsp.dispose(),
+      this.projectTools.close(Date.now() + getWorkbenchLanguageServiceRequestTimeoutMs('shutdown')),
+    ])
+    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+    if (failures.length) throw new AggregateError(failures, 'Language services did not close')
   }
 
   public async resolveLanguageService(
@@ -834,8 +806,17 @@ class WorkbenchLanguageServices {
       .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
   }
 
-  public async getDiagnostics(
+  public getDiagnostics(
     request: WorkbenchLanguageServiceRequest
+  ): Promise<WorkbenchLanguageServiceDiagnosticsResult> {
+    return this.projectTools.run('getDiagnostics', request.projectRoot, (tools) =>
+      this.diagnostics(request, tools)
+    )
+  }
+
+  private async diagnostics(
+    request: WorkbenchLanguageServiceRequest,
+    tools: ProjectToolOperations
   ): Promise<WorkbenchLanguageServiceDiagnosticsResult> {
     const resolved = await this.resolveLanguageService(request)
     if (this.isExternalRuntime(resolved.service?.runtime)) {
@@ -905,7 +886,7 @@ class WorkbenchLanguageServices {
       ...snapshot.service.getSemanticDiagnostics(snapshot.requestAbsolutePath),
       ...snapshot.service.getSuggestionDiagnostics(snapshot.requestAbsolutePath),
     ]
-    const eslintDiagnostics = await getWorkbenchJavaScriptLintDiagnostics({
+    const eslintDiagnostics = await tools.lint({
       projectRoot: snapshot.projectRoot,
       absolutePath: snapshot.requestAbsolutePath,
       relativePath: snapshot.requestPath,
@@ -1264,8 +1245,17 @@ class WorkbenchLanguageServices {
     }
   }
 
-  public async getFormat(
+  public getFormat(
     request: WorkbenchLanguageServiceRequest
+  ): Promise<WorkbenchLanguageServiceFormatResult> {
+    return this.projectTools.run('getFormat', request.projectRoot, (tools) =>
+      this.format(request, tools)
+    )
+  }
+
+  private async format(
+    request: WorkbenchLanguageServiceRequest,
+    tools: ProjectToolOperations
   ): Promise<WorkbenchLanguageServiceFormatResult> {
     const resolved = await this.resolveLanguageService(request)
     const projectRoot = resolved.projectRoot
@@ -1309,7 +1299,7 @@ class WorkbenchLanguageServices {
     }
 
     // 1) 项目 Prettier 优先：命中即为权威结果，不再回退内置。
-    const prettierFormatted = await formatWorkbenchDocumentWithProjectPrettier({
+    const prettierFormatted = await tools.format({
       projectRoot,
       absolutePath,
       content,

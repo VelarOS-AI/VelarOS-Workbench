@@ -11,6 +11,7 @@ import {
   type WorkbenchLanguagePathResolver,
   WorkbenchLanguageServices,
 } from '../src/main/workspace/language/LanguageServices'
+import { ProjectToolWorkerHost } from '../src/main/workspace/language/ProjectToolWorkerHost'
 import { registerWorkbenchLanguageService } from '../src/shared/workbenchLanguageServices'
 
 function isInside(projectRoot: string, absolutePath: string): boolean {
@@ -52,7 +53,13 @@ void test('retains large contextual completion rosters within a safe external LS
     args: [fixture, 'many-completions'],
     documentLanguageId: 'many-completions',
   })
-  const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+  const services = new WorkbenchLanguageServices(
+    languagePathResolver,
+    new ExternalLspProcessHost(),
+    new ProjectToolWorkerHost(
+      new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+    )
+  )
 
   try {
     const result = await services.getCompletions({

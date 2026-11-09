@@ -14,7 +14,6 @@ import { type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceT
  */
 
 interface PrettierModuleLike {
-  clearConfigCache(): Promise<void> | void
   resolveConfig(
     filepath: string,
     options?: { editorconfig?: boolean }
@@ -25,9 +24,6 @@ interface PrettierModuleLike {
     options?: Record<string, unknown>
   ): Promise<{ ignored: boolean; inferredParser: string | null }>
 }
-
-/** 每个 package 边界缓存一次 Prettier 解析结果（命中或未命中都缓存，避免重复探测）。 */
-const projectPrettierCache = new Map<string, Nullable<PrettierModuleLike>>()
 
 function isPathInside(parentPath: string, childPath: string): boolean {
   const childRelativePath = relative(parentPath, childPath)
@@ -60,9 +56,6 @@ function loadProjectPrettier(
   absolutePath: string
 ): Nullable<PrettierModuleLike> {
   const packageJsonPath = findNearestPackageJsonPath(projectRoot, absolutePath)
-  if (projectPrettierCache.has(packageJsonPath))
-    return projectPrettierCache.get(packageJsonPath) ?? null
-
   let module: Nullable<PrettierModuleLike> = null
   try {
     // 从目标文件最近 package 创建 require；Node 会继续向上查找，因此同时兼容子包自装和根目录 hoist。
@@ -73,19 +66,7 @@ function loadProjectPrettier(
     module = null
   }
 
-  projectPrettierCache.set(packageJsonPath, module)
   return module
-}
-
-export async function clearWorkbenchProjectPrettierCache(projectRoot?: string): Promise<void> {
-  const modules = new Set<PrettierModuleLike>()
-  for (const [packageJsonPath, prettier] of projectPrettierCache) {
-    if (projectRoot && !isPathInside(projectRoot, packageJsonPath)) continue
-    if (prettier) modules.add(prettier)
-    projectPrettierCache.delete(packageJsonPath)
-  }
-  // require 会继续返回同一模块；配置解析与 EditorConfig 的缓存也必须经公开 API 清掉。
-  await Promise.all([...modules].map((prettier) => prettier.clearConfigCache()))
 }
 
 /**

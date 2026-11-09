@@ -15,6 +15,7 @@ import { AppError } from '@velaros-ai/velaros/core/error'
 import { ExternalLspProcessHost } from '../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import { withWorkbenchMarkdownLanguageService } from '../src/main/workspace/language/MarkdownLanguageService'
+import { ProjectToolWorkerHost } from '../src/main/workspace/language/ProjectToolWorkerHost'
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import {
   usesWorkbenchBuiltinLanguageService,
@@ -124,7 +125,13 @@ void describe('Workbench Markdown support', () => {
 
   void test('provides Markdown symbols, definitions, and broken-link diagnostics', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-markdown-'))
-    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      languagePathResolver,
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const guide = '# Install\n\nRun the installer.\n'
     const readme = [
       '# Workbench',

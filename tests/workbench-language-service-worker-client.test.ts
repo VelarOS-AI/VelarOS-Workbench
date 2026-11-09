@@ -8,12 +8,12 @@ import { Worker } from 'node:worker_threads'
 import { describe, test } from 'bun:test'
 
 import {
-  getWorkbenchLanguageServiceRequestTimeoutMs,
   WorkbenchLanguageServiceWorkerClient,
   type WorkbenchLanguageServiceWorkerFactoryOptions,
   type WorkbenchLanguageServiceWorkerPort,
 } from '../src/main/workspace/language/LanguageServiceWorkerClient'
 import {
+  getWorkbenchLanguageServiceRequestTimeoutMs,
   isWorkbenchLanguageServiceRequestCancelled,
   isWorkbenchLanguageServiceWorkerControl,
   type WorkbenchLanguageServiceWorkerMessage,

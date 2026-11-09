@@ -15,6 +15,7 @@ import {
   type WorkbenchLanguageServiceWorkerResponse,
 } from '../src/main/workspace/language/LanguageServiceWorkerProtocol'
 import { WorkbenchLanguageServiceWorkerScheduler } from '../src/main/workspace/language/LanguageServiceWorkerScheduler'
+import { ProjectToolWorkerHost } from '../src/main/workspace/language/ProjectToolWorkerHost'
 import {
   clearTypeScriptProjectCache,
   configureTypeScriptCancellation,
@@ -137,7 +138,13 @@ void describe('language worker scheduler', () => {
 
   void test('stops a superseded TypeScript semantic pass at its next checkpoint', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-ts-cancel-')))
-    const services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+    const services = new WorkbenchLanguageServices(
+      languagePathResolver,
+      new ExternalLspProcessHost(),
+      new ProjectToolWorkerHost(
+        new URL('../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+      )
+    )
     const buffer = new Int32Array(createWorkbenchLanguageServiceCancellationBuffer())
     const content = 'export function greet(name: string) { return name }\nexport class Box {}\n'
     await writeFile(join(projectRoot, 'main.ts'), content)

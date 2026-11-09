@@ -6,6 +6,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { ExternalLspProcessHost } from '../../src/main/workspace/language/ExternalLspProcessHost'
 import { WorkbenchLanguageServices } from '../../src/main/workspace/language/LanguageServices'
+import { ProjectToolWorkerHost } from '../../src/main/workspace/language/ProjectToolWorkerHost'
 import { VelarWorkbenchLanguageService } from '../../src/shared/contributions/velar/service'
 import { registerWorkbenchLanguageService } from '../../src/shared/workbenchLanguageServices'
 
@@ -344,7 +345,13 @@ try {
     command: nodeExecutable,
     args: [installedProjectCli, 'lsp'],
   })
-  services = new WorkbenchLanguageServices(languagePathResolver, new ExternalLspProcessHost())
+  services = new WorkbenchLanguageServices(
+    languagePathResolver,
+    new ExternalLspProcessHost(),
+    new ProjectToolWorkerHost(
+      new URL('../../src/main/workspace/language/ProjectToolWorker.ts', import.meta.url)
+    )
+  )
   const resolved = await services.resolveLanguageService({
     projectRoot,
     path: 'src/main.vel',

@@ -174,6 +174,21 @@ export function getWorkbenchLanguageServiceWorkerPriority(
   return BackgroundLanguageServiceOperations.has(operation) ? 'background' : 'interactive'
 }
 
+/** 排队、冷工具启动/执行/退出共用调用方这一张预算，不在下层续期。 */
+export function getWorkbenchLanguageServiceRequestTimeoutMs(
+  operation: WorkbenchLanguageServiceWorkerOperation
+): number {
+  if (operation === 'getDiagnostics') return 90_000
+  switch (getWorkbenchLanguageServiceWorkerPriority(operation)) {
+    case 'background':
+      return 30_000
+    case 'lifecycle':
+      return 15_000
+    default:
+      return 12_000
+  }
+}
+
 export function isWorkbenchLanguageServiceOperationSuperseded(
   operation: WorkbenchLanguageServiceWorkerOperation
 ): boolean {

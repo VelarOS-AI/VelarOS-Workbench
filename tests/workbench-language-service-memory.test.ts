@@ -1,17 +1,11 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import {
-  clearWorkbenchProjectEslintCache,
-  describeWorkbenchProjectEslint,
-  getWorkbenchJavaScriptLintDiagnostics,
-  releaseWorkbenchProjectEslint,
-} from '../src/main/workspace/language/JavaScriptLinting'
 import {
   computeWorkbenchLanguageWorkerHeapLimitMb,
   decideWorkbenchLanguageMemoryAction,
@@ -123,24 +117,6 @@ void describe('language worker memory guard', () => {
     }
   })
 
-  void test('releases the project ESLint instance and its cached results', async () => {
-    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-eslint-release-')))
-    const absolutePath = join(projectRoot, 'main.js')
-    try {
-      await mkdir(join(projectRoot, 'node_modules'), { recursive: true })
-      await symlink(resolve(process.cwd(), 'node_modules', 'eslint'), join(projectRoot, 'node_modules', 'eslint'), 'dir')
-      await writeFile(join(projectRoot, 'package.json'), JSON.stringify({ type: 'module' }), 'utf8')
-      await writeFile(join(projectRoot, 'eslint.config.js'), "export default [{ files: ['**/*.js'], rules: {} }]\n", 'utf8')
-
-      await getWorkbenchJavaScriptLintDiagnostics({ projectRoot, absolutePath, relativePath: 'main.js', content: 'export const a = 1\n' })
-      assert.deepEqual(describeWorkbenchProjectEslint(), { instances: 1, cachedResults: 1 })
-      assert.equal(releaseWorkbenchProjectEslint(), 1)
-      assert.deepEqual(describeWorkbenchProjectEslint(), { instances: 0, cachedResults: 0 })
-    } finally {
-      clearWorkbenchProjectEslintCache(projectRoot)
-      await rm(projectRoot, { recursive: true, force: true })
-    }
-  })
 })
 
 class FakeWorker implements WorkbenchLanguageServiceWorkerPort {
@@ -187,7 +163,7 @@ void describe('language worker client under memory failures', () => {
 
     const pending = client.getDefinition(request)
     // 内存通报不是答复：只记日志，不影响挂起的请求。
-    workers[0]!.notify({ notification: 'memory', heapUsedMb: 3000, heapLimitMb: 4096, rssMb: 3500, projects: 4, files: 1200, eslintInstances: 1, action: 'inactive', reason: 'pressure' })
+    workers[0]!.notify({ notification: 'memory', heapUsedMb: 3000, heapLimitMb: 4096, rssMb: 3500, projects: 4, files: 1200, action: 'inactive', reason: 'pressure' })
     const oom = Object.assign(new Error('Worker terminated due to reaching memory limit: JS heap out of memory'), { code: 'ERR_WORKER_OUT_OF_MEMORY' })
     workers[0]!.fail(oom)
     await assert.rejects(pending, (error: { code?: string; message: string }) =>
