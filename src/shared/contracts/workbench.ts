@@ -252,15 +252,7 @@ export interface WorkbenchGetCodeGraphResult {
 }
 
 export type WorkbenchProjectAiRuleSource =
-  | 'velar'
-  | 'reasonix'
-  | 'codex'
-  | 'claude'
-  | 'cursor'
-  | 'copilot'
-  | 'windsurf'
-  | 'cline'
-  | 'roo'
+  'velar' | 'reasonix' | 'codex' | 'claude' | 'cursor' | 'copilot' | 'windsurf' | 'cline' | 'roo'
 
 export interface WorkbenchProjectAiRulesRequest {
   projectRoot: string
@@ -343,8 +335,7 @@ export interface WorkbenchLanguageServiceRequest {
   format?: WorkbenchLanguageServiceEditFormat
 }
 
-export interface WorkbenchLanguageServiceExtensionRequest
-  extends WorkbenchLanguageServiceRequest {
+export interface WorkbenchLanguageServiceExtensionRequest extends WorkbenchLanguageServiceRequest {
   /** Contribution-owned id declared by the selected language service. */
   requestId: string
   /** JSON-compatible request fields; textDocument/version remain host-owned. */
@@ -475,8 +466,7 @@ export interface WorkbenchLanguageServiceCompletionResult {
 }
 
 /** 补全项接受前后的细节：位置与正文取发起补全时的那一份。 */
-export interface WorkbenchLanguageServiceCompletionResolveRequest
-  extends WorkbenchLanguageServicePositionRequest {
+export interface WorkbenchLanguageServiceCompletionResolveRequest extends WorkbenchLanguageServicePositionRequest {
   item: WorkbenchLanguageServiceCompletionResolveData
 }
 
@@ -755,8 +745,7 @@ export interface WorkbenchLanguageServiceCodeActionsResult {
 }
 
 /** 选中了一个带 `resolve` 的动作：按发起时的正文与范围算出它的改动。 */
-export interface WorkbenchLanguageServiceCodeActionResolveRequest
-  extends WorkbenchLanguageServiceRequest {
+export interface WorkbenchLanguageServiceCodeActionResolveRequest extends WorkbenchLanguageServiceRequest {
   range: WorkbenchLanguageServiceRange
   resolve: WorkbenchLanguageServiceCodeActionResolveData
 }
@@ -787,8 +776,7 @@ export type WorkbenchLanguageServiceCallHierarchyDirection = 'incoming' | 'outgo
  * 某个位置上的函数的一层调用关系。界面先拿光标的位置问，再拿某个调用方（被调用方）名字的位置问它的下一层，
  * 一层一层展开。
  */
-export interface WorkbenchLanguageServiceCallHierarchyRequest
-  extends WorkbenchLanguageServicePositionRequest {
+export interface WorkbenchLanguageServiceCallHierarchyRequest extends WorkbenchLanguageServicePositionRequest {
   direction: WorkbenchLanguageServiceCallHierarchyDirection
 }
 
@@ -1203,8 +1191,6 @@ export interface WorkbenchTerminalStopRequest {
   sessionId: string
   /** 终止信号，默认 SIGTERM。SIGINT = 往伪终端写 Ctrl+C，只打断前台程序，shell 本身活着。 */
   signal?: 'SIGINT' | 'SIGTERM'
-  /** 跳过延迟 SIGKILL 兜底强杀。 */
-  skipForceKill?: boolean
   /** 等进程真的退出（或强杀后再等一会儿）才返回：重新运行要等旧进程让出端口。 */
   waitForExit?: boolean
 }

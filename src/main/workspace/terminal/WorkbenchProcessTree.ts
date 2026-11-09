@@ -24,8 +24,8 @@ export function collectWorkbenchProcessTree(processList: string, rootPid: number
   const tree: number[] = []
   const seen = new Set<number>()
   const queue = [rootPid]
-  while (queue.length > 0) {
-    const pid = queue.shift()!
+  for (let index = 0; index < queue.length; index += 1) {
+    const pid = queue[index]!
     if (seen.has(pid)) continue
     seen.add(pid)
     tree.push(pid)
@@ -60,8 +60,12 @@ export async function listWorkbenchProcessTree(rootPid: number): Promise<number[
             maxBuffer: ProcessListMaxBytes,
           })
     return collectWorkbenchProcessTree(stdout, rootPid)
-  } catch {
-    // arch-guard:silent-catch-ok 列不出进程表（沙箱、没有 ps）时退回只结束根进程，关伪终端时前台进程组还会收到 SIGHUP。
+  } catch (error) {
+    // 列不出进程表（沙箱、没有 ps）时仍关闭根进程；关伪终端时前台进程组还会收到 SIGHUP。
+    console.warn('[WorkbenchTerminal] process tree unavailable; terminating root only', {
+      rootPid,
+      error,
+    })
     return [rootPid]
   }
 }

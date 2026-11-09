@@ -52,10 +52,10 @@ export interface WorkbenchProcessTreeOps {
 
 export interface WorkbenchPtyFactory {
   spawn(file: string, args: string[], options: WorkbenchPtySpawnOptions): WorkbenchPtyProcess
-  /** 结束会话时对整棵进程树下手的办法；测试里的假工厂不给，就只对伪终端本身发信号，不会碰到真实进程。 */
-  readonly processTree?: WorkbenchProcessTreeOps
-  /** 一个进程此刻所在的目录（问操作系统）；问不到给 null，假工厂不给就一律当作问不到。 */
-  readonly readCwd?: (pid: number) => Promise<Nullable<string>>
+  /** 结束会话时清理整棵进程树；假工厂显式注入隔离实现。 */
+  readonly processTree: WorkbenchProcessTreeOps
+  /** 一个进程此刻所在的目录（问操作系统）；平台不支持或问不到时返回 null。 */
+  readonly readCwd: (pid: number) => Promise<Nullable<string>>
 }
 
 type NodePtyModule = typeof import('@lydell/node-pty')

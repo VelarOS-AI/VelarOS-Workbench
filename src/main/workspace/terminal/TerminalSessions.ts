@@ -1,9 +1,8 @@
 /**
  * 工作台持久终端会话服务：每个会话一个真正的伪终端（PTY）。
  *
- * 以前子进程用 pipe stdio：shell 不是交互态，没有提示符、没有 tab 补全、没有颜色，Ctrl+C 要靠给进程组发信号，
- * 目录跟随要靠往 stdin 里塞探针命令。现在 shell 坐在 PTY 上，提示符、行编辑、补全、颜色、进度条、交互式程序
- * 都是 shell 和程序自己的事；renderer 只负责把字节送进 xterm、把按键送回来。
+ * shell 坐在 PTY 上，提示符、行编辑、补全、颜色、进度条与交互由 shell 和程序处理；
+ * renderer 只负责把字节送进 xterm、把按键送回来。
  *
  * 键控轴：service 单例（Parts 装配），会话按请求 `projectRoot` 解析根、按随机 `sessionId` 登记进程内 Map；
  * `WorkbenchTerminalStartResult.sessionId` 是 PTY 会话 id，是本服务对外的持久句柄。多卡 = 每次运行新开会话，
@@ -13,7 +12,7 @@ import { stat } from 'node:fs/promises'
 
 import { isEmpty } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
+import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 import { type TimerLease, TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
 import {
@@ -73,7 +72,7 @@ interface WorkbenchTerminalSession {
   /** 因为 renderer 跟不上，暂停读伪终端了。 */
   paused: boolean
   /** 进程退出时通知等待者（停止时要等它真的退出）。 */
-  exitWaiters: Array<() => void>
+  exitWaiters: Set<() => void>
 }
 
 /**
@@ -118,7 +117,7 @@ export function clampTerminalDimension(
   return Math.min(max, Math.max(1, Math.floor(value)))
 }
 
-class TerminalSessions {
+export class TerminalSessions {
   /** sessionId -> 会话实体；存活的伪终端都在这里登记。 */
   private readonly terminalSessions = new Map<string, WorkbenchTerminalSession>()
 
@@ -144,8 +143,8 @@ class TerminalSessions {
     const shellSpec = initialCommand
       ? this.commandHelper.getShellSpec(initialCommand)
       : {
-          file: systemPlatformCompatibility.getPreferredShellPath(process.env),
-          args: systemPlatformCompatibility.getInteractiveShellArgs(),
+          file: currentPlatform.getPreferredShellPath(process.env),
+          args: currentPlatform.getInteractiveShellArgs(),
           windowsVerbatimArguments: false,
         }
     const cols = clampTerminalDimension(request.cols, DefaultTerminalColumns, MaxTerminalColumns)
@@ -178,7 +177,7 @@ class TerminalSessions {
       flushLease: null,
       unackedChars: 0,
       paused: false,
-      exitWaiters: [],
+      exitWaiters: new Set(),
     }
     this.terminalSessions.set(sessionId, session)
 
@@ -201,7 +200,7 @@ class TerminalSessions {
         signal: endedBySignal === undefined ? undefined : String(endedBySignal),
       })
       this.dropSession(sessionId, session)
-      for (const waiter of session.exitWaiters.splice(0)) waiter()
+      for (const waiter of session.exitWaiters) waiter()
     })
 
     return {
@@ -246,7 +245,7 @@ class TerminalSessions {
     const session = this.terminalSessions.get(request.sessionId)
     if (!session || session.exited) return { cwd: null }
     assertSessionOwner(session, ownerId)
-    return { cwd: (await this.ptyFactory.readCwd?.(session.pty.pid)) ?? null }
+    return { cwd: await this.ptyFactory.readCwd(session.pty.pid) }
   }
 
   /** renderer 确认把一段输出写进了 xterm：降到低水位以下就接着读伪终端。 */
@@ -290,7 +289,7 @@ class TerminalSessions {
     let tree = [session.pty.pid]
     try {
       // 趁 shell 仍在时快照进程树；失败仍须清理 PTY，且不能向调用者报成功。
-      tree = await this.listSessionProcessTree(session)
+      tree = await this.ptyFactory.processTree.list(session.pty.pid)
     } catch (error) {
       console.error('[WorkbenchTerminal] process tree snapshot failed', {
         sessionId: request.sessionId,
@@ -301,13 +300,11 @@ class TerminalSessions {
     }
     const exited = request.waitForExit ? this.waitForExit(session) : null
     errors.push(...(await this.signalSessionProcesses(request.sessionId, session, tree, 'SIGTERM')))
-    if (!request.skipForceKill) {
-      // 独立于会话计时器，shell 先退出也继续清理子孙；方法内部接住并记录所有错误。
-      const forceKill = setTimeout(() => {
-        void this.signalSessionProcesses(request.sessionId, session, tree, 'SIGKILL')
-      }, this.commandHelper.getForceKillDelayMs())
-      forceKill.unref?.()
-    }
+    // 独立于会话计时器，shell 先退出也继续清理子孙；方法内部接住并记录所有错误。
+    const forceKill = setTimeout(() => {
+      void this.signalSessionProcesses(request.sessionId, session, tree, 'SIGKILL')
+    }, this.commandHelper.getForceKillDelayMs())
+    forceKill.unref()
     if (exited) await exited
     if (errors.length > 0)
       throw new AggregateError(errors, `Failed to stop terminal ${request.sessionId}`)
@@ -322,7 +319,7 @@ class TerminalSessions {
   ): Promise<unknown[]> {
     const errors: unknown[] = []
     try {
-      await this.ptyFactory.processTree?.signal(tree, signal)
+      await this.ptyFactory.processTree.signal(tree, signal)
     } catch (error) {
       console.error('[WorkbenchTerminal] process tree signal failed', {
         sessionId,
@@ -358,23 +355,18 @@ class TerminalSessions {
     )
   }
 
-  private async listSessionProcessTree(session: WorkbenchTerminalSession): Promise<number[]> {
-    return (await this.ptyFactory.processTree?.list(session.pty.pid)) ?? [session.pty.pid]
-  }
-
   /** 等会话的进程退出；强杀的延迟过后再多等一会儿，还没退也返回。 */
   private waitForExit(session: WorkbenchTerminalSession): Promise<void> {
     if (session.exited) return Promise.resolve()
     return new Promise((resolve) => {
-      const timeout = setTimeout(
-        resolve,
-        this.commandHelper.getForceKillDelayMs() + ExitWaitGraceMs
-      )
-      timeout.unref?.()
-      session.exitWaiters.push(() => {
+      const finish = (): void => {
         clearTimeout(timeout)
+        session.exitWaiters.delete(finish)
         resolve()
-      })
+      }
+      const timeout = setTimeout(finish, this.commandHelper.getForceKillDelayMs() + ExitWaitGraceMs)
+      timeout.unref()
+      session.exitWaiters.add(finish)
     })
   }
 
@@ -449,5 +441,3 @@ function assertSessionOwner(session: WorkbenchTerminalSession, ownerId: Nullable
 
   throw new AppError('PERMISSION', workbenchMainText('terminal.sessionNotInWindow'))
 }
-
-export { TerminalSessions, TerminalSessions as WorkbenchTerminalService }

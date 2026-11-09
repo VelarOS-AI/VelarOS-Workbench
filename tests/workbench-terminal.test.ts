@@ -112,8 +112,8 @@ function createFakeFactory(
         spawned.push(pty)
         return pty
       },
-      processTree,
-      readCwd,
+      processTree: processTree ?? { list: async (pid) => [pid], signal: () => undefined },
+      readCwd: readCwd ?? (async () => null),
     },
   }
 }
@@ -506,11 +506,11 @@ void describe('terminal sessions on a pseudo-terminal', () => {
 
   void test('surfaces a missing terminal backend as a platform error instead of crashing', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-missing-')))
-    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), {
-      spawn: () => {
-        throw new Error('no prebuilt binary')
-      },
-    })
+    const { factory } = createFakeFactory()
+    factory.spawn = () => {
+      throw new Error('no prebuilt binary')
+    }
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
     try {
       await assert.rejects(
         terminal.startTerminalSession({ projectRoot }, () => undefined),

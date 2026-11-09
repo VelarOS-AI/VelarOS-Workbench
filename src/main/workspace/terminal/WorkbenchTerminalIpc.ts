@@ -1,5 +1,5 @@
 /**
- * 持久终端 IPC 装配：handle start / write / resize / stop 四通道，start 的流式输出只回发给发起窗口。
+ * 持久终端 IPC 装配：启动、输入、尺寸、停止、目录与输出确认；流式输出只回发给发起窗口。
  *
  * IPC 入参是边界外来数据，在此解析一次（形状不符按无效请求处理），服务内部只见类型。异常经
  * `callWithEnvelope` 降为错误信封，renderer 侧再升回 Result。终端输出走 `event.sender.send`
@@ -7,8 +7,6 @@
  * 路由到对应终端/运行卡。
  */
 import { ipcMain } from 'electron'
-
-import { toOptional } from '@velaros-ai/velaros/core'
 
 import {
   type WorkbenchTerminalInputRequest,
@@ -21,9 +19,9 @@ import { readWorkbenchRunEnvironment } from '../../../shared/workbenchRunEnviron
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
 import {
   callWithEnvelope,
+  callWithEnvelopeSync,
   hasStringFields,
   invalidRequest,
-  isRecord,
   optionalBoolean,
   optionalNumber,
   optionalString,
@@ -51,7 +49,7 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
   )
 
   ipcMain.handle(WorkbenchTerminalChannels.write, (event, request: unknown) =>
-    callWithEnvelope(async () => {
+    callWithEnvelopeSync(() => {
       const parsed = parseInputRequest(request)
       if (!parsed) return invalidRequest()
 
@@ -60,7 +58,7 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
   )
 
   ipcMain.handle(WorkbenchTerminalChannels.resize, (event, request: unknown) =>
-    callWithEnvelope(async () => {
+    callWithEnvelopeSync(() => {
       const parsed = parseResizeRequest(request)
       if (!parsed) return invalidRequest()
 
@@ -69,16 +67,16 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
   )
 
   ipcMain.handle(WorkbenchTerminalChannels.stop, (event, request: unknown) =>
-    callWithEnvelope(async () => {
+    callWithEnvelope(() => {
       const parsed = parseStopRequest(request)
       if (!parsed) return invalidRequest()
 
-      await terminal.stopTerminalSession(parsed, event.sender.id)
+      return terminal.stopTerminalSession(parsed, event.sender.id)
     })
   )
 
   ipcMain.handle(WorkbenchTerminalChannels.cwd, (event, request: unknown) =>
-    callWithEnvelope(async () => {
+    callWithEnvelope(() => {
       if (!hasStringFields(request, ['sessionId'])) return invalidRequest()
 
       return terminal.readTerminalCwd(
@@ -90,7 +88,7 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
 
   // 单向消息，不回复：会话已经结束、请求不对都直接忽略。
   ipcMain.on(WorkbenchTerminalChannels.acknowledge, (event, request: unknown) => {
-    if (!hasStringFields(request, ['sessionId']) || !isRecord(request)) return
+    if (!hasStringFields(request, ['sessionId'])) return
     const chars = request['chars']
     if (typeof chars !== 'number' || !Number.isFinite(chars) || chars <= 0) return
     try {
@@ -131,7 +129,7 @@ function parseInputRequest(input: unknown): Nullable<WorkbenchTerminalInputReque
 }
 
 function parseResizeRequest(input: unknown): Nullable<WorkbenchTerminalResizeRequest> {
-  if (!hasStringFields(input, ['sessionId']) || !isRecord(input)) return null
+  if (!hasStringFields(input, ['sessionId'])) return null
   if (typeof input['cols'] !== 'number' || typeof input['rows'] !== 'number') return null
 
   return {
@@ -142,18 +140,11 @@ function parseResizeRequest(input: unknown): Nullable<WorkbenchTerminalResizeReq
 }
 
 function parseStopRequest(input: unknown): Nullable<WorkbenchTerminalStopRequest> {
-  if (!hasStringFields(input, ['sessionId']) || !isRecord(input)) return null
-
-  const signal = parseStopSignal(input['signal'])
+  if (!hasStringFields(input, ['sessionId'])) return null
 
   return {
     sessionId: input['sessionId'] as string,
-    signal: toOptional(signal),
-    ...optionalBoolean(input, 'skipForceKill'),
+    signal: input['signal'] === 'SIGINT' ? 'SIGINT' : 'SIGTERM',
     ...optionalBoolean(input, 'waitForExit'),
   }
-}
-
-function parseStopSignal(input: unknown): Nullable<'SIGINT' | 'SIGTERM'> {
-  return input === 'SIGINT' || input === 'SIGTERM' ? input : null
 }
