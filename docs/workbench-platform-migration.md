@@ -1,4 +1,6 @@
-# Workbench → Platform 0.9.0 接入需求
+# Workbench → Platform 0.9.1 接入准备
+
+主协调已确认：空闲控制 lease 由 Platform owner 在独立 0.9.1 合同与双包中交付；冻结的 0.9.0 不改、不安装。
 
 ## 空闲会话控制缺口
 
@@ -32,7 +34,9 @@ Workbench 的空闲入口没有上一轮 request/model/权限选项，不能为�
 
 ## 一次接入所需归档
 
-两份必须配套；Workbench 使用项目/代码/图像、浏览器、网页和产品会话协作，不能仅接基础包。
+目标为配套的 `@velaros-ai/velaros@0.9.1` 与 `@velaros-ai/capabilities@0.9.1`，准确 receipt/哈希待交付。
+Workbench 使用项目/代码/图像、浏览器、网页和产品会话协作，不能仅接基础包。
+下表是已核对的 **0.9.0 冻结参考**，不能拿它冒充补齐控制合同的 0.9.1：
 
 来源：Platform commit `697bcba2fdff5b7160116a7c936876df8bf4abb2`。
 receipt：`D:/Projects/VelarOS-Platform/.velaros-workspace/candidates/platform-0.9.0-ba4c31c4-7455cef2/candidate.json`。
@@ -49,3 +53,14 @@ Linux 和供应商 API 仍未覆盖。消费时复制到 Workbench 自己的哈�
 切换范围：manifest/lock/快照来源；专项 import → capabilities；Node 工厂 → velaros/node；显式项目端口、
 context source/snapshot、worker/memory/widget 装配；执行身份与授权 scope；新会话数据代际；发行外置包闭包。
 继续使用 WorkbenchShellHostRegistry 唯一应用级 Host，产品项目/浏览器选择、登记和权限策略不进入核心。
+
+## 已核出的另外两项合同变化
+
+- `capabilities/sessions` 的 `SessionTold.status` 仅 `queued`，tell 只给目标活动 run 追加 guidance，空闲拒绝。
+  Workbench 现 `WorkbenchSessionPeers.ts:103` 会开新轮/排到下一轮并返回 delivered；切换时改为新合同，不能只换 import。
+- 0.9.0 capabilities 的 optional peer 是 Electron `42.11.16`、React `19.3.1`，而 Workbench 实装
+  Electron `41.10.2`、React `19.2.5`；现用 0.7.0 包声明为 Electron `>=41.0.0`、React `^19.0.0`。
+  请 Platform owner 在 0.9.1 明确支持范围或说明必须升级的真实 API，Workbench 不用 override 掩盖不匹配。
+
+活跃会话拟使用根 createRuntime + `/node.createNodeExecutionEnvironment` + 显式 localContextStorage，
+由产品统一派生 executionIdentity/authorizationScope 并供控制 lease 核对；不复制 NodeRuntime 便利入口的私有二次哈希公式。
