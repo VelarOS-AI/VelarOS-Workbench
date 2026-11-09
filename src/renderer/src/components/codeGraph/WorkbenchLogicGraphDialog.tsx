@@ -3,6 +3,7 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -604,6 +605,18 @@ function dirtyOpenFiles(openTabs: readonly WorkbenchOpenEditorTab[]) {
     .map((tab) => ({ path: tab.path, content: tab.content }))
 }
 
+function openFileContent(
+  path: string,
+  openTabs: readonly WorkbenchOpenEditorTab[],
+  selectedFilePath: Nullable<string>,
+  selectedContent: string
+): Nullable<string> {
+  return (
+    openTabs.find((tab) => tab.path === path)?.content ??
+    (selectedFilePath === path ? selectedContent : null)
+  )
+}
+
 function manifestEntryPath(content: string): Nullable<string> {
   try {
     const manifest = JSON.parse(content) as { entry?: unknown }
@@ -746,6 +759,7 @@ export function WorkbenchLogicGraphEditor({
   const [panning, setPanning] = useState(false)
   const [selectedNodeCode, setSelectedNodeCode] = useState<Nullable<NodeCodeSnippet>>(null)
   const requestSequence = useRef(0)
+  const sourceRequestRef = useRef<Nullable<{ path: string; content: Nullable<string> }>>(null)
   const nodeDragRef = useRef<Nullable<NodeDragState>>(null)
   const graphPanRef = useRef<Nullable<GraphPanState>>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -764,9 +778,25 @@ export function WorkbenchLogicGraphEditor({
     [projectSnapshots, snapshotRoots]
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     projectSnapshotsRef.current = projectSnapshots
   }, [projectSnapshots])
+
+  useLayoutEffect(
+    () => () => {
+      sourceRequestRef.current = null
+    },
+    [active, projectRoot, runtime, scopePaths]
+  )
+
+  useLayoutEffect(() => {
+    const request = sourceRequestRef.current
+    if (
+      request &&
+      openFileContent(request.path, openTabs, selectedFilePath, selectedContent) !== request.content
+    )
+      sourceRequestRef.current = null
+  }, [openTabs, selectedContent, selectedFilePath])
 
   const load = useCallback(
     async (forceSnapshot = false): Promise<void> => {
@@ -818,13 +848,11 @@ export function WorkbenchLogicGraphEditor({
           path: string,
           previous: VelarLogicGraphSnapshot | null
         ): Promise<VelarLogicGraphSnapshot> => {
-          const activeTab = openTabs.find((tab) => tab.path === path)
           const response = await runtime.kernel.project.requestWorkbenchLanguageServiceExtension({
             projectRoot,
             path,
             language: 'velar',
-            content:
-              activeTab?.content ?? (selectedFilePath === path ? selectedContent : undefined),
+            content: openFileContent(path, openTabs, selectedFilePath, selectedContent) ?? undefined,
             openFiles: dirtyOpenFiles(openTabs),
             requestId: VelarOwnershipGraphRequestId,
             parameters: {
@@ -879,17 +907,19 @@ export function WorkbenchLogicGraphEditor({
     ]
   )
 
-  useEffect(() => {
-    if (!active) return
+  useLayoutEffect(() => {
+    if (!active) {
+      requestSequence.current += 1
+      setLoading(false)
+      setSelectedNodeId(null)
+      return
+    }
     const timer = setTimeout(() => void load(), snapshot ? 120 : 0)
-    return () => clearTimeout(timer)
+    return () => {
+      requestSequence.current += 1
+      clearTimeout(timer)
+    }
   }, [active, load, refreshVersion])
-
-  useEffect(() => {
-    if (active) return
-    requestSequence.current += 1
-    setSelectedNodeId(null)
-  }, [active])
 
   useEffect(() => {
     setSelectedNodeId(null)
@@ -1018,9 +1048,12 @@ export function WorkbenchLogicGraphEditor({
     }
     let cancelled = false
     const sourceNode = snapshot?.nodes.find((node) => node.id === selectedNode.id)
-    const openContent =
-      openTabs.find((tab) => tab.path === selectedNode.path)?.content ??
-      (selectedFilePath === selectedNode.path ? selectedContent : null)
+    const openContent = openFileContent(
+      selectedNode.path,
+      openTabs,
+      selectedFilePath,
+      selectedContent
+    )
     const applyContent = (content: string): void => {
       if (!cancelled) {
         setSelectedNodeCode(nodeCodeSnippet(content, sourceNode?.range, selectedNode.line))
@@ -1180,19 +1213,35 @@ export function WorkbenchLogicGraphEditor({
   }
 
   async function openSource(path: string, line?: number, column?: number): Promise<void> {
+    if (!active) return
+    const request = {
+      path,
+      content: openFileContent(path, openTabs, selectedFilePath, selectedContent),
+    }
+    sourceRequestRef.current = request
+    setError(null)
     try {
-      const result = await runtime.kernel.project.readWorkbenchFile({
-        projectRoot,
-        path,
-        maxChars: 2_000_000,
-      })
+      let content = request.content
+      if (content === null) {
+        const result = await runtime.kernel.project.readWorkbenchFile({
+          projectRoot,
+          path,
+          maxChars: 2_000_000,
+        })
+        if (sourceRequestRef.current !== request) return
+        content = Result.unwrap(result).content
+      }
+      if (sourceRequestRef.current !== request) return
       onOpenSource({
         path,
-        content: Result.unwrap(result).content,
+        content,
         line,
         column,
       })
+      if (sourceRequestRef.current === request) sourceRequestRef.current = null
     } catch (reason) {
+      if (sourceRequestRef.current !== request) return
+      sourceRequestRef.current = null
       setError(reason instanceof Error ? reason.message : t('workbench.codeGraphError'))
     }
   }
