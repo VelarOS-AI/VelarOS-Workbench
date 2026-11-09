@@ -17,8 +17,8 @@
 
 ## 实际依赖边界
 
-当前使用 Platform 正式发布 `v0.7.5` / commit `1b0004d773ac54c9f20f3748f9f4baed021a6481`，
-Velaros / Capabilities 均 `0.9.4`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
+当前使用 Platform 正式发布 `v0.7.6` / commit `70e93a2b8c020ad7509a9fb2d8eb3f7a754664a7`，
+Velaros / Capabilities 均 `0.9.5`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
 全部为带哈希的本仓归档，不是兄弟仓链接；schema2 记录正式来源。0.9.1 候选及消费证明保留为历史证据。
 
 - Runtime 根入口：createRuntime、openSessionControl、createCapabilityModule、会话/笔记/trace；Node 入口为 `/node`。
@@ -32,7 +32,7 @@ Platform 只持有通用 Agent/Session、执行、上下文、交互与授权。
 
 ## 固定归档接入
 
-1. ADR 0028 / 0029 与配套双包已交付；当前消费 0.9.4 正式归档，执行与独立无执行控制口均使用公开合同。
+1. ADR 0028 / 0029 与配套双包已交付；当前消费 0.9.5 正式归档，执行与独立无执行控制口均使用公开合同。
 2. project/code/images、memory、widget、worker profile 已按实际构建后的公开声明显式装配。
 3. executionIdentity、authorizationScope 与模块绑定是通用恢复约束；Workbench 的项目与浏览器选择留在产品。
 4. manifest、Bun 锁与已安装双包均已切换；可核验来源及归档见迁移文档，不加旧接口适配或 node_modules 补丁。
@@ -381,3 +381,17 @@ Windows 无额外只读后端时 available 为 false，普通 exec 继续完成�
 
 0.9.1/0.9.2/0.9.3 原字节与回执保持历史身份，发布方 Linux 归档证明未改称本地 Windows 采集证据。
 没有全量回归、完整生产构建、新跨 OS/供应商缓存/模型选择率或签名安装矩阵。已知源码修复、审计记录和此次正式接入均已收口。
+
+## Platform 0.9.5 包装查询修复接入
+
+2026-11-10 固定正式 `v0.7.6` / `70e93a2b8c020ad7509a9fb2d8eb3f7a754664a7` 的配套 0.9.5 归档。
+独立核验公开 Release、tag/source、资产 digest、实际下载字节的长度/SHA256/SHA512、tar 身份和精确 peer；
+基础 SHA256 为 `8d8bc25d98bda5ab207c6bae05151922df77c23d1494a6e5cab17273d3db3b2b`，
+能力 SHA256 为 `f576132e2309413d333a2671e3d2e7c333c8a183914fc5941e5939787cfe6601`。
+两包第三方依赖声明与 0.9.4 相同，UI 1.0.0 保持原身份。
+
+实际装配未传 `packageEnvironment`，固定 Node 包目录不等同动态环境 registry；RuntimeBootstrap 不会对本产品调用
+`withPackageEnvironment()`。本批无产品源码修改，也没有兼容或默认支持兜底。
+公开 Node runner 返回类型加强、project 版本字面量更新，因此仅补一个 node 类型分区，1.7 秒通过；一次安装及完整三包锁检查通过。
+没有重跑 web/lint、真实 Node、PTY、CLI 或构建；这些旧绿项和旧 Linux 回执均保持原版本身份。
+发布方对同正式基础归档的查询转发、JS、严格声明证据覆盖本次 Core 修复，不冒称 Workbench 实际只读采集。

@@ -1,6 +1,6 @@
 # Workbench 排查覆盖与剩余游标
 
-2026-11-09。既有生产行为源码全文阅读回执已在 `f694f64` 合并收口；新增实施另按差量审阅与验证。
+2026-11-10 更新。既有生产行为源码全文阅读回执已在 `f694f64` 合并收口；新增实施另按差量审阅与验证。
 本文区分源码阅读、具体接缝和运行验证，不用提交数、测试数或文件数推导全仓完成。
 逐批行为与验证证据见 [refactoring-progress.md](./refactoring-progress.md)，底座来源及公开调用库存见
 [workbench-platform-migration.md](./workbench-platform-migration.md)。
@@ -28,7 +28,7 @@
 | Windows updater helper 目录回收 | `d5e6ec7`：真实持有 worker 句柄，匹配终态回执与停止 ACK；原生安装收尾、恢复、错回执及目录保留、替换、取消已验收。 |
 | probe / isolated test 宿主强杀边界 | `9c2b932`：缺清理回执真实故障、entrypoint 以及实际 Electron/PTY 原 17 项断言通过；延迟 force 和实际 close 均由 owner 等待。 |
 | renderer 新发现与生成命令 | `49e4399` 等叶修复及 `aa15f43` 结构化启动已交付；实际 PTY 字面 argv、raw shell、npm 及真实查询取消/关闭通过，配置/菜单/重启模型和真实 Node/CDP 接线通过。 |
-| Core observe 动态上下文 | 正式 v0.7.5 / 0.9.4 已一次接入，模型沿公开 SDK 完整编码；真实宿主支持查询已转发，Windows 无只读后端及普通 exec 实际行为已验收。历史、动态区和预算留在 Core。 |
+| Core observe 动态上下文 | 当前固定 v0.7.6 / 0.9.5，本产品不经 packageEnvironment 包装；新包身份/锁/node 类型已验收。模型完整编码、真实宿主查询及 Windows 普通 exec 的 0.9.4 证明保留，未重标为 0.9.5 实测。历史、动态区和预算留在 Core。 |
 
 树读取路径代际与 EditorConfig 非缺失错误缓存已在 `b9bb6c6` 修复，web 类型及两文件 lint 通过；未冒称真实 DOM 故障重现。
 observe 预览副本与销毁 peer watcher 已在 `a5d3ffd` 交付，实际 Board 八项断言通过；展示裁剪不改模型上下文或缓存。

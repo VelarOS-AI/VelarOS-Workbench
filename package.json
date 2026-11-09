@@ -51,8 +51,8 @@
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-markdown-languageservice": "^0.5.0",
     "vscode-uri": "^3.1.0",
-    "@velaros-ai/velaros": "file:build/runtime-packages/ad28c5dc3b6499140a2e176481df7decc0eb80e8c73658fa7982ba6eccfa0250/velaros-ai-velaros-0.9.4.tgz",
-    "@velaros-ai/capabilities": "file:build/runtime-packages/8665b5f0ba32aa5e95daef81726bb8b0fc5ddfb8e19c30a28c9149b3994bd110/velaros-ai-capabilities-0.9.4.tgz"
+    "@velaros-ai/velaros": "file:build/runtime-packages/8d8bc25d98bda5ab207c6bae05151922df77c23d1494a6e5cab17273d3db3b2b/velaros-ai-velaros-0.9.5.tgz",
+    "@velaros-ai/capabilities": "file:build/runtime-packages/f576132e2309413d333a2671e3d2e7c333c8a183914fc5941e5939787cfe6601/velaros-ai-capabilities-0.9.5.tgz"
   },
   "devDependencies": {
     "@ast-grep/napi": "0.45.3",
@@ -148,8 +148,8 @@
     "node-win-x64": "24.22.0"
   },
   "overrides": {
-    "@velaros-ai/velaros": "file:build/runtime-packages/ad28c5dc3b6499140a2e176481df7decc0eb80e8c73658fa7982ba6eccfa0250/velaros-ai-velaros-0.9.4.tgz",
-    "@velaros-ai/capabilities": "file:build/runtime-packages/8665b5f0ba32aa5e95daef81726bb8b0fc5ddfb8e19c30a28c9149b3994bd110/velaros-ai-capabilities-0.9.4.tgz",
+    "@velaros-ai/velaros": "file:build/runtime-packages/8d8bc25d98bda5ab207c6bae05151922df77c23d1494a6e5cab17273d3db3b2b/velaros-ai-velaros-0.9.5.tgz",
+    "@velaros-ai/capabilities": "file:build/runtime-packages/f576132e2309413d333a2671e3d2e7c333c8a183914fc5941e5939787cfe6601/velaros-ai-capabilities-0.9.5.tgz",
     "@velaros-ai/ui": "file:build/runtime-packages/d7ef7c3281ec3587036d3e81026cf5d9471a86f3a55d09079a4e6471ceac09e7/velaros-ai-ui-1.0.0.tgz"
   }
 }

@@ -1,4 +1,4 @@
-# Workbench → Platform 0.9.4
+# Workbench → Platform 0.9.5
 
 Workbench 使用配套的基础与扩展正式固定归档，不引用兄弟仓源码，也不修改依赖包实现。
 
@@ -26,34 +26,45 @@ Workbench 使用配套的基础与扩展正式固定归档，不引用兄弟仓�
 
 ## 一次接入所需归档
 
-安装身份为配套的 `@velaros-ai/velaros@0.9.4` 与 `@velaros-ai/capabilities@0.9.4`。
+安装身份为配套的 `@velaros-ai/velaros@0.9.5` 与 `@velaros-ai/capabilities@0.9.5`。
 Workbench 使用项目/代码/图像、浏览器、网页和产品会话协作，不能仅接基础包。
-正式来源：[Platform v0.7.5](https://github.com/VelarOS-AI/VelarOS-Platform/releases/tag/v0.7.5)，
-commit `1b0004d773ac54c9f20f3748f9f4baed021a6481`。schema2 快照仅声明正式发布来源，
+正式来源：[Platform v0.7.6](https://github.com/VelarOS-AI/VelarOS-Platform/releases/tag/v0.7.6)，
+commit `70e93a2b8c020ad7509a9fb2d8eb3f7a754664a7`。schema2 快照仅声明正式发布来源，
 核对 Release 公开状态、tag→commit、资源大小/digest、实际下载 SHA256/SHA512 与 tar 内包身份。
 
 | 安装身份 | 版本 | 归档 | SHA256 |
 | --- | --- | --- | --- |
-| @velaros-ai/velaros | 0.9.4 | [velaros-ai-velaros-0.9.4.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.5/velaros-ai-velaros-0.9.4.tgz) | ad28c5dc3b6499140a2e176481df7decc0eb80e8c73658fa7982ba6eccfa0250 |
-| @velaros-ai/capabilities | 0.9.4 | [velaros-ai-capabilities-0.9.4.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.5/velaros-ai-capabilities-0.9.4.tgz) | 8665b5f0ba32aa5e95daef81726bb8b0fc5ddfb8e19c30a28c9149b3994bd110 |
+| @velaros-ai/velaros | 0.9.5 | [velaros-ai-velaros-0.9.5.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.6/velaros-ai-velaros-0.9.5.tgz) | 8d8bc25d98bda5ab207c6bae05151922df77c23d1494a6e5cab17273d3db3b2b |
+| @velaros-ai/capabilities | 0.9.5 | [velaros-ai-capabilities-0.9.5.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.6/velaros-ai-capabilities-0.9.5.tgz) | f576132e2309413d333a2671e3d2e7c333c8a183914fc5941e5939787cfe6601 |
 
 两包的大小与 SHA512 integrity 由 `resources/runtime-snapshot.json` 固定，归档位于本仓按哈希分格的缓存。
 UI 仍使用原 1.0.0 正式固定归档。正式来源门继续拒绝本机候选，不把预发布身份伪造成 Release。
 
 0.9.1 的源 commit `e3e157696994a0d667cbd542a809484b93e40e71`、原始候选证明和消费验证已保留：
 接入提交 `f0cd235`，原字节位于 `resources/runtime-sources/platform-0.9.1/`。其 658 输入、dirty 来源事实
-及四个真实 Node 场景仍是历史证据。0.9.2/0.9.3 的归档、tag 与回执同样保留；当前安装以 0.9.4 发布来源为准。
+及四个真实 Node 场景仍是历史证据。0.9.2/0.9.3/0.9.4 的归档、tag 与回执同样保留；当前安装以 0.9.5 发布来源为准。
 
 2026-11-09 对 0.9.3 核验正式 Release、tag/commit、GitHub asset digest、实际 SHA256/SHA512/长度及 tar 身份后，
 仅执行一次 `bun install --ignore-scripts`。三包锁身份通过；新归档上的真实 Node 24.22 取消/进程关闭及写窗口收口用例通过。
 该证据没有重标旧四场景，也不覆盖供应商、Chrome、签名安装或完整跨平台矩阵。
 
-2026-11-09 对 0.9.4 再独立核验正式 Release、tag/commit、asset digest 和实际归档字节，
+2026-11-09 对 0.9.4（v0.7.5 / `1b0004d773ac54c9f20f3748f9f4baed021a6481`）再独立核验正式 Release、tag/commit、asset digest 和实际归档字节，
 安装前核对 tar 内包名、版本、平台代际 `0.7` 及能力包对基础包精确 `0.9.4` peer。
 仅执行一次 Bun 1.4.3 `install --ignore-scripts`，完整三包锁身份通过。node/web 类型、宿主单文件定向 lint 通过；
 在新归档上运行一个原生 Node/项目编辑用例，约 2397ms 内完成真实执行、IDE 通知、输出和收尾，原 30 秒不变。
 同一用例从真实 Workbench 宿主查询到 Windows `available: false`，再证明普通 exec 仍正常运行。
 发布方 Linux 的 release:check、归档 JS/声明及 trace 证明保持发布方身份；未重标为 Workbench Windows 观察执行。
+
+2026-11-10 接入 0.9.5：再次独立核验正式来源、实际下载长度/SHA256/SHA512、tar 包名/版本/代际及精确 peer，
+并核对两包第三方依赖声明与 0.9.4 相同。一次 Bun 1.4.3 安装、三包完整锁及 node 类型分区通过。
+本次没有修改产品源码、重建或重跑实际 Node/PTY/CLI；0.9.4 的 web 类型、宿主 lint 和执行证明保留原版本身份。
+
+0.9.5 修复 Core `withPackageEnvironment()` 与 RuntimeBootstrap 的真实查询转发。
+Workbench 的 `createRuntime()` 未提供 `packageEnvironment`；固定 `packageDirectory/runtime` 不触发该包装，
+产品 `...shell` 与已交付的支持查询转发保留，因此无需产品兜底或调用迁移。
+公开 `/script` 新增 `NodeCodeRunnerApi extends CodeRunnerApi`，工厂返回强类型保证查询存在；参数、
+泛端口可选查询及 Node 环境输入不变，project 版本字面量更新为 0.9.5。
+发布方同基础归档的 JS/严格声明/nodeEnvironmentQuery 证明属于发布方；查询转发不等同实际只读采集成功。
 
 ## 小型观察与动态上下文
 
@@ -80,12 +91,12 @@ context source/snapshot、worker/memory/widget 装配；执行身份与授权 sc
 - `capabilities/sessions` 的 `SessionTold.status` 仅 `queued`，tell 只给目标活动 run 追加 guidance，空闲拒绝。
   Workbench 先显示 pending guidance 并回执，再 await 真实 steer；不新建运行或检查点，目标换轮会拒绝。
   接纳后来源取消或 UI 通知失败不误报未投递，不自动重放，也不把先到的 applied 降级。
-- 0.9.4 扩展 required peer 为基础精确 `0.9.4`；宿主 optional peer 是 Electron `>=41.0.0`、
+- 0.9.5 扩展 required peer 为基础精确 `0.9.5`；宿主 optional peer 是 Electron `>=41.0.0`、
   React / @types/react `^19.0.0`，与本仓宿主版本一致，无本地依赖补丁或 peer override。
 
 ## 实际公开调用库存
 
-当前产品调用库存从已验证的 0.9.1 接入延续到 0.9.4；本轮新增真实宿主支持查询转发，既有执行与控制分流保留。
+当前产品调用库存从已验证的 0.9.1 接入延续到 0.9.5；0.9.4 新增真实宿主支持查询转发，0.9.5 不需改动产品调用。
 空闲 trace/traceBranches 不是 Workbench 当前产品调用；空闲 UI 恢复读取产品 Recovery 日志。
 后续验证若发现真实合同缺口再补充，不恢复已删除字段或导入包内私有实现。
 
