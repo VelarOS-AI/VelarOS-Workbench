@@ -92,7 +92,7 @@ apply to engine sessions.
 
 ## Development
 
-当前固定依赖快照为 Platform v0.6.107（Velaros 0.6.33），UI 版本为 0.2.73。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+当前固定依赖快照为 Platform v0.6.111（Velaros 0.7.0），UI 版本为 1.0.0。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
 
 Workbench 使用固定的 Platform 本机依赖快照与 UI 发布版本，锁文件记录完整依赖。先登录具备 Platform 仓库读取权限的 `gh`，并配置 `NODE_AUTH_TOKEN` 后运行：
 
