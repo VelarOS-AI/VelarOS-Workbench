@@ -743,6 +743,69 @@ test(
 )
 
 test(
+  'cancelling a console while its launch environment loads starts no process',
+  { timeout: 30_000 },
+  async (t) => {
+    const workspace = await mkdtemp(join(build, 'console-cancel-'))
+    await writeFile(
+      join(workspace, 'server.cjs'),
+      "require('node:fs').writeFileSync('started.txt','started');setInterval(()=>{},1000)"
+    )
+    const entered = Promise.withResolvers()
+    const environment = Promise.withResolvers()
+    const shells = new WorkbenchShellHostRegistry({
+      getEnvironment: async () => {
+        entered.resolve()
+        return environment.promise
+      },
+    })
+    t.after(() => shells.dispose())
+    const controller = new AbortController()
+    const starting = shells.startConsoleCommand(
+      { sessionId: 'console-cancel', cwd: workspace, command: 'node server.cjs', sandbox: false },
+      controller.signal
+    )
+    const cancelled = assert.rejects(starting, /cancel launch/u)
+    await entered.promise
+    controller.abort(new Error('cancel launch'))
+    environment.resolve({ ...process.env })
+    await cancelled
+    assert.deepEqual(await shells.listBackgroundTasks(), [])
+    await assert.rejects(stat(join(workspace, 'started.txt')), { code: 'ENOENT' })
+  }
+)
+
+test(
+  'an accepted console outlives cancellation of its launching call',
+  { timeout: 30_000 },
+  async (t) => {
+    const workspace = await mkdtemp(join(build, 'console-accepted-'))
+    await writeFile(join(workspace, 'server.cjs'), "console.log('READY');setInterval(()=>{},1000)")
+    const shells = new WorkbenchShellHostRegistry()
+    t.after(() => shells.dispose())
+    const controller = new AbortController()
+    const { task } = await shells.startConsoleCommand(
+      { sessionId: 'console-accepted', cwd: workspace, command: 'node server.cjs', sandbox: false },
+      controller.signal
+    )
+    controller.abort(new Error('the launching call ended'))
+
+    let output = ''
+    for (let attempt = 0; attempt < 100 && !output.includes('READY'); attempt++) {
+      output = (
+        await shells.readConsoleOutput({ taskId: task.id, sessionId: task.sessionId }, workspace)
+      ).text
+      if (!output.includes('READY')) await new Promise((done) => setTimeout(done, 20))
+    }
+    assert.match(output, /READY/u)
+    assert.equal(
+      (await shells.listBackgroundTasks({ taskId: task.id }, workspace))[0]?.status,
+      'running'
+    )
+  }
+)
+
+test(
   'real child execution reaches the Workbench thread transcript before resources close',
   { timeout: 30_000 },
   async (t) => {

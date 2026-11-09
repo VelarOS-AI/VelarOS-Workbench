@@ -18,6 +18,7 @@ const Session = z.object({
   sessionId: z.string().min(1).max(512),
 })
 const Task = Session.extend({ taskId: z.string().min(1).max(512) })
+const ExitedTaskHistoryLimit = 64
 
 /** 只向项目所属窗口开放本项目会话启动的进程；进程当前 cwd 不用来推断归属。 */
 export function registerWorkbenchAgentProcessesIpc(options: {
@@ -36,10 +37,12 @@ export function registerWorkbenchAgentProcessesIpc(options: {
     callWithEnvelope(async () => {
       const request = Session.parse(raw)
       const tasks = await options.shells.listBackgroundTasks(
-        { sessionId: request.sessionId, limit: 64 },
+        { sessionId: request.sessionId },
         await ownedRoot(event, request.projectRoot)
       )
-      return tasks.map((task) => ({
+      const active = tasks.filter((task) => task.status !== 'exited')
+      const history = tasks.filter((task) => task.status === 'exited').slice(0, ExitedTaskHistoryLimit)
+      return [...active, ...history].map((task) => ({
         ...task,
         recentOutput: task.recentOutput
           ? stripVTControlCharacters(task.recentOutput).slice(-16000)

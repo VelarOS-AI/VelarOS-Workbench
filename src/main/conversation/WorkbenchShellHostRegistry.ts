@@ -1,3 +1,5 @@
+import { resolve } from 'node:path'
+
 import { Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
@@ -29,6 +31,13 @@ type SharedShellHost = Required<ShellHostPort> & Pick<LocalShellHostApi, 'inspec
 /** 交互式命令用的终端：第一次建宿主时才问，没有就用管道。 */
 type ShellTerminalLoader = () => Nullable<ShellTerminalFactory>
 
+interface ConsoleCommandRequest {
+  sessionId: string
+  cwd: string
+  command: string
+  sandbox: boolean
+}
+
 /**
  * 应用共用的本机 shell 宿主（Desktop 同名登记表的精简版）：每个项目根、每种进程约束各一个，活到应用退出。
  *
@@ -36,12 +45,10 @@ type ShellTerminalLoader = () => Nullable<ShellTerminalFactory>
  * 这一轮结束后要接着跑。模型与界面都按项目根查询、控制任务；全局查询供资源回收使用。
  */
 export interface WorkbenchShellHostRegistryApi {
-  startConsoleCommand(request: {
-    sessionId: string
-    cwd: string
-    command: string
-    sandbox: boolean
-  }): Promise<{ task: ShellBackgroundTaskRecord }>
+  startConsoleCommand(
+    request: ConsoleCommandRequest,
+    signal: AbortSignal
+  ): Promise<{ task: ShellBackgroundTaskRecord }>
   readConsoleOutput(
     request: ShellConsoleOutputRequest,
     projectRoot: string
@@ -123,27 +130,41 @@ export class WorkbenchShellHostRegistry implements WorkbenchShellHostRegistryApi
   }
 
   /** 与 Desktop 同一命令台协议；进程归属应用，会话结束不释放。 */
-  public async startConsoleCommand(request: {
-    sessionId: string
-    cwd: string
-    command: string
-    sandbox: boolean
-  }): Promise<{ task: ShellBackgroundTaskRecord }> {
-    const result = await this.host(
-      request.cwd,
-      request.sandbox ? 'workspace-write' : 'danger-full-access'
-    ).runCommand(request.command, {
-      cwd: request.cwd,
-      sessionId: request.sessionId,
-      background: true,
-      interactive: true,
-    })
-    const taskId = result.backgroundProcess?.taskId
-    const [task] = taskId
-      ? await this.listBackgroundTasks({ taskId, sessionId: request.sessionId }, request.cwd)
-      : []
-    if (!task?.console) throw new AppError('UNAVAILABLE', '命令未能在控制台启动')
-    return { task }
+  public async startConsoleCommand(
+    request: ConsoleCommandRequest,
+    signal: AbortSignal
+  ): Promise<{ task: ShellBackgroundTaskRecord }> {
+    signal.throwIfAborted()
+    // 启动尚未交付时跟随调用取消；交付后任务归应用，不能继续监听这一轮的取消信号。
+    const launch = new AbortController()
+    const abort = (): void => launch.abort(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    try {
+      const result = await this.host(
+        request.cwd,
+        request.sandbox ? 'workspace-write' : 'danger-full-access'
+      ).runCommand(
+        request.command,
+        {
+          cwd: request.cwd,
+          sessionId: request.sessionId,
+          background: true,
+          interactive: true,
+        },
+        false,
+        launch.signal
+      )
+      signal.throwIfAborted()
+      const taskId = result.backgroundProcess?.taskId
+      const [task] = taskId
+        ? await this.listBackgroundTasks({ taskId, sessionId: request.sessionId }, request.cwd)
+        : []
+      signal.throwIfAborted()
+      if (!task?.console) throw new AppError('UNAVAILABLE', '命令未能在控制台启动')
+      return { task }
+    } finally {
+      signal.removeEventListener('abort', abort)
+    }
   }
 
   public async readConsoleOutput(
@@ -293,4 +314,3 @@ export class WorkbenchShellHostRegistry implements WorkbenchShellHostRegistryApi
     return host
   }
 }
-import { resolve } from 'node:path'

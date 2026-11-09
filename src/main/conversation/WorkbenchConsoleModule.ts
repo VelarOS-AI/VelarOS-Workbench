@@ -33,12 +33,10 @@ export function createWorkbenchConsoleModule(
         await confirm(input.command, call.signal)
         call.signal.throwIfAborted()
         call.recordEffect('unknown')
-        const { task } = await shells.startConsoleCommand({
-          sessionId,
-          cwd,
-          command: input.command,
-          sandbox,
-        })
+        const { task } = await shells.startConsoleCommand(
+          { sessionId, cwd, command: input.command, sandbox },
+          call.signal
+        )
         call.recordEffect('committed')
         return taskSummary(task)
       },
