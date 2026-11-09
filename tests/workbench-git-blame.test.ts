@@ -34,34 +34,40 @@ async function commitAs(root: string, author: string, message: string): Promise<
 }
 
 void describe('Git blame for the editor', () => {
-  void test('parses incremental blame output into a commit per line', () => {
-    const first = 'a'.repeat(40)
-    const second = 'b'.repeat(40)
-    const blame = parseWorkbenchGitBlame(
-      [
-        `${second} 2 2 1`,
-        'author Bob',
-        'author-time 1700000100',
-        'summary second change',
-        'filename a.ts',
-        `${first} 1 1 1`,
-        'author Alice',
-        'author-time 1700000000',
-        'summary first',
-        'filename a.ts',
-        `${'0'.repeat(40)} 3 3 1`,
-        'author Not Committed Yet',
-        'filename a.ts',
-        `${first} 3 4 2`,
-        'filename a.ts',
-        '',
-      ].join('\n')
-    )
-    assert.deepEqual(blame.commits, [
-      { sha: second, author: 'Bob', authorTime: 1_700_000_100, summary: 'second change' },
-      { sha: first, author: 'Alice', authorTime: 1_700_000_000, summary: 'first' },
-    ])
-    assert.deepEqual(owners(blame), ['first', 'second change', null, 'first', 'first'])
+  void test('parses SHA-1 and SHA-256 incremental blame and rejects other object-id widths', () => {
+    for (const width of [40, 64]) {
+      const first = 'a'.repeat(width)
+      const second = 'b'.repeat(width)
+      const blame = parseWorkbenchGitBlame(
+        [
+          `${second} 2 2 1`,
+          'author Bob',
+          'author-time 1700000100',
+          'summary second change',
+          'filename a.ts',
+          `${first} 1 1 1`,
+          'author Alice',
+          'author-time 1700000000',
+          'summary first',
+          'filename a.ts',
+          `${'0'.repeat(width)} 3 3 1`,
+          'author Not Committed Yet',
+          'filename a.ts',
+          `${first} 3 4 2`,
+          'filename a.ts',
+          '',
+        ].join('\n')
+      )
+      assert.deepEqual(blame.commits, [
+        { sha: second, author: 'Bob', authorTime: 1_700_000_100, summary: 'second change' },
+        { sha: first, author: 'Alice', authorTime: 1_700_000_000, summary: 'first' },
+      ])
+      assert.deepEqual(owners(blame), ['first', 'second change', null, 'first', 'first'])
+    }
+    assert.deepEqual(parseWorkbenchGitBlame(`${'a'.repeat(48)} 1 1 1\nfilename a.ts\n`), {
+      commits: [],
+      lines: [],
+    })
   })
 
   void test('attributes each line to its commit, and unsaved editor text to no commit', async () => {

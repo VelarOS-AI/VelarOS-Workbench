@@ -1,7 +1,7 @@
 /**
  * `git blame --incremental` 的输出解析成「每一行属于哪个提交」。
  *
- * 输出是一块一块的：每块第一行是 `<40 位提交号> <原行号> <现行号> <行数>`，一个提交第一次出现时后面跟着它的
+ * 输出是一块一块的：每块第一行是 `<40 或 64 位提交号> <原行号> <现行号> <行数>`，一个提交第一次出现时后面跟着它的
  * 信息（`author`、`author-time`、`summary` ……），以 `filename` 一行收尾；不带正文。还没提交的行挂在全零的
  * 提交号上。
  */
@@ -21,8 +21,8 @@ export interface WorkbenchGitBlame {
   lines: number[]
 }
 
-const UncommittedSha = '0'.repeat(40)
-const BlockHeaderPattern = /^([0-9a-f]{40}) \d+ (\d+) (\d+)$/u
+const UncommittedShaPattern = /^0+$/u
+const BlockHeaderPattern = /^([0-9a-f]{40}|[0-9a-f]{64}) \d+ (\d+) (\d+)$/u
 
 export function parseWorkbenchGitBlame(output: string): WorkbenchGitBlame {
   const commits: WorkbenchGitBlameCommit[] = []
@@ -35,7 +35,7 @@ export function parseWorkbenchGitBlame(output: string): WorkbenchGitBlame {
     if (header) {
       const sha = header[1]!
       let index = -1
-      if (sha === UncommittedSha) {
+      if (UncommittedShaPattern.test(sha)) {
         current = null
       } else {
         index = indexBySha.get(sha) ?? commits.length
