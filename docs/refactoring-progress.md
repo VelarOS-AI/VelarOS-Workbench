@@ -243,3 +243,18 @@ GoToLine 在未就绪时保留输入和意图，取消、改输入或转查找�
 选区/正文事务、切文件或卸载都会使旧回执失效；fallback 也只用原 identifier。web 类型与该单文件 lint 通过，
 没有新 DOM harness 或镜像测试，真实 DOM 异步交互未测。新的团队短游标及已证未修项见
 [refactoring-coverage.md](./refactoring-coverage.md)，后续按实际未读生产路径补齐，已审且合理保留的模块不反复找新题。
+
+`ed22db1` 让保存全部返回当前同步 owner 是否仍有草稿，编辑器测试/调试入口只有确认 clean 才启动。
+失败、冲突、不可保存的草稿及保存等待中新输入都不能被“Promise 已完成”冒充已落盘；现有逐文件提示保留。
+`f9abf60` 在首次 browser snapshot 等待期间若已收到同会话站点通知，保留 live 结果，不让旧快照覆盖。
+两处实际调用链及 web 类型/单文件 scoped lint 已核，没有复制 hook 或引入 DOM 测试框架，完整交互未测。
+
+`4de59a1` 将 Git hunk 确认目标保存为原项目/路径/来源/分组及复制的 header/lines，刷新后不按旧 index
+重新取块；确认发送前再核当前未保存编辑门，主进程继续用原有 CAS 拒绝已变块。
+退役仅三条源码正则、且锁住旧 index 行为的专属 case；既有真实仓库“原块已变拒绝而不猜测”用例通过。
+组件/测试 scoped lint 与 web 类型通过，未宣称驱动真实 Dialog。`e6ce7ae` 在非仓库 revision 下不再返回旧 blame，
+沿用已有 HeadContent 的同一结果门；单文件 lint 通过，web 类型复用此次检查。
+
+本轮新增完整静态覆盖：PageModel、Controller、项目 session/context index、DebugPanel、浏览器两面板、
+EmbeddedKernel/Adapter、main i18n、shared 大合同，以及 Git 全 hooks/13 组件/16 模型和直接 editor/history/refresh 消费。
+未发现需要修改的跨组状态、调试暂停序号、变量按需读取、webview 事件解除等约束保留；剩余只接缝与未读路径见短表。
