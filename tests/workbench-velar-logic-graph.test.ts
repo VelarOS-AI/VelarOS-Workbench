@@ -13,7 +13,6 @@ import {
 import {
   applyVelarLogicGraphResponse,
   parseVelarLogicGraphResponse,
-  selectVelarLogicGraphNeighborhood,
   velarLogicGraphForWorkbench,
   type VelarLogicGraphResponse,
 } from '../src/shared/contributions/velar/logicGraph'
@@ -72,7 +71,7 @@ function graphResponse(
 }
 
 void describe('Workbench Velar compiler graph consumer', () => {
-  void test('parses, patches, maps, and focuses the compiler-owned graph', () => {
+  void test('parses, patches, and maps the compiler-owned graph', () => {
     const parsed = parseVelarLogicGraphResponse(graphResponse())
     assert.ok(parsed)
     const snapshot = applyVelarLogicGraphResponse(null, parsed)
@@ -98,9 +97,7 @@ void describe('Workbench Velar compiler graph consumer', () => {
       'state:ready',
     ])
 
-    const focused = selectVelarLogicGraphNeighborhood(updated, 'run', 1, 10)
-    assert.deepEqual([...focused], ['function:run', 'state:ready', 'module:main'])
-    const view = velarLogicGraphForWorkbench('/project', updated, focused)
+    const view = velarLogicGraphForWorkbench('/project', updated)
     const run = view.nodes.find((node) => node.id === 'function:run')
     assert.deepEqual(
       { path: run?.path, line: run?.line, column: run?.column, type: run?.type },
@@ -109,22 +106,6 @@ void describe('Workbench Velar compiler graph consumer', () => {
     assert.equal(run?.context, 'Order checkout')
     assert.equal(view.edges.length, 2)
 
-    const readsFromRun = selectVelarLogicGraphNeighborhood(
-      updated,
-      'run',
-      1,
-      10,
-      { direction: 'outgoing', relationKinds: new Set(['reads']) }
-    )
-    assert.deepEqual([...readsFromRun], ['function:run', 'state:ready'])
-    const ownerOfRun = selectVelarLogicGraphNeighborhood(
-      updated,
-      'run',
-      1,
-      10,
-      { direction: 'incoming', relationKinds: new Set(['contains']) }
-    )
-    assert.deepEqual([...ownerOfRun], ['function:run', 'module:main'])
   })
 
   void test('rejects unsafe, duplicate, or unbounded protocol data', () => {
