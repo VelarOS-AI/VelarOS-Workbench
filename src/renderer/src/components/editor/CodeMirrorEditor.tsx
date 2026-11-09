@@ -443,6 +443,20 @@ interface WorkbenchIdentifierRange {
   to: number
 }
 
+interface WorkbenchEditorFileOwner {
+  token: object
+  view: EditorView
+  key: Nullable<string>
+  projectRoot: string
+  path: Nullable<string>
+}
+
+interface WorkbenchRenameAction {
+  owner: WorkbenchEditorFileOwner
+  doc: EditorState['doc']
+  identifier: WorkbenchIdentifierRange
+}
+
 interface WorkbenchSymbolLocationsAnchor {
   left: number
   top: number
@@ -1266,6 +1280,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const contextMenuRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
     const definitionRequestGenerationRef = useRef(0)
+    const fileOwnerTokenRef = useRef<Nullable<object>>(null)
+    const renameActionRef = useRef<Nullable<WorkbenchRenameAction>>(null)
+    const formatRequestRef = useRef<Nullable<object>>(null)
     /** 视图里正在显示的文件（项目 + 路径）；没有路径时为 null。 */
     const activeFileKeyRef = useRef<Nullable<string>>(null)
     const instanceExtensionsRef = useRef<Nullable<WorkbenchEditorInstanceExtensions>>(null)
@@ -1327,6 +1344,35 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
 
     const projectRootRef = useLatest(projectRoot)
+    const editorReadOnlyRef = useLatest(readOnly || disabled)
+    // 提交换文件或卸载时同步撤销旧owner；复用view、切回同路径和StrictMode都不能复活旧动作。
+    useLayoutEffect(() => {
+      const token = {}
+      fileOwnerTokenRef.current = token
+      return () => {
+        if (fileOwnerTokenRef.current !== token) return
+        fileOwnerTokenRef.current = null
+        renameActionRef.current = null
+        formatRequestRef.current = null
+      }
+    }, [path, projectRoot])
+
+    const captureFileOwner = (view: EditorView): Nullable<WorkbenchEditorFileOwner> => {
+      const token = fileOwnerTokenRef.current
+      const currentPath = pathRef.current
+      const currentRoot = projectRootRef.current
+      const key = currentPath ? workbenchEditorFileStateKey(currentRoot, currentPath) : null
+      if (!token || viewRef.current !== view || activeFileKeyRef.current !== key) return null
+      return { token, view, key, projectRoot: currentRoot, path: currentPath }
+    }
+
+    const isCurrentFileOwner = (owner: WorkbenchEditorFileOwner): boolean =>
+      fileOwnerTokenRef.current === owner.token &&
+      viewRef.current === owner.view &&
+      activeFileKeyRef.current === owner.key &&
+      projectRootRef.current === owner.projectRoot &&
+      pathRef.current === owner.path
+
     const modelConfig = useStandaloneWorkbenchModelConfig()
     const completionModel = modelConfig.completionModel
     // 只读、禁用或补全模型为“无”时不请求内联补全；ViewPlugin 每次调用时实时读取。
@@ -1536,7 +1582,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const [symbolLocationsAnchor, setSymbolLocationsAnchor] =
       useState<Nullable<WorkbenchSymbolLocationsAnchor>>(null)
     const [renamePopup, setRenamePopup] =
-      useState<Nullable<{ identifier: WorkbenchIdentifierRange; left: number; top: number }>>(null)
+      useState<Nullable<{ action: WorkbenchRenameAction; left: number; top: number }>>(null)
     const [commentDraft, setCommentDraft] = useState<
       Nullable<{
         from: number
@@ -1576,7 +1622,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           const draftStartCoords = draftFrom === null ? null : measuredView.coordsAtPos(draftFrom)
           const draftEndCoords = draftTo === null ? null : measuredView.coordsAtPos(draftTo)
           const renamePosition = rename
-            ? Math.min(Math.max(0, rename.identifier.from), measuredView.state.doc.length)
+            ? Math.min(Math.max(0, rename.action.identifier.from), measuredView.state.doc.length)
             : null
           const renameCoords =
             renamePosition === null ? null : measuredView.coordsAtPos(renamePosition)
@@ -2053,112 +2099,135 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const renameIdentifier = (word: Nullable<WorkbenchIdentifierRange>): void => {
       const view = viewRef.current
       const identifier = word ?? getCurrentIdentifier()
-      if (!view || !identifier || view.state.facet(EditorState.readOnly)) return
+      if (!view || !identifier || view.state.readOnly || editorReadOnlyRef.current) return
+      const owner = captureFileOwner(view)
+      if (!owner) return
 
       // Electron 禁用了 window.prompt，改用内嵌输入浮层收集新名字。
       setContextMenu(null)
       const coords = view.coordsAtPos(identifier.from)
+      const action = { owner, doc: view.state.doc, identifier }
+      renameActionRef.current = action
       setRenamePopup({
-        identifier,
+        action,
         left: coords?.left ?? 120,
         top: (coords?.bottom ?? 120) + 4,
       })
     }
 
+    const isCurrentRenameAction = (action: WorkbenchRenameAction): boolean =>
+      renameActionRef.current === action &&
+      isCurrentFileOwner(action.owner) &&
+      action.owner.view.state.doc === action.doc &&
+      !action.owner.view.state.readOnly &&
+      !editorReadOnlyRef.current
+
+    const cancelRename = (action: WorkbenchRenameAction): void => {
+      if (renameActionRef.current === action) renameActionRef.current = null
+      setRenamePopup((current) => (current?.action === action ? null : current))
+    }
+
     const commitRename = async (
-      identifier: WorkbenchIdentifierRange,
+      action: WorkbenchRenameAction,
       rawName: string
     ): Promise<void> => {
-      const view = viewRef.current
-      setRenamePopup(null)
-      if (!view || view.state.facet(EditorState.readOnly)) return
+      if (!isCurrentRenameAction(action)) return
+      setRenamePopup((current) => (current?.action === action ? null : current))
+      const { owner, identifier } = action
+      const view = owner.view
+      const applyRename = callbacksRef.current.onApplyLanguageServiceRename
+      try {
+        const nextName = rawName.trim()
+        const semanticRename = usesWorkbenchSemanticLanguageService(owner.path)
+        // 允许 Unicode 标识符（JS/TS 合法，含中文），仅排除以数字开头/含空白等非法名。
+        if (
+          !nextName ||
+          nextName === identifier.text ||
+          !/^[\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*$/u.test(nextName)
+        )
+          return
 
-      const nextName = rawName.trim()
-      const semanticRename = usesWorkbenchSemanticLanguageService(pathRef.current)
-      // 允许 Unicode 标识符（JS/TS 合法，含中文），仅排除以数字开头/含空白等非法名。
-      if (
-        !nextName ||
-        nextName === identifier.text ||
-        !/^[\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*$/u.test(nextName)
-      )
-        return
-
-      if (pathRef.current) {
-        try {
-          const result = await getWorkbenchLanguageServiceRename(
-            {
-              ...buildWorkbenchLanguageServiceRequestBase({
-                projectRoot,
-                path: pathRef.current,
-                language,
-                content: view.state.doc.toString(),
-                openTabs: openTabsLatest.current,
-              }),
-              position: positionLineColumnFromState(view.state, identifier.from),
-              newName: nextName,
-            },
-            hostRuntime
-          )
-          if (result.ok && !isEmpty(result.data.changes)) {
-            const currentFileChange = pathRef.current
-              ? result.data.changes.find((change) => change.path === pathRef.current)
-              : null
-            const currentFileEdits = currentFileChange?.edits ?? []
-            const otherFileChanges = result.data.changes.filter(
-              (change) => change.path !== pathRef.current && !isEmpty(change.edits)
+        if (owner.path) {
+          try {
+            const result = await getWorkbenchLanguageServiceRename(
+              {
+                ...buildWorkbenchLanguageServiceRequestBase({
+                  projectRoot: owner.projectRoot,
+                  path: owner.path,
+                  language,
+                  content: action.doc.toString(),
+                  openTabs: openTabsLatest.current,
+                }),
+                position: positionLineColumnFromState(view.state, identifier.from),
+                newName: nextName,
+              },
+              hostRuntime
             )
+            if (!isCurrentRenameAction(action)) return
+            if (result.ok && !isEmpty(result.data.changes)) {
+              const currentFileChange = result.data.changes.find(
+                (change) => change.path === owner.path
+              )
+              const currentFileEdits = currentFileChange?.edits ?? []
+              const otherFileChanges = result.data.changes.filter(
+                (change) => change.path !== owner.path && !isEmpty(change.edits)
+              )
 
-            // 没打开的文件也要改（经主进程写回），否则跨文件改名改一半、项目就编不过了。
-            if (!isEmpty(otherFileChanges)) {
-              callbacksRef.current.onApplyLanguageServiceRename?.(otherFileChanges, {
-                editedInEditor: isEmpty(currentFileEdits) ? 0 : 1,
-              })
-            }
+              // 跨文件改动交出前也必须仍属于这次动作，旧源不能触发磁盘写入。
+              if (!isEmpty(otherFileChanges)) {
+                if (!isCurrentRenameAction(action)) return
+                applyRename?.(otherFileChanges, {
+                  editedInEditor: isEmpty(currentFileEdits) ? 0 : 1,
+                })
+              }
 
-            if (!isEmpty(currentFileEdits)) {
-              const changes = currentFileEdits
-                .map((edit) => languageServiceEditToCodeMirrorChange(view.state, edit))
-                .sort((a, b) => b.from - a.from)
-              setContextMenu(null)
-              view.dispatch({
-                changes,
-                selection: { anchor: identifier.from + nextName.length },
-              })
-              view.focus()
-              return
-            }
+              if (!isEmpty(currentFileEdits)) {
+                if (!isCurrentRenameAction(action)) return
+                const changes = currentFileEdits
+                  .map((edit) => languageServiceEditToCodeMirrorChange(view.state, edit))
+                  .sort((a, b) => b.from - a.from)
+                setContextMenu(null)
+                view.dispatch({
+                  changes,
+                  selection: { anchor: identifier.from + nextName.length },
+                })
+                view.focus()
+                return
+              }
 
-            if (!isEmpty(otherFileChanges)) {
-              setContextMenu(null)
-              view.focus()
-              return
+              if (!isEmpty(otherFileChanges)) {
+                if (!isCurrentRenameAction(action)) return
+                setContextMenu(null)
+                view.focus()
+                return
+              }
             }
+            if (semanticRename) return
+          } catch (error) {
+            if (!isCurrentRenameAction(action)) return
+            log.debug('查询语言服务重命名失败，回退到本地重命名', {
+              projectRoot: owner.projectRoot,
+              path: owner.path,
+              language,
+              error,
+            })
+            if (semanticRename) return
           }
-          if (semanticRename) return
-        } catch (error) {
-          log.debug('查询语言服务重命名失败，回退到本地重命名', {
-            projectRoot,
-            path: pathRef.current,
-            language,
-            error,
-          })
-          if (semanticRename) return
         }
+
+        if (!isCurrentRenameAction(action)) return
+        const changes = buildIdentifierRenameChanges(action.doc.toString(), identifier.text, nextName)
+        if (isEmpty(changes)) return
+
+        setContextMenu(null)
+        view.dispatch({
+          changes,
+          selection: { anchor: identifier.from + nextName.length },
+        })
+        view.focus()
+      } finally {
+        if (renameActionRef.current === action) renameActionRef.current = null
       }
-
-      const changes = buildIdentifierRenameChanges(
-        view.state.doc.toString(),
-        identifier.text,
-        nextName
-      )
-      if (isEmpty(changes)) return
-
-      setContextMenu(null)
-      view.dispatch({
-        changes,
-        selection: { anchor: identifier.from + nextName.length },
-      })
-      view.focus()
     }
 
     const selectAllOccurrences = (word: Nullable<WorkbenchIdentifierRange>): void => {
@@ -2226,16 +2295,21 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       // 无论是否有可格式化改动，点击都要关闭右键菜单（用户反馈「点了没反应」的主因之一）。
       setContextMenu(null)
       const view = viewRef.current
-      if (!view || view.state.facet(EditorState.readOnly) || !pathRef.current) return
+      if (!view || view.state.readOnly || editorReadOnlyRef.current || !pathRef.current) return
+      const owner = captureFileOwner(view)
+      if (!owner?.path) return
+      const sourceDocument = view.state.doc
+      const requestToken = {}
+      formatRequestRef.current = requestToken
 
       // 后端统一按「项目 Prettier 优先 / 内置规则回退」返回整篇格式化编辑，前端只负责应用。
-      const content = view.state.doc.toString()
+      const content = sourceDocument.toString()
       try {
         const result = await getWorkbenchLanguageServiceFormat(
           {
             ...buildWorkbenchLanguageServiceRequestBase({
-              projectRoot,
-              path: pathRef.current,
+              projectRoot: owner.projectRoot,
+              path: owner.path,
               language,
               content,
               openTabs: openTabsLatest.current,
@@ -2244,10 +2318,17 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           },
           hostRuntime
         )
-        const currentFileChange =
-          result.ok && pathRef.current
-            ? result.data.changes.find((change) => change.path === pathRef.current)
-            : null
+        if (
+          formatRequestRef.current !== requestToken ||
+          !isCurrentFileOwner(owner) ||
+          view.state.doc !== sourceDocument ||
+          view.state.readOnly ||
+          editorReadOnlyRef.current
+        )
+          return
+        const currentFileChange = result.ok
+          ? result.data.changes.find((change) => change.path === owner.path)
+          : null
         if (!currentFileChange || isEmpty(currentFileChange.edits)) return
 
         const nextContent = applyWorkbenchLanguageServiceEditsToContent(
@@ -2255,18 +2336,21 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           currentFileChange.edits
         )
         // 格式化期间文档又被改过：这份结果已经过时，套上去会冲掉新敲的字。
-        if (nextContent === content || view.state.doc.toString() !== content) return
+        if (nextContent === content) return
 
         // 按最小改动应用：整篇替换会让光标、讲解、AI 选区、评论全部塌到文件开头。
         view.dispatch({ changes: buildWorkbenchMinimalTextChanges(content, nextContent) })
         view.focus()
       } catch (error) {
+        if (formatRequestRef.current !== requestToken || !isCurrentFileOwner(owner)) return
         log.debug('格式化文档失败', {
-          projectRoot,
-          path: pathRef.current,
+          projectRoot: owner.projectRoot,
+          path: owner.path,
           language,
           error,
         })
+      } finally {
+        if (formatRequestRef.current === requestToken) formatRequestRef.current = null
       }
     }
 
@@ -2424,13 +2508,20 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
      * 交去保存（不等标签里的正文随渲染跟上）。只读文件原样保存。
      */
     const saveFromEditor = async (view: EditorView): Promise<void> => {
-      if (!view.state.readOnly) {
+      const owner = captureFileOwner(view)
+      if (!owner) return
+      const saveConfig = editorConfigRef.current
+      const save = callbacksRef.current.onSave
+      if (!view.state.readOnly && !editorReadOnlyRef.current) {
         if (readWorkbenchPreferences().editorFormatOnSave)
           await editorActionsRef.current.formatDocument()
-        const whitespace = buildWorkbenchSaveWhitespaceChanges(view.state, editorConfigRef.current)
-        if (whitespace.length > 0) view.dispatch({ changes: whitespace })
+        if (!isCurrentFileOwner(owner)) return
+        if (!view.state.readOnly && !editorReadOnlyRef.current) {
+          const whitespace = buildWorkbenchSaveWhitespaceChanges(view.state, saveConfig)
+          if (whitespace.length > 0) view.dispatch({ changes: whitespace })
+        }
       }
-      callbacksRef.current.onSave(view.state.doc.toString())
+      if (isCurrentFileOwner(owner)) save(view.state.doc.toString())
     }
 
     // Vim 键位方案：模式编辑那一层选了才加载（见 useWorkbenchEditorVim）。`:w` 就是上面的保存，其余交给页面。
@@ -2438,10 +2529,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       save: (view) => void saveFromEditor(view),
       quit: () => callbacksRef.current.onVimCommand?.('quit'),
       saveAndQuit: (view) => {
-        // 保存时格式化要等一下：等的时候换了文件，就只存不关。
-        const savedPath = pathRef.current
+        // 保存时格式化要等一下：等的时候换了文件或卸载了，旧动作既不保存新文件，也不关闭后来标签。
+        const owner = captureFileOwner(view)
+        if (!owner) return
+        const onVimCommand = callbacksRef.current.onVimCommand
         void saveFromEditor(view).then(() => {
-          if (pathRef.current === savedPath) callbacksRef.current.onVimCommand?.('write-quit')
+          if (isCurrentFileOwner(owner)) onVimCommand?.('write-quit')
         })
       },
       saveAll: () => callbacksRef.current.onVimCommand?.('write-all'),
@@ -2470,6 +2563,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     ): WorkbenchEditorInstanceExtensions => {
       const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {
         if (update.docChanged) {
+          const renameAction = renameActionRef.current
+          renameActionRef.current = null
+          formatRequestRef.current = null
+          if (renameAction)
+            setRenamePopup((current) => (current?.action === renameAction ? null : current))
           const isExternalSync = update.transactions.some((transaction) =>
             transaction.annotation(externalValueSync)
           )
@@ -3398,11 +3496,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           createPortal(symbolNavigation.overlay, containerRef.current)}
         {!!renamePopup && (
           <RenameInputPopup
-            initial={renamePopup.identifier.text}
+            initial={renamePopup.action.identifier.text}
             left={renamePopup.left}
             top={renamePopup.top}
-            onSubmit={(value) => void commitRename(renamePopup.identifier, value)}
-            onCancel={() => setRenamePopup(null)}
+            onSubmit={(value) => void commitRename(renamePopup.action, value)}
+            onCancel={() => cancelRename(renamePopup.action)}
           />
         )}
         {!!commentDraft && (

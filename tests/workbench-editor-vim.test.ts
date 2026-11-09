@@ -631,10 +631,10 @@ void describe('vim: :w, :q, :wq and :wa in the editor', () => {
     assert.match(editor, /save: \(view\) => void saveFromEditor\(view\),/u)
     assert.match(editor, /quit: \(\) => callbacksRef\.current\.onVimCommand\?\.\('quit'\),/u)
     assert.match(editor, /saveAll: \(\) => callbacksRef\.current\.onVimCommand\?\.\('write-all'\),/u)
-    // `:wq`：先走完保存，再报给页面；等保存的时候换了文件就只存不关。
+    // `:wq`：保存等待期间仍须属于原文件owner；切走再切回同路径也不恢复旧关闭。
     assert.match(
       editor,
-      /saveAndQuit: \(view\) => \{[\s\S]*?const savedPath = pathRef\.current\s*void saveFromEditor\(view\)\.then\(\(\) => \{\s*if \(pathRef\.current === savedPath\) callbacksRef\.current\.onVimCommand\?\.\('write-quit'\)\s*\}\)/u
+      /saveAndQuit: \(view\) => \{[\s\S]*?const owner = captureFileOwner\(view\)\s*if \(!owner\) return\s*const onVimCommand = callbacksRef\.current\.onVimCommand\s*void saveFromEditor\(view\)\.then\(\(\) => \{\s*if \(isCurrentFileOwner\(owner\)\) onVimCommand\?\.\('write-quit'\)\s*\}\)/u
     )
   })
 
