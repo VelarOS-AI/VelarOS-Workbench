@@ -48,10 +48,6 @@ export function registerProjectHubIpc(
       : { ok: false as const, reason: 'missing' as const }
   )
 
-  ipcMain.handle(WorkbenchProjectHubChannels.switchProjectDialog, (event) =>
-    windows.switchProjectViaDialog(event.sender)
-  )
-
   ipcMain.handle(WorkbenchProjectHubChannels.switchProjectPath, (event, path: unknown) =>
     typeof path === 'string' && path.length > 0
       ? windows.switchProjectPath(event.sender, path)
@@ -74,12 +70,6 @@ export function registerProjectHubIpc(
       typeof remoteUrl === 'string'
         ? windows.cloneProjectInNewWindow(event.sender, remoteUrl)
         : { ok: false as const, reason: 'invalid-remote' as const }
-  )
-
-  ipcMain.handle(WorkbenchProjectHubChannels.validateProjectPath, (_event, path: unknown) =>
-    typeof path === 'string' && path.length > 0
-      ? windows.validateProjectPath(path)
-      : { ok: false as const, reason: 'missing' as const }
   )
 
   ipcMain.handle(WorkbenchProjectHubChannels.openDroppedPaths, (event, paths: unknown) =>

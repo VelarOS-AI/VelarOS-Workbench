@@ -63,7 +63,6 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.getState),
   openProjectDialog: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectDialog),
   openProjectPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPath, path),
-  switchProjectDialog: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.switchProjectDialog),
   switchProjectPath: (path) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.switchProjectPath, path),
   openProjectDialogInNewWindow: () =>
@@ -72,8 +71,6 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
     ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPathInNewWindow, path),
   cloneProjectInNewWindow: (remoteUrl) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.cloneProjectInNewWindow, remoteUrl),
-  validateProjectPath: (path) =>
-    ipcRenderer.invoke(WorkbenchProjectHubChannels.validateProjectPath, path),
   openDroppedPaths: (paths) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.openDroppedPaths, paths),
   acknowledgeFileOpen: (id) =>

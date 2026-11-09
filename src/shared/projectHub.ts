@@ -12,12 +12,10 @@ export const WorkbenchProjectHubChannels = {
   resolveRegistration: 'workbench-app:project-hub:resolve-registration',
   openProjectDialog: 'workbench-app:project-hub:open-project-dialog',
   openProjectPath: 'workbench-app:project-hub:open-project-path',
-  switchProjectDialog: 'workbench-app:project-hub:switch-project-dialog',
   switchProjectPath: 'workbench-app:project-hub:switch-project-path',
   openProjectDialogInNewWindow: 'workbench-app:project-hub:open-project-dialog-in-new-window',
   openProjectPathInNewWindow: 'workbench-app:project-hub:open-project-path-in-new-window',
   cloneProjectInNewWindow: 'workbench-app:project-hub:clone-project-in-new-window',
-  validateProjectPath: 'workbench-app:project-hub:validate-project-path',
   openDroppedPaths: 'workbench-app:project-hub:open-dropped-paths',
   acknowledgeFileOpen: 'workbench-app:project-hub:acknowledge-file-open',
   openSystemPath: 'workbench-app:project-hub:open-system-path',
@@ -120,12 +118,10 @@ export interface WorkbenchProjectHubBridge {
   getState: () => Promise<WorkbenchProjectHubState>
   openProjectDialog: () => Promise<WorkbenchProjectOpenResult>
   openProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
-  switchProjectDialog: () => Promise<WorkbenchProjectOpenResult>
   switchProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
   openProjectDialogInNewWindow: () => Promise<WorkbenchProjectOpenResult>
   openProjectPathInNewWindow: (path: string) => Promise<WorkbenchProjectOpenResult>
   cloneProjectInNewWindow: (remoteUrl: string) => Promise<WorkbenchProjectCloneResult>
-  validateProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
   openDroppedPaths: (paths: string[]) => Promise<WorkbenchProjectDropResult>
   acknowledgeFileOpen: (id: number) => Promise<WorkbenchProjectHubState>
   /** Electron 41 不再暴露 File.path；preload 用 webUtils 恢复可信的原生拖拽路径。 */

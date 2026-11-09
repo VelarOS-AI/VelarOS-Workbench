@@ -1,6 +1,6 @@
 import { existsSync, statSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { type BaseWindow, BrowserWindow, type WebContents } from 'electron'
 import { execa } from 'execa'
@@ -147,16 +147,6 @@ export class WorkbenchWindowManager {
     return this.openProjectPath(targetWindow?.webContents ?? null, picked)
   }
 
-  public async switchProjectViaDialog(sender: WebContents): Promise<WorkbenchProjectOpenResult> {
-    const picked = await pickDirectory(
-      this.getWindowForWebContents(sender),
-      workbenchMainText('projects.pickSwitch')
-    )
-    if (!picked) return { ok: false, reason: 'canceled' }
-
-    return this.switchProjectPath(sender, picked)
-  }
-
   public async openProjectInNewWindowViaDialog(
     targetWindow: Nullable<BrowserWindow>
   ): Promise<WorkbenchProjectOpenResult> {
@@ -276,20 +266,6 @@ export class WorkbenchWindowManager {
 
     const opened = this.openProjectPathInNewWindow(projectPath)
     return opened.ok ? { ok: true, project: opened.project } : { ok: false, reason: 'clone-failed' }
-  }
-
-  public validateProjectPath(path: string): WorkbenchProjectOpenResult {
-    const projectPath = resolve(path)
-    const failure = validateProjectDirectory(projectPath)
-    return failure
-      ? { ok: false, reason: failure }
-      : {
-          ok: true,
-          project: {
-            path: projectPath,
-            name: basename(projectPath),
-          },
-        }
   }
 
   public createProject(
