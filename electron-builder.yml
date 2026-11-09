@@ -9,6 +9,7 @@ directories:
 files:
   - build/electron/**/*
   - package.json
+  - LICENSE
   - '!node_modules/@velaros-ai/**/*.{ts,tsx,mts,cts,tsbuildinfo}'
   - '!node_modules/@velaros-ai/**/{test,tests,spec,fixtures}/**/*'
   - '!node_modules/@velaros-ai/**/*.{test,spec}.{js,mjs,cjs}'
