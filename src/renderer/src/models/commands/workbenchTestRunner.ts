@@ -4,6 +4,9 @@
  * 只认 JS / TS 的测试文件和这两个运行器；认的依据是离测试文件最近的 `package.json`（依赖、脚本、`jest` 配置段）
  * 和它旁边的配置文件，不执行项目里的任何代码。
  */
+import { tsxLanguage } from '@codemirror/lang-javascript'
+import type { SyntaxNode } from '@lezer/common'
+
 import { isPlainObject, isString } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
@@ -177,12 +180,47 @@ export function pickWorkbenchTestRunner(
   return jest > vitest ? 'jest' : 'vitest'
 }
 
-/** 测试文件自己引的是哪个运行器（只看开头一段源码里的 import / require）；看不出来返回 null。 */
+/** 候选导入自身不完整时不用错误恢复树猜模块；其它位置的编辑中语法错误不影响已完整的导入。 */
+function hasTestRunnerImportSyntaxError(node: SyntaxNode): boolean {
+  let invalid = false
+  node.cursor().iterate((current) => {
+    if (current.type.isError) invalid = true
+  })
+  return invalid
+}
+
+/** 只看开头一段源码中的静态 import 或直接 require 的字符串参数；不执行项目代码。 */
 export function readWorkbenchTestRunnerImport(source: string): Nullable<WorkbenchTestRunnerKind> {
   const head = source.slice(0, 20_000)
-  if (/(?:from|require\()\s*['"]vitest['"]/u.test(head)) return 'vitest'
-  if (/(?:from|require\()\s*['"]@jest\/globals['"]/u.test(head)) return 'jest'
-  return null
+  let imported: Nullable<WorkbenchTestRunnerKind> = null
+  tsxLanguage.parser.parse(head).iterate({
+    enter(current) {
+      const node = current.node
+      let specifier: Nullable<SyntaxNode> = null
+      if (node.name === 'ImportDeclaration') {
+        specifier = node.getChild('String')
+      } else if (node.name === 'CallExpression') {
+        const callee = node.firstChild
+        if (callee?.name !== 'VariableName' || head.slice(callee.from, callee.to) !== 'require')
+          return
+        specifier = node.getChild('ArgList')?.firstChild?.nextSibling ?? null
+        while (specifier?.name === 'BlockComment' || specifier?.name === 'LineComment')
+          specifier = specifier.nextSibling
+      }
+      if (specifier?.name !== 'String') return
+      const literal = head.slice(specifier.from, specifier.to)
+      const runner =
+        literal === "'vitest'" || literal === '"vitest"'
+          ? 'vitest'
+          : literal === "'@jest/globals'" || literal === '"@jest/globals"'
+            ? 'jest'
+            : null
+      if (!runner || hasTestRunnerImportSyntaxError(node)) return
+      // 两种运行器都被实际引入时保留既有 Vitest 优先级。
+      if (runner === 'vitest' || imported === null) imported = runner
+    },
+  })
+  return imported
 }
 
 /** 这个目录说的包管理器：`package.json` 的 `packageManager` 字段优先，其次看锁文件；看不出来返回 null。 */

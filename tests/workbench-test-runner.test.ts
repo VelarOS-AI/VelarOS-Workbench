@@ -316,6 +316,60 @@ void describe('test runner of a project', () => {
     assert.equal(readWorkbenchTestRunnerImport("import x from './vitest-helpers'"), null)
   })
 
+  void test('reads real static imports and direct require calls across JavaScript, TypeScript and JSX', () => {
+    for (const [source, runner] of [
+      ["import 'vitest'", 'vitest'],
+      ["import type { ExpectStatic } from 'vitest'", 'vitest'],
+      ["import * as runner from '@jest/globals'", 'jest'],
+      ["import {\n it\n} /* module */ from\n 'vitest'", 'vitest'],
+      ["const runner = require /* load */ ( /* module */ '@jest/globals' )", 'jest'],
+      ["const runner = require(\n // module\n 'vitest'\n)", 'vitest'],
+      ["const example = <pre>from 'vitest'</pre>; import { jest } from '@jest/globals'", 'jest'],
+      ["const example = `text ${require('vitest')}`", 'vitest'],
+      ["import { jest } from '@jest/globals'; import { it } from 'vitest'", 'vitest'],
+      ["import { it } from 'vitest'; import { jest } from '@jest/globals'", 'vitest'],
+    ] as const)
+      assert.equal(readWorkbenchTestRunnerImport(source), runner, source)
+  })
+
+  void test('ignores runner-looking comments, strings and unrelated calls before falling back to project evidence', () => {
+    for (const source of [
+      "// import { it } from 'vitest'",
+      "/* const { it } = require('vitest') */",
+      'const example = "from \'vitest\'"',
+      "const example = `require('vitest')`",
+      "const example = /from 'vitest'/",
+      "const example = <pre>from 'vitest'</pre>",
+      "loader.require('vitest')",
+      "require.resolve('vitest')",
+      "prerequire('vitest')",
+      "require(`vitest`)",
+      "require('vitest' + suffix)",
+      "require(moduleName)",
+      "require('vitest'",
+      "import { it } from 'vitest",
+    ]) {
+      const imported = readWorkbenchTestRunnerImport(source)
+      assert.equal(imported, null, source)
+      assert.equal(pickWorkbenchTestRunner({ vitest: 1, jest: 3 }, imported), 'jest', source)
+    }
+    assert.equal(
+      readWorkbenchTestRunnerImport("/* from 'vitest' */\nconst { jest } = require('@jest/globals')"),
+      'jest'
+    )
+  })
+
+  void test('keeps the source budget and uses complete imports despite unrelated unfinished code', () => {
+    const imported = "import { it } from 'vitest'"
+    assert.equal(readWorkbenchTestRunnerImport(' '.repeat(20_000 - imported.length) + imported), 'vitest')
+    assert.equal(readWorkbenchTestRunnerImport(' '.repeat(20_000) + imported), null)
+    assert.equal(readWorkbenchTestRunnerImport(' '.repeat(20_001 - imported.length) + imported), null)
+    assert.equal(
+      readWorkbenchTestRunnerImport("import { jest } from '@jest/globals';\nconst unfinished = ("),
+      'jest'
+    )
+  })
+
   void test('reads the package manager from the manifest, then from the lock file', () => {
     assert.equal(
       readWorkbenchTestPackageManager(['yarn.lock'], '{"packageManager":"pnpm@9.12.0"}'),
