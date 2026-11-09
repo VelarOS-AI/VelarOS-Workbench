@@ -74,7 +74,6 @@ export class WorkbenchProductAnalyticsPreferencesStore {
   private update(patch: Partial<WorkbenchProductAnalyticsPreferences>): void {
     const next = { ...this.#preferences, ...patch }
     if (JSON.stringify(next) === JSON.stringify(this.#preferences)) return
-    this.#preferences = next
     const file: WorkbenchProductAnalyticsPreferencesFile = {
       version: 1,
       ...next,
@@ -83,6 +82,7 @@ export class WorkbenchProductAnalyticsPreferencesStore {
     const temporaryPath = `${this.#filePath}.tmp`
     writeFileSync(temporaryPath, `${JSON.stringify(file, null, 2)}\n`, 'utf8')
     renameSync(temporaryPath, this.#filePath)
+    this.#preferences = next
   }
 }
 

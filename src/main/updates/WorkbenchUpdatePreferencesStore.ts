@@ -34,21 +34,21 @@ export class WorkbenchUpdatePreferencesStore {
 
   public setAutomaticDownloads(enabled: boolean): void {
     if (this.#automaticDownloads === enabled) return
+    this.#write(enabled, this.#channel)
     this.#automaticDownloads = enabled
-    this.#write()
   }
 
   public setChannel(channel: WorkbenchUpdateChannel): void {
     if (this.#channel === channel) return
+    this.#write(this.#automaticDownloads, channel)
     this.#channel = channel
-    this.#write()
   }
 
-  #write(): void {
+  #write(automaticDownloads: boolean, channel: WorkbenchUpdateChannel): void {
     const file: WorkbenchUpdatePreferencesFileV2 = {
       version: 2,
-      automaticDownloads: this.#automaticDownloads,
-      channel: this.#channel,
+      automaticDownloads,
+      channel,
     }
     mkdirSync(dirname(this.#filePath), { recursive: true })
     const temporaryPath = `${this.#filePath}.tmp`
