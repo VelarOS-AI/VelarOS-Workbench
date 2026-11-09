@@ -2,6 +2,8 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow, ipcMain } from 'electron'
 
+import { Log } from '@velaros-ai/velaros/core'
+
 import { isWorkbenchUpdateChannel, WorkbenchUpdateChannels } from '../../shared/workbenchUpdate'
 import { resolveWorkbenchNodeExecutable } from '../conversation/WorkbenchNodeRuntime'
 import { resolveVelarOSOfficialWebsiteMarket } from '../VelarOSOfficialWebsite'
@@ -35,18 +37,18 @@ export function installWorkbenchUpdateRuntime(): void {
     minimumRevision: WorkbenchCloudRoutingMinimumRevision,
     manifestStore: new WorkbenchCloudRoutingManifestFileStore(app.getPath('userData'), market),
   })
+  const windowsUpdater = process.platform === 'win32' && app.isPackaged
+    ? new WindowsArchiveUpdater({
+        appId: 'com.velaros.workbench',
+        executable: process.execPath,
+        nodeExecutable: resolveWorkbenchNodeExecutable(),
+        workerFile: join(process.resourcesPath, 'windows-update.cjs'),
+        userDataDirectory: app.getPath('userData'),
+      })
+    : null
   const service = new WorkbenchUpdateService(
     new CloudWorkbenchReleaseSource(endpointResolver),
-    async () =>
-      process.platform === 'win32'
-        ? new WindowsArchiveUpdater({
-            appId: 'com.velaros.workbench',
-            executable: process.execPath,
-            nodeExecutable: resolveWorkbenchNodeExecutable(),
-            workerFile: join(process.resourcesPath, 'windows-update.cjs'),
-            userDataDirectory: app.getPath('userData'),
-          })
-        : (await import('electron-updater')).default.autoUpdater,
+    windowsUpdater ?? (async () => (await import('electron-updater')).default.autoUpdater),
     new WorkbenchUpdatePreferencesStore(app.getPath('userData')),
     {
       currentVersion: app.getVersion(),
@@ -86,5 +88,13 @@ export function installWorkbenchUpdateRuntime(): void {
       if (channel !== WorkbenchUpdateChannels.changed) ipcMain.removeHandler(channel)
     }
   })
-  service.start()
+  if (windowsUpdater) {
+    void windowsUpdater.recovery
+      .then(() => {
+        if (service.getState().phase !== 'error') service.start()
+      })
+      .catch((error) => {
+        Log.tag('WorkbenchUpdate').caught('Windows update startup recovery failed', error)
+      })
+  } else service.start()
 }

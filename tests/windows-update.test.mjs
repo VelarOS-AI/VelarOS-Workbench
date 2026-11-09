@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import {
   copyFile,
@@ -29,11 +30,14 @@ async function fixture(t, overrides = {}) {
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }))
   const appDir = join(root, 'Installed App')
   const userDataDir = join(root, 'User Data')
-  const helper = join(root, 'Helper')
+  const jobId = randomUUID()
+  const helper = join(root, `velaros-update-helper-${jobId}`)
+  const workRoot = join(root, `.velaros-update-${jobId}`)
   await Promise.all([
     mkdir(join(appDir, 'resources'), { recursive: true }),
     mkdir(userDataDir),
     mkdir(helper),
+    mkdir(workRoot),
   ])
   const manifest = {
     schema: 1,
@@ -66,6 +70,10 @@ async function fixture(t, overrides = {}) {
   const archive = join(root, 'update.zip')
   await writeFile(archive, await zip.generateAsync({ type: 'nodebuffer' }))
   const job = {
+    schema: 1,
+    jobId,
+    helperDirectory: helper,
+    workRoot,
     appDir,
     userDataDir,
     archive,
@@ -74,8 +82,34 @@ async function fixture(t, overrides = {}) {
     executable: manifest.executable,
     version: '1.0.1',
     pid: process.pid,
+    restart: false,
   }
   return { root, job, helper }
+}
+
+async function readReceipt(job) {
+  const resultPath = join(job.userDataDir, `windows-update-result-${job.jobId}.json`)
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    try {
+      return JSON.parse(await readFile(resultPath, 'utf8'))
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      await delay(50)
+    }
+  }
+  let diagnostic = ''
+  try {
+    diagnostic = await readFile(join(job.helperDirectory, `observer-error-${job.jobId}.json`), 'utf8')
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  const facts = await Promise.allSettled([
+    readFile(join(job.helperDirectory, 'terminal.json'), 'utf8'),
+    readFile(join(job.helperDirectory, `observer-ready-${job.jobId}.json`), 'utf8'),
+    readFile(join(dirname(job.appDir), 'worker-exits.jsonl'), 'utf8'),
+  ])
+  throw new Error(`Windows update completion receipt was not published. ${diagnostic} ${JSON.stringify(facts)}`)
 }
 
 test('archive update replaces Electron files while preserving user data, uninstaller and extra files', async (t) => {
@@ -106,6 +140,32 @@ test('failed directory switch rolls the old application back', async (t) => {
   )
   assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'old exe')
   assert.equal(await readFile(join(job.appDir, 'resources/app.asar'), 'utf8'), 'old asar')
+})
+
+test('a failed rollback preserves the install error and the previous files', async (t) => {
+  const { root, job, helper } = await fixture(t)
+  const prepared = await prepare(job, helper)
+  const { rename } = await import('node:fs/promises')
+  const retained = join(root, 'retained-previous')
+  const installError = new Error('Directory switch failed')
+  await assert.rejects(
+    replaceApplication(job, prepared, async (source, target) => {
+      if (source.endsWith('next')) {
+        await rename(join(prepared.workRoot, 'previous'), retained)
+        throw installError
+      }
+      await rename(source, target)
+    }),
+    (error) => {
+      assert.ok(error instanceof AggregateError)
+      assert.strictEqual(error.errors[0], installError)
+      assert.equal(error.errors[1].code, 'ENOENT')
+      assert.equal(error.rollbackFailed, true)
+      return true
+    }
+  )
+  assert.equal(await readFile(join(retained, job.executable), 'utf8'), 'old exe')
+  assert.equal(await readFile(join(job.userDataDir, 'conversations.json'), 'utf8'), 'my conversations')
 })
 
 test('rejects corrupt archives, wrong product, wrong version, and modified staging', async (t) => {
@@ -140,11 +200,15 @@ test('rejects traversal, Windows aliases, links and application-local user data'
   assert.throws(() => validateEntry('link', 0o120777 << 16))
   const { job, helper } = await fixture(t)
   await assert.rejects(prepare({ ...job, userDataDir: job.appDir }, helper), /independent/u)
+  const nestedUserData = join(job.workRoot, 'user-data')
+  await mkdir(nestedUserData)
+  await assert.rejects(prepare({ ...job, userDataDir: nestedUserData }, helper), /independent/u)
 })
 
+// The native handoff uses a real Windows Process handle; ZIP and rollback checks above stay portable.
 test(
   'detached updater waits for its parent to exit before applying an update',
-  { timeout: 30_000 },
+  { timeout: 30_000, skip: process.platform !== 'win32' },
   async (t) => {
     const { job, helper } = await fixture(t)
     const parent = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
@@ -157,6 +221,7 @@ test(
     job.pid = parent.pid
     await prepare(job, helper)
     await writeFile(join(helper, 'job.json'), JSON.stringify(job))
+    await writeFile(join(job.userDataDir, 'windows-update-owner.json'), JSON.stringify(job))
     const script = join(helper, 'worker.cjs')
     await build({
       entryPoints: [workerPath],
@@ -165,7 +230,7 @@ test(
       platform: 'node',
       format: 'cjs',
     })
-    const runtime = join(helper, process.platform === 'win32' ? 'node.exe' : 'node')
+    const runtime = join(helper, 'node.exe')
     await copyFile(process.execPath, runtime)
     const worker = spawn(runtime, [script, 'apply', helper, 'exit'], {
       cwd: helper,
@@ -187,18 +252,20 @@ test(
     const [code] = await completed
     assert.equal(code, 0, error)
     assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'new exe')
-    const result = JSON.parse(
-      await readFile(join(job.userDataDir, 'windows-update-result.json'), 'utf8')
-    )
+    const result = await readReceipt(job)
     assert.equal(result.success, true)
+    assert.equal(result.workerExited, true)
+    assert.equal(result.jobId, job.jobId)
     assert.equal(dirname(result.workRoot), dirname(job.appDir))
   }
 )
 
-for (const action of ['close', 'install', 'replace']) {
+for (const action of ['close', 'install', 'replace', 'cancel']) {
   test(
-    `prepared Windows updater applies on ${action} without another download`,
-    { timeout: 30_000 },
+    action === 'cancel'
+      ? 'prepared Windows updater cancels only after its worker exits'
+      : `prepared Windows updater applies on ${action} without another download`,
+    { timeout: 30_000, skip: process.platform !== 'win32' },
     async (t) => {
       const { root, job } = await fixture(t)
       const bundledWorker = join(root, 'worker.cjs')
@@ -209,25 +276,57 @@ for (const action of ['close', 'install', 'replace']) {
         platform: 'node',
         format: 'cjs',
       })
+      const exitLedger = join(root, 'worker-exits.jsonl')
+      const observedWorker = join(root, 'observed-worker.cjs')
+      await writeFile(observedWorker, `
+        const { appendFileSync, existsSync } = require('node:fs')
+        process.once('exit', () => appendFileSync(process.env.UPDATE_EXIT_LEDGER, JSON.stringify({
+          command: process.argv[2], directory: process.argv[3], pid: process.pid,
+          directoryExists: existsSync(process.argv[3]),
+        }) + '\\n'))
+        require(${JSON.stringify(bundledWorker)}).run(process.argv[2], process.argv[3]).catch((error) => {
+          if (process.connected) process.send({ error: error.message })
+          console.error(error.message)
+          process.exitCode = 1
+          if (process.connected) process.disconnect()
+        })
+      `)
       const parentFile = join(root, 'parent.mjs')
       await build({
         stdin: {
           contents: `
+          import { readFile } from 'node:fs/promises'
+          import { join } from 'node:path'
           import { WindowsArchiveUpdater } from './src/main/updates/WindowsArchiveUpdater.ts'
-          const updater = new WindowsArchiveUpdater(JSON.parse(process.env.UPDATE_OPTIONS))
+          const options = JSON.parse(process.env.UPDATE_OPTIONS)
+          const updater = new WindowsArchiveUpdater(options)
           updater.autoInstallOnAppQuit = true
+          updater.autoRunAppAfterInstall = false
           updater.on('error', (error) => { console.error(error); process.exit(1) })
+          await updater.recovery
+          if (process.env.UPDATE_ACTION === 'recover') {
+            process.send({ recovered: true })
+            process.disconnect()
+          } else {
           const downloadOptions = { updateInfoAndProvider: {
             info: { version: '1.0.1' },
             provider: { resolveFiles: () => [{ url: new URL('https://updates.test/update.zip'), info: { sha512: process.env.UPDATE_SHA512 } }] }
           } }
           await updater.doDownloadUpdate(downloadOptions)
-          if (process.env.UPDATE_ACTION === 'replace') await updater.doDownloadUpdate(downloadOptions)
-          process.send({ downloaded: true })
+          let task = JSON.parse(await readFile(join(options.userDataDirectory, 'windows-update-owner.json'), 'utf8'))
+          let previousTask
+          if (process.env.UPDATE_ACTION === 'replace') {
+            previousTask = task
+            await updater.doDownloadUpdate(downloadOptions)
+            task = JSON.parse(await readFile(join(options.userDataDirectory, 'windows-update-owner.json'), 'utf8'))
+          }
+          if (process.env.UPDATE_ACTION === 'cancel') await updater.cancelPreparedUpdate()
+          process.send({ downloaded: true, task, previousTask })
           process.once('message', (action) => {
             if (action === 'install') updater.quitAndInstall(true, false)
             else process.exit(0)
           })
+          }
         `,
           resolveDir: process.cwd(),
           loader: 'ts',
@@ -250,7 +349,7 @@ for (const action of ['close', 'install', 'replace']) {
                     ? `
               import { EventEmitter } from 'node:events'
               export class AppUpdater extends EventEmitter {
-                app = { version: '1.0.0', quit: () => process.exit(0), onQuit: (handler) => process.on('exit', () => handler(0)) }
+                app = { version: process.env.UPDATE_VERSION || '1.0.0', quit: () => process.exit(0), onQuit: (handler) => process.on('exit', () => handler(0)) }
                 async executeDownload(options) { await options.done({ downloadedFile: process.env.UPDATE_ARCHIVE }); return [] }
                 dispatchUpdateDownloaded(event) { this.emit('update-downloaded', event) }
                 dispatchError(error) { this.emit('error', error) }
@@ -263,25 +362,28 @@ for (const action of ['close', 'install', 'replace']) {
           },
         ],
       })
-      const parent = spawn(process.execPath, [parentFile], {
+      const startParent = (nextAction, version = '1.0.0') => spawn(process.execPath, [parentFile], {
         stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
         env: {
           ...process.env,
           TMPDIR: root,
           TMP: root,
           TEMP: root,
-          UPDATE_ACTION: action,
+          UPDATE_ACTION: nextAction,
+          UPDATE_VERSION: version,
+          UPDATE_EXIT_LEDGER: exitLedger,
           UPDATE_ARCHIVE: job.archive,
           UPDATE_SHA512: job.sha512,
           UPDATE_OPTIONS: JSON.stringify({
             appId: job.appId,
             executable: join(job.appDir, job.executable),
             nodeExecutable: process.execPath,
-            workerFile: bundledWorker,
+            workerFile: observedWorker,
             userDataDirectory: job.userDataDir,
           }),
         },
       })
+      const parent = startParent(action)
       let error = ''
       parent.stderr.on('data', (bytes) => {
         error += bytes.toString()
@@ -297,31 +399,59 @@ for (const action of ['close', 'install', 'replace']) {
         }),
       ])
       assert.equal(downloaded.downloaded, true)
+      const task = downloaded.task
+      const ledger = (await readFile(exitLedger, 'utf8')).trim().split('\n').map((line) => JSON.parse(line))
+      const retired = action === 'replace' ? downloaded.previousTask : action === 'cancel' ? task : null
+      if (retired) {
+        const closedWorker = ledger.find((entry) => entry.command === 'watch' && entry.directory === retired.helperDirectory)
+        assert.equal(closedWorker?.directoryExists, true, 'helper exists until its runtime exits')
+        await assert.rejects(readFile(join(retired.helperDirectory, 'job.json')), { code: 'ENOENT' })
+        await assert.rejects(readdir(retired.workRoot), { code: 'ENOENT' })
+      }
+      if (action !== 'cancel')
+        assert.equal(JSON.parse(await readFile(join(task.helperDirectory, 'job.json'), 'utf8')).jobId, task.jobId)
       assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'old exe')
       parent.send(action)
       const [code] = await exited
       assert.equal(code, 0, error)
-      const resultPath = join(job.userDataDir, 'windows-update-result.json')
-      const deadline = Date.now() + 10_000
-      let result
-      while (!result && Date.now() < deadline) {
-        try {
-          result = JSON.parse(await readFile(resultPath, 'utf8'))
-        } catch (failure) {
-          if (failure.code !== 'ENOENT') throw failure
-          await delay(50)
-        }
+      if (action === 'cancel') {
+        await assert.rejects(readFile(join(job.userDataDir, 'windows-update-owner.json')), { code: 'ENOENT' })
+        assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'old exe')
+        return
       }
+      const result = await readReceipt(task)
       assert.equal(result?.success, true, JSON.stringify(result))
-      assert.equal(
-        (await readdir(root)).filter((name) => name.startsWith('.velaros-update-')).length,
-        1
-      )
+      assert.equal(result.workerExited, true)
+      assert.equal(result.jobId, task.jobId)
+      assert.equal(result.helperDirectory, task.helperDirectory)
+      assert.equal(result.workRoot, task.workRoot)
       assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'new exe')
       assert.equal(
         await readFile(join(job.userDataDir, 'conversations.json'), 'utf8'),
         'my conversations'
       )
+      const untouched = join(root, `velaros-update-helper-${randomUUID()}`)
+      await mkdir(untouched)
+      await writeFile(join(untouched, 'sentinel'), 'preserve')
+      if (action === 'close') {
+        const resultPath = join(job.userDataDir, `windows-update-result-${task.jobId}.json`)
+        await writeFile(resultPath, JSON.stringify({ ...result, jobId: randomUUID() }))
+        const rejected = startParent('recover', '1.0.1')
+        rejected.stderr.resume()
+        assert.equal((await once(rejected, 'exit'))[0], 1)
+        assert.equal(JSON.parse(await readFile(join(task.helperDirectory, 'job.json'), 'utf8')).jobId, task.jobId)
+        assert.equal(await readFile(join(task.workRoot, 'previous', job.executable), 'utf8'), 'old exe')
+        await writeFile(resultPath, JSON.stringify(result))
+      }
+      const successor = startParent('recover', '1.0.1')
+      let recoveryError = ''
+      successor.stderr.on('data', (bytes) => { recoveryError += bytes.toString() })
+      assert.equal((await once(successor, 'exit'))[0], 0, recoveryError)
+      await assert.rejects(readFile(join(task.helperDirectory, 'job.json')), { code: 'ENOENT' })
+      await assert.rejects(readdir(task.workRoot), { code: 'ENOENT' })
+      await assert.rejects(readFile(join(job.userDataDir, 'windows-update-owner.json')), { code: 'ENOENT' })
+      await assert.rejects(readFile(join(job.userDataDir, `windows-update-result-${task.jobId}.json`)), { code: 'ENOENT' })
+      assert.equal(await readFile(join(untouched, 'sentinel'), 'utf8'), 'preserve')
     }
   )
 }

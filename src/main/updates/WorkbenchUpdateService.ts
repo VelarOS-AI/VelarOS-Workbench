@@ -25,6 +25,10 @@ interface WorkbenchUpdateServiceOptions {
   readonly downloadCache?: WorkbenchUpdateDownloadCache
 }
 
+interface WorkbenchUpdateInstaller extends AppUpdater {
+  cancelPreparedUpdate?(): Promise<void>
+}
+
 type WorkbenchUpdateListener = (state: WorkbenchUpdateState) => void
 
 const DownloadRetryLimit = 3
@@ -57,7 +61,7 @@ export class WorkbenchUpdateService {
   #selectedArtifact: Nullable<WorkbenchReleaseArtifact> = null
   readonly #cached = new Map<string, string>()
   #installingCached = false
-  #updater: AppUpdater | null = null
+  #updater: WorkbenchUpdateInstaller | null = null
   #updaterPromise: Promise<AppUpdater> | null = null
   #disposed = false
 
@@ -103,7 +107,7 @@ export class WorkbenchUpdateService {
     updater.on('error', this.#handleError)
   }
 
-  private get updater(): AppUpdater {
+  private get updater(): WorkbenchUpdateInstaller {
     if (!this.#updater) throw new Error('Workbench update installer is not initialized.')
     return this.#updater
   }
@@ -321,6 +325,7 @@ export class WorkbenchUpdateService {
     this.#downloadController?.abort()
     this.#downloadCancellation?.cancel()
     await this.#downloadPromise
+    await this.#updater?.cancelPreparedUpdate?.()
     this.#cached.clear()
     await this.options.downloadCache?.clear()
     this.#setState({ phase: 'available', targetVersion })
@@ -351,8 +356,14 @@ export class WorkbenchUpdateService {
     this.#downloadController?.abort()
     this.#downloadCancellation?.cancel()
     if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
+    await this.#updater?.cancelPreparedUpdate?.()
     await this.#replaceFeed(null)
-    this.preferences.setChannel(channel)
+    try {
+      this.preferences.setChannel(channel)
+    } catch (error) {
+      if (this.#updater?.cancelPreparedUpdate) this.#setState({ phase: 'idle' })
+      throw error
+    }
     if (this.#updater) this.#updater.allowPrerelease = channel !== 'stable'
     this.#setState({ phase: 'idle' })
     return this.checkForUpdates()
@@ -509,7 +520,6 @@ export class WorkbenchUpdateService {
   readonly #handleError = (error: Error): void => {
     if (
       this.#disposed ||
-      this.#state.phase === 'downloaded' ||
       this.#downloadPromise ||
       this.#downloadCancellation?.cancelled ||
       this.#downloadController?.signal.aborted
