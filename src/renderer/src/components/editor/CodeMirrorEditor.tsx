@@ -296,17 +296,17 @@ export interface CodeMirrorEditorNavigationOptions {
 
 export interface CodeMirrorEditorHandle {
   focus: () => void
-  moveToLine: (line: number, column?: number, options?: CodeMirrorEditorNavigationOptions) => void
+  moveToLine: (line: number, column?: number, options?: CodeMirrorEditorNavigationOptions) => boolean
   /** 选中 startLine..endLine 整行并滚到视野中间（指给用户看一段代码）。 */
   selectLines: (
     startLine: number,
     endLine: number,
     options?: CodeMirrorEditorNavigationOptions
-  ) => void
+  ) => boolean
   openCompletion: () => void
   /** 在光标处做一个代码动作（命令面板里的「快速修复」……）。 */
   runCommand: (command: WorkbenchEditorCommandId) => void
-  selectRange: (from: number, to: number) => void
+  selectRange: (from: number, to: number, options?: CodeMirrorEditorNavigationOptions) => boolean
   /** 查找栏的动作：下一处、上一处、替换当前一处（并跳到下一处）、全部替换。 */
   findNext: () => void
   findPrevious: () => void
@@ -342,6 +342,8 @@ interface CodeMirrorEditorProps {
    */
   fileStates?: WorkbenchEditorFileStates
   onChange: (content: string) => void
+  /** 本文件的view已建立并装入状态；之前未被接纳的导航现在可以重试。 */
+  onReady?: () => void
   onCursorPositionChange?: (position: {
     line: number
     column: number
@@ -1247,6 +1249,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onToggleGitBlame,
       fileStates,
       onChange,
+      onReady,
       onCursorPositionChange,
       onOpenFind,
       onCloseFind,
@@ -1294,6 +1297,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const projectContextIndexRef = useLatest(projectContextIndex)
     const callbacksRef = useLatest({
       onChange,
+      onReady,
       onCursorPositionChange,
       onOpenFind,
       onCloseFind,
@@ -2435,7 +2439,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       },
       moveToLine: (line, column = 1, options) => {
         const view = viewRef.current
-        if (!view) return
+        if (!view || !captureFileOwner(view)) return false
 
         const targetLine = view.state.doc.line(Math.min(Math.max(1, line), view.state.doc.lines))
         const targetPosition = clampPosition(
@@ -2450,10 +2454,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         revealWorkbenchActiveLine(view)
         if (options?.focus !== false) view.focus()
         emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
+        return true
       },
       selectLines: (startLine, endLine, options) => {
         const view = viewRef.current
-        if (!view) return
+        if (!view || !captureFileOwner(view)) return false
 
         const lines = view.state.doc.lines
         const first = view.state.doc.line(Math.min(Math.max(1, startLine), lines))
@@ -2465,6 +2470,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         revealWorkbenchActiveLine(view)
         if (options?.focus !== false) view.focus()
         emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
+        return true
       },
       openCompletion: () => {
         const view = viewRef.current
@@ -2474,9 +2480,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         startCompletion(view)
       },
       runCommand: (command) => runEditorCommand(command),
-      selectRange: (from, to) => {
+      selectRange: (from, to, options) => {
         const view = viewRef.current
-        if (!view) return
+        if (!view || !captureFileOwner(view)) return false
 
         const start = clampPosition(from, view.state.doc.length)
         const end = clampPosition(to, view.state.doc.length)
@@ -2485,8 +2491,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           effects: EditorView.scrollIntoView(start, { y: 'center', x: 'nearest' }),
         })
         revealWorkbenchActiveLine(view)
-        view.focus()
+        if (options?.focus !== false) view.focus()
         emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
+        return true
       },
       findNext: () => runFindCommand(findNext),
       findPrevious: () => runFindCommand(findPrevious),
@@ -2944,6 +2951,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       }
       reanchorWorkbenchComments(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
+      callbacksRef.current.onReady?.()
     }
 
     useEffect(() => {

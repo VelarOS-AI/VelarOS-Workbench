@@ -939,7 +939,7 @@ void describe('split editor wiring', () => {
     )
     assert.match(
       controller,
-      /const updateEditorContent = useMemoizedFn\(\(content: string, path\?: string\): void => \{\s*const file = path \? openTabsByPath\.get\(path\)\?\.file : selectedFile/u
+      /const updateEditorContent = useMemoizedFn\(\(content: string, path\?: string\): void => \{\s*const targetPath = path \?\? selectedFilePathRef\.current\s*const file = targetPath \? openTabsByPathLatest\.current\.get\(targetPath\)\?\.file : undefined/u
     )
   })
 
@@ -956,7 +956,7 @@ void describe('split editor wiring', () => {
     // 定位请求只由正在显示那个文件的一组执行，两组共用「做过了」的记录。
     assert.match(
       editorPanel,
-      /if \(navigationRequest\.path && navigationRequest\.path !== selectedFile\.path\) return/u
+      /if \(navigationRequest\.path && navigationRequest\.path !== codeEditorPath\) return/u
     )
     assert.match(
       editorPanel,

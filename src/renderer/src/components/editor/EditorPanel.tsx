@@ -7,6 +7,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -71,6 +72,7 @@ import {
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { isPresent, Log, toNullable } from '@velaros-ai/velaros/core'
+import type { TimerLease } from '@velaros-ai/velaros/core/utils/TimerScope'
 
 import {
   type WorkbenchLanguageServiceDiagnostic,
@@ -295,6 +297,16 @@ interface EditorPanelProps {
   workspace: WorkbenchEditorPanelWorkspaceProps
 }
 
+type PendingEditorNavigation =
+  | { owner: object; kind: 'request'; request: EditorNavigationRequest }
+  | {
+      owner: object
+      kind: 'go-to-line'
+      line: number
+      column: number
+      navigationRequestId: Nullable<number>
+    }
+
 /**
  * 编辑区里的一组：自己的标签栏、查找栏、跳行栏、外部改动提示与编辑器。编辑区并排两组时左右各一个；
  * Git 对比、只读预览、网页调试与 Agent 浏览器这些盖在编辑器上的标签只在左边那组里（`diff`）。
@@ -395,6 +407,14 @@ export function EditorPanel({
     () => new Set()
   )
   const timers = useTimerScope('EditorPanel')
+  const navigationOwnerRef = useRef<Nullable<object>>(null)
+  const pendingNavigationRef = useRef<Nullable<PendingEditorNavigation>>(null)
+  const navigationFrameRef = useRef<Nullable<TimerLease>>(null)
+  const navigationRequestLatest = useLatest(navigationRequest)
+  const cancelNavigationFrame = useCallback((): void => {
+    navigationFrameRef.current?.cancel()
+    navigationFrameRef.current = null
+  }, [])
   const [goToLineInput, setGoToLineInput] = useState('')
   const [externalConflictDialogOpen, setExternalConflictDialogOpen] = useState(false)
   const [fileHistoryMode, setFileHistoryMode] = useState<Nullable<FileHistoryMode>>(null)
@@ -606,6 +626,96 @@ export function EditorPanel({
     !hasEditorOverlayTab && isWorkbenchMarkdownPreviewPath(selectedFilePath)
   const markdownPreviewActive =
     markdownPreviewAvailable && !!selectedFilePath && markdownPreviewPaths.has(selectedFilePath)
+  const codeEditorVisible =
+    !!selectedFile &&
+    !selectedImagePreview &&
+    !hasEditorOverlayTab &&
+    !markdownPreviewActive &&
+    !fileHistoryMode
+  const codeEditorPath = selectedFile?.path ?? null
+  useLayoutEffect(() => {
+    if (!codeEditorVisible) return
+    const owner = {}
+    navigationOwnerRef.current = owner
+    return () => {
+      if (navigationOwnerRef.current === owner) navigationOwnerRef.current = null
+      if (pendingNavigationRef.current?.owner === owner) pendingNavigationRef.current = null
+      cancelNavigationFrame()
+    }
+  }, [cancelNavigationFrame, codeEditorPath, codeEditorVisible, group.index, projectRoot])
+
+  const schedulePendingNavigation = useCallback((): void => {
+    const pending = pendingNavigationRef.current
+    if (!pending || navigationOwnerRef.current !== pending.owner || !editorRef.current) return
+    cancelNavigationFrame()
+    const frame = timers.nextFrame(
+      () => {
+        if (navigationFrameRef.current === frame) navigationFrameRef.current = null
+        if (pendingNavigationRef.current !== pending || navigationOwnerRef.current !== pending.owner)
+          return
+        const editor = editorRef.current
+        if (!editor) return
+        let applied: boolean
+        if (pending.kind === 'request') {
+          const request = pending.request
+          if (
+            navigationRequestLatest.current?.id !== request.id ||
+            appliedNavigationRequestIdRef.current === request.id
+          )
+            return
+          const options = { focus: request.focus }
+          if (request.endColumn) {
+            const content = editorContentLatest.current
+            const endLine = request.endLine ?? request.line
+            applied = editor.selectRange(
+              resolveWorkbenchTextOffset(content, request.line, request.column ?? 1),
+              resolveWorkbenchTextOffset(content, endLine, request.endColumn),
+              options
+            )
+          } else if (request.endLine)
+            applied = editor.selectLines(request.line, request.endLine, options)
+          else applied = editor.moveToLine(request.line, request.column, options)
+          if (applied) appliedNavigationRequestIdRef.current = request.id
+        } else {
+          if ((navigationRequestLatest.current?.id ?? null) !== pending.navigationRequestId) return
+          applied = editor.moveToLine(pending.line, pending.column)
+          if (applied) {
+            setIsGoToLineOpen(false)
+            setGoToLineInput('')
+          }
+        }
+        // 未ready不消费：真实view装入状态后的onReady会再次尝试，不按帧轮询。
+        if (applied && pendingNavigationRef.current === pending) pendingNavigationRef.current = null
+      },
+      { label: 'workbench.editor.navigation' }
+    )
+    navigationFrameRef.current = frame
+  }, [
+    appliedNavigationRequestIdRef,
+    cancelNavigationFrame,
+    editorContentLatest,
+    navigationRequestLatest,
+    timers,
+  ])
+
+  const queueNavigationRequest = useCallback((): void => {
+    cancelNavigationFrame()
+    pendingNavigationRef.current = null
+    const owner = navigationOwnerRef.current
+    if (!owner || !navigationRequest || !codeEditorPath) return
+    // 请求按实际文件交给一组；共享id只在handle确认已经执行后提交。
+    if (navigationRequest.path && navigationRequest.path !== codeEditorPath) return
+    if (appliedNavigationRequestIdRef.current === navigationRequest.id) return
+    pendingNavigationRef.current = { owner, kind: 'request', request: navigationRequest }
+    schedulePendingNavigation()
+  }, [
+    appliedNavigationRequestIdRef,
+    cancelNavigationFrame,
+    codeEditorPath,
+    navigationRequest,
+    schedulePendingNavigation,
+  ])
+
   const selectedExternalConflictKey = useMemo(() => {
     if (!selectedExternalChange) return null
 
@@ -626,10 +736,17 @@ export function EditorPanel({
   const problemsShortcut = formatWorkbenchShortcutHint(keymap['toggle-problems'])
   const gitShortcut = formatWorkbenchShortcutHint(keymap['toggle-changes'])
 
+  function cancelPendingGoToLine(): void {
+    if (pendingNavigationRef.current?.kind !== 'go-to-line') return
+    pendingNavigationRef.current = null
+    cancelNavigationFrame()
+  }
+
   /** 打开查找栏：`seed` 是预填的查找词，`withReplace` 连替换行一起展开。已经开着就把焦点放回查找框。 */
   function openFindBar(seed?: string, withReplace = false): void {
     if (!selectedFile || selectedImagePreview || markdownPreviewActive) return
 
+    cancelPendingGoToLine()
     setIsGoToLineOpen(false)
     if (seed) setFindQuery(seed)
     if (withReplace) setIsFindReplaceOpen(true)
@@ -650,12 +767,14 @@ export function EditorPanel({
   function openGoToLineBar(): void {
     if (!selectedFile || selectedImagePreview) return
 
+    cancelPendingGoToLine()
     setIsFindOpen(false)
     setIsGoToLineOpen(true)
     setGoToLineInput('')
   }
 
   function closeGoToLineBar(): void {
+    cancelPendingGoToLine()
     setIsGoToLineOpen(false)
     setGoToLineInput('')
     editorRef.current?.focus()
@@ -663,13 +782,17 @@ export function EditorPanel({
 
   function submitGoToLine(): void {
     if (!goToLineTarget) return
-
-    const target = goToLineTarget
-    closeGoToLineBar()
+    const owner = navigationOwnerRef.current
+    if (!owner) return
     onNavigationPoint?.()
-    timers.nextFrame(() => editorRef.current?.moveToLine(target.line, target.column), {
-      label: 'workbench.editor.goToLine',
-    })
+    cancelNavigationFrame()
+    pendingNavigationRef.current = {
+      owner,
+      kind: 'go-to-line',
+      ...goToLineTarget,
+      navigationRequestId: navigationRequestLatest.current?.id ?? null,
+    }
+    schedulePendingNavigation()
   }
 
   function openTabContextMenu(path: string, event: MouseEvent): void {
@@ -721,38 +844,9 @@ export function EditorPanel({
   }, [activeDiffItem, activeAuxiliaryTab, lightTab])
 
   useEffect(() => {
-    if (!navigationRequest || !selectedFile) return
-    // 请求是给某个文件的：并排两组时只有正在显示它的那一组执行。
-    if (navigationRequest.path && navigationRequest.path !== selectedFile.path) return
-    // 每个导航请求只应用一次（按单调 id 去重，两组共用这份记录）。selectedFile 仍在依赖里，
-    // 以便文件在请求之后才加载完成时能补跳；但保存等操作只是刷新 selectedFile 身份，
-    // 不能因此把光标重新拽回上一次导航位置、顺带关掉补全面板。
-    if (appliedNavigationRequestIdRef.current === navigationRequest.id) return
-    appliedNavigationRequestIdRef.current = navigationRequest.id
-
-    timers.nextFrame(
-      () => {
-        const options = { focus: navigationRequest.focus }
-        if (navigationRequest.endColumn) {
-          // 行列按编辑器里的正文换成偏移（与编辑器同样的 LF 正文）。
-          const content = editorContentLatest.current
-          const endLine = navigationRequest.endLine ?? navigationRequest.line
-          editorRef.current?.selectRange(
-            resolveWorkbenchTextOffset(
-              content,
-              navigationRequest.line,
-              navigationRequest.column ?? 1
-            ),
-            resolveWorkbenchTextOffset(content, endLine, navigationRequest.endColumn)
-          )
-        } else if (navigationRequest.endLine)
-          editorRef.current?.selectLines(navigationRequest.line, navigationRequest.endLine, options)
-        else
-          editorRef.current?.moveToLine(navigationRequest.line, navigationRequest.column, options)
-      },
-      { label: 'workbench.editor.navigationRequest' }
-    )
-  }, [appliedNavigationRequestIdRef, editorContentLatest, navigationRequest, selectedFile, timers])
+    queueNavigationRequest()
+    return cancelNavigationFrame
+  }, [cancelNavigationFrame, codeEditorVisible, queueNavigationRequest])
 
   // ⌘1 / ⌘2、拆分之后：把键盘焦点放进这一组的编辑器。这一组眼前没有编辑器（图片、Markdown 预览、Git 对比）
   // 时把键盘焦点从原来的地方拿走：留在另一组的编辑器或终端里的话，下一次按键（包括 ⌘W）还是落在那边。
@@ -1070,7 +1164,10 @@ export function EditorPanel({
                   goToLineInput={goToLineInput}
                   editorLineCount={editorLineCount}
                   goToLineTarget={goToLineTarget}
-                  onGoToLineInputChange={setGoToLineInput}
+                  onGoToLineInputChange={(input) => {
+                    cancelPendingGoToLine()
+                    setGoToLineInput(input)
+                  }}
                   onSubmit={submitGoToLine}
                   onClose={closeGoToLineBar}
                 />
@@ -1192,6 +1289,7 @@ export function EditorPanel({
                         onToggleGitBlame={toggleWorkbenchGitBlameVisible}
                         fileStates={group.fileStates}
                         onChange={onEditorContentChange}
+                        onReady={schedulePendingNavigation}
                         onCursorPositionChange={handleCursorPositionChange}
                         onOpenFind={openFindBar}
                         onCloseFind={closeFindBar}
