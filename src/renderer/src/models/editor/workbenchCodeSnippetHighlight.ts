@@ -3,7 +3,11 @@ import { highlightCode, type Highlighter, tagHighlighter } from '@lezer/highligh
 
 import type { WorkbenchThemeId } from '../workbenchPreferences'
 
-import { findWorkbenchCodeMirrorLanguage, resolveWorkbenchCodeMirrorLanguage } from './workbenchCodeMirrorLanguage'
+import {
+  findWorkbenchCodeMirrorLanguage,
+  resolveWorkbenchCodeMirrorLanguage,
+  resolveWorkbenchCodeMirrorLanguageToken,
+} from './workbenchCodeMirrorLanguage'
 import { getWorkbenchCodeHighlightSpecs } from './workbenchCodeMirrorTheme'
 
 /** 一段着色后的代码：颜色与字形取自编辑器的着色规则；`match` 表示这段落在查询词里。 */
@@ -44,7 +48,8 @@ export function highlightWorkbenchCodeSnippet(options: {
 }): WorkbenchCodeSnippetToken[] {
   const query = options.query?.trim() ?? ''
   const range = options.match ? `${options.match.start}-${options.match.end}` : ''
-  const key = `${options.theme}\0${languageKey(options.path)}\0${query}\0${range}\0${options.text}`
+  const languageToken = resolveWorkbenchCodeMirrorLanguageToken(options.path, '')
+  const key = `${options.theme}\0${languageToken}\0${query}\0${range}\0${options.text}`
   const cached = snippetCache.get(key)
   if (cached) {
     // 最近用过的挪到最后，淘汰时先丢最久没用的。
@@ -154,18 +159,12 @@ function markRanges(
   return marked
 }
 
-/** 同一种文件共用一个语言解析器：按扩展名认，没有扩展名（Dockerfile、.env）按整个文件名认。 */
+/** 同一种语言共用一个解析器，身份与编辑器实际的语言选择一致。 */
 function languageFor(path: string): Nullable<Language> {
-  const key = languageKey(path)
+  const key = resolveWorkbenchCodeMirrorLanguageToken(path, '')
   if (languageCache.has(key)) return languageCache.get(key) ?? null
   const support = resolveWorkbenchCodeMirrorLanguage(path, '')
   const language = support.mode === 'builtin' ? findWorkbenchCodeMirrorLanguage(support.extension) : null
   languageCache.set(key, language)
   return language
-}
-
-function languageKey(path: string): string {
-  const name = (path.split(/[\\/]/u).at(-1) ?? path).toLowerCase()
-  const dot = name.lastIndexOf('.')
-  return dot > 0 ? name.slice(dot + 1) : name
 }

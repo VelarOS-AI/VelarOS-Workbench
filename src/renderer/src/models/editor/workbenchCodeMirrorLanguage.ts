@@ -77,13 +77,23 @@ function getSpecialFileLanguageToken(path: Nullable<string>): string {
   return ''
 }
 
+/** 语言选择与缓存共用的身份：特殊文件名优先，其次扩展名，最后是声明的语言。 */
+export function resolveWorkbenchCodeMirrorLanguageToken(
+  path: Nullable<string>,
+  language: string
+): string {
+  return (
+    getSpecialFileLanguageToken(path) ||
+    getWorkbenchPathExtension(path) ||
+    normalizeWorkbenchLanguage(language)
+  )
+}
+
 export function resolveWorkbenchCodeMirrorLanguage(
   path: Nullable<string>,
   language: string
 ): WorkbenchCodeMirrorLanguageSupport {
-  const extension = getWorkbenchPathExtension(path)
-  const normalizedLanguage = normalizeWorkbenchLanguage(language)
-  const token = getSpecialFileLanguageToken(path) || extension || normalizedLanguage
+  const token = resolveWorkbenchCodeMirrorLanguageToken(path, language)
   const injected = resolveWorkbenchEditorLanguage(token)
 
   if (injected)

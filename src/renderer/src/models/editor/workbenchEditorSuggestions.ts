@@ -2,8 +2,6 @@ import { isNumber, optionalWhenLazy } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchProjectContextIndex } from '../project/workbenchProjectContextIndex'
 
-import type { WorkbenchEditorTextEdit } from './workbenchEditorModel'
-
 export type WorkbenchEditorSuggestionKind =
   'file' | 'keyword' | 'project-symbol' | 'property' | 'symbol'
 
@@ -316,22 +314,4 @@ export function shouldAutoOpenWorkbenchEditorSuggestions(
 
   const previousCharacter = request.beforeCursor.at(-1) ?? ''
   return AUTO_TRIGGER_CHARACTERS.has(previousCharacter)
-}
-
-export function applyWorkbenchEditorSuggestion(
-  content: string,
-  suggestion: WorkbenchEditorSuggestion
-): WorkbenchEditorTextEdit {
-  const replaceStart = clamp(suggestion.replaceStart, content)
-  const replaceEnd = clamp(suggestion.replaceEnd, content)
-  const nextContent = `${content.slice(0, replaceStart)}${suggestion.insertText}${content.slice(
-    replaceEnd
-  )}`
-  const nextCursor = replaceStart + suggestion.insertText.length
-
-  return {
-    content: nextContent,
-    selectionStart: nextCursor,
-    selectionEnd: nextCursor,
-  }
 }

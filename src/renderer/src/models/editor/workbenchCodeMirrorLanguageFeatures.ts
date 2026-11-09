@@ -807,11 +807,12 @@ export function createWorkbenchSignatureHelpExtension(
   context: WorkbenchLanguageServiceEditorContext,
   classes: WorkbenchEditorLanguageFeatureClasses
 ): Extension {
-  let requestGeneration = 0
-  let tooltip: HTMLElement | null = null
-
   return ViewPlugin.fromClass(
     class {
+      private requestGeneration = 0
+      private tooltip: HTMLElement | null = null
+      private destroyed = false
+
       constructor(readonly view: EditorView) {
         void this.sync()
       }
@@ -828,19 +829,23 @@ export function createWorkbenchSignatureHelpExtension(
       }
 
       public destroy(): void {
-        tooltip?.remove()
-        tooltip = null
+        this.destroyed = true
+        this.requestGeneration += 1
+        this.tooltip?.remove()
+        this.tooltip = null
       }
 
       public async sync(): Promise<void> {
+        if (this.destroyed) return
         const path = context.path
-        const position = this.view.state.selection.main.head
+        const state = this.view.state
+        const position = state.selection.main.head
         if (!path || !usesWorkbenchSemanticLanguageService(path)) {
           this.hide()
           return
         }
 
-        if (!shouldRequestSignatureHelp(this.view.state, position)) {
+        if (!shouldRequestSignatureHelp(state, position)) {
           this.hide()
           return
         }
@@ -851,9 +856,14 @@ export function createWorkbenchSignatureHelpExtension(
           return
         }
 
-        const generation = ++requestGeneration
+        const generation = ++this.requestGeneration
         const result = await getWorkbenchLanguageServiceSignatureHelp(request, context.hostRuntime)
-        if (generation !== requestGeneration) return
+        if (
+          this.destroyed ||
+          generation !== this.requestGeneration ||
+          this.view.state.doc !== state.doc
+        )
+          return
 
         const signatureHelp = result.ok ? result.data.signatureHelp : null
         if (!signatureHelp || isEmpty(signatureHelp.signatures)) {
@@ -868,26 +878,26 @@ export function createWorkbenchSignatureHelpExtension(
         signatureHelp: WorkbenchLanguageServiceSignatureHelpResult,
         position: number
       ): void {
-        if (!tooltip) {
-          tooltip = document.createElement('div')
-          tooltip.className = classes.editorSignatureTooltipHost
-          this.view.dom.append(tooltip)
+        if (!this.tooltip) {
+          this.tooltip = document.createElement('div')
+          this.tooltip.className = classes.editorSignatureTooltipHost
+          this.view.dom.append(this.tooltip)
         }
 
-        tooltip.replaceChildren(buildSignatureHelpDom(signatureHelp, classes))
+        this.tooltip.replaceChildren(buildSignatureHelpDom(signatureHelp, classes))
         const coords = this.view.coordsAtPos(position)
         if (!coords) return
 
         const editorRect = this.view.dom.getBoundingClientRect()
-        tooltip.style.left = `${coords.left - editorRect.left}px`
-        tooltip.style.top = `${coords.top - editorRect.top - tooltip.offsetHeight - 8}px`
-        tooltip.style.display = 'block'
+        this.tooltip.style.left = `${coords.left - editorRect.left}px`
+        this.tooltip.style.top = `${coords.top - editorRect.top - this.tooltip.offsetHeight - 8}px`
+        this.tooltip.style.display = 'block'
       }
 
       public hide(): void {
-        requestGeneration += 1
-        if (!tooltip) return
-        tooltip.style.display = 'none'
+        this.requestGeneration += 1
+        if (!this.tooltip) return
+        this.tooltip.style.display = 'none'
       }
     }
   )

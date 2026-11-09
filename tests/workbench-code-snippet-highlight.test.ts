@@ -41,4 +41,25 @@ describe('search result code snippets', () => {
       highlightWorkbenchCodeSnippet({ path: 'notes.unknown', text: 'plain words', theme: 'light-modern' })
     ).toEqual([{ text: 'plain words' }])
   })
+
+  test('keep special filenames separate from ordinary suffixes in both cache orders', () => {
+    const first = 'name = "first"'
+    const second = 'name = "second"'
+    const render = (path: string, text: string) =>
+      highlightWorkbenchCodeSnippet({ path, text, theme: 'light-modern' })
+
+    const tomlFirst = render('control.toml', first)
+    const tomlSecond = render('control.toml', second)
+    expect(tomlFirst.some((token) => !!token.style)).toBe(true)
+    expect(render('ordinary.lock', first)).toEqual([{ text: first }])
+    // 相同正文经过 snippet 缓存，不同正文经过 parser 缓存。
+    expect(render('Cargo.lock', first)).toEqual(tomlFirst)
+    expect(render('Cargo.lock', second)).toEqual(tomlSecond)
+
+    const propertiesFirst = render('.env', first)
+    expect(propertiesFirst.some((token) => !!token.style)).toBe(true)
+    expect(render('.env.local', first)).toEqual(propertiesFirst)
+    expect(render('ordinary.local', first)).toEqual([{ text: first }])
+    expect(render('ordinary.local', second)).toEqual([{ text: second }])
+  })
 })

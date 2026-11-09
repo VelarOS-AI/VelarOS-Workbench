@@ -1,9 +1,3 @@
-export interface WorkbenchEditorTextEdit {
-  content: string
-  selectionStart: number
-  selectionEnd: number
-}
-
 export interface WorkbenchEditorGoToLineTarget {
   line: number
   column: number
@@ -39,7 +33,6 @@ export interface WorkbenchEditorProblemItem {
   excerpt: string
 }
 
-const DEFAULT_INDENT = '  '
 const MAX_EDITOR_OUTLINE_ITEMS = 120
 const MAX_EDITOR_PROBLEMS = 120
 const SYMBOL_LINE_PATTERNS: Array<{
@@ -65,35 +58,8 @@ const SYMBOL_LINE_PATTERNS: Array<{
   },
 ]
 
-function clampSelection(value: number, content: string): number {
-  return Math.min(Math.max(value, 0), content.length)
-}
-
 export function getWorkbenchEditorLineCount(content: string): number {
   return content ? content.split('\n').length : 1
-}
-
-export function buildWorkbenchEditorLineNumberText(lineCount: number): string {
-  return Array.from({ length: Math.max(lineCount, 1) }, (_, index) => String(index + 1)).join('\n')
-}
-
-export function buildWorkbenchEditorLineNumbers(lineCount: number): number[] {
-  return Array.from({ length: Math.max(lineCount, 1) }, (_, index) => index + 1)
-}
-
-export function getWorkbenchEditorLineStartOffset(content: string, line: number): number {
-  const targetLine = Math.max(1, Math.floor(line))
-  if (targetLine === 1) return 0
-
-  let currentLine = 1
-  for (let index = 0; index < content.length; index += 1) {
-    if (content[index] === '\n') {
-      currentLine += 1
-      if (currentLine === targetLine) return index + 1
-    }
-  }
-
-  return content.length
 }
 
 export function parseWorkbenchGoToLineInput(
@@ -284,74 +250,4 @@ export function buildWorkbenchEditorProblems(content: string): WorkbenchEditorPr
   })
 
   return problems.slice(0, MAX_EDITOR_PROBLEMS)
-}
-
-function removeLineIndent(line: string, indent: string): { line: string; removed: number } {
-  if (line.startsWith(indent)) return { line: line.slice(indent.length), removed: indent.length }
-
-  if (line.startsWith('\t')) return { line: line.slice(1), removed: 1 }
-
-  if (line.startsWith(' ')) return { line: line.slice(1), removed: 1 }
-
-  return { line, removed: 0 }
-}
-
-export function applyWorkbenchEditorTabEdit(
-  content: string,
-  selectionStart: number,
-  selectionEnd: number,
-  options: { unindent?: boolean; indent?: string } = {}
-): WorkbenchEditorTextEdit {
-  const indent = options.indent ?? DEFAULT_INDENT
-  const start = clampSelection(Math.min(selectionStart, selectionEnd), content)
-  const end = clampSelection(Math.max(selectionStart, selectionEnd), content)
-
-  if (start === end && !options.unindent) return {
-      content: `${content.slice(0, start)}${indent}${content.slice(end)}`,
-      selectionStart: start + indent.length,
-      selectionEnd: start + indent.length,
-    }
-
-  const lineStart = content.lastIndexOf('\n', Math.max(0, start - 1)) + 1
-  const rawLineEnd = end > start && content[end - 1] === '\n' ? end - 1 : end
-  const nextBreak = content.indexOf('\n', rawLineEnd)
-  const lineEnd = nextBreak === -1 ? content.length : nextBreak
-  const selectedBlock = content.slice(lineStart, lineEnd)
-  const lines = selectedBlock.split('\n')
-
-  if (!options.unindent) {
-    const editedBlock = lines.map((line) => `${indent}${line}`).join('\n')
-    return {
-      content: `${content.slice(0, lineStart)}${editedBlock}${content.slice(lineEnd)}`,
-      selectionStart: start + indent.length,
-      selectionEnd: end + lines.length * indent.length,
-    }
-  }
-
-  let removedBeforeStart = 0
-  let removedBeforeEnd = 0
-  let lineOffset = 0
-  const editedBlock = lines
-    .map((line) => {
-      const absoluteLineStart = lineStart + lineOffset
-      const result = removeLineIndent(line, indent)
-      lineOffset += line.length + 1
-
-      if (absoluteLineStart < start) {
-        removedBeforeStart += Math.min(result.removed, start - absoluteLineStart)
-      }
-
-      if (absoluteLineStart < end) {
-        removedBeforeEnd += result.removed
-      }
-
-      return result.line
-    })
-    .join('\n')
-
-  return {
-    content: `${content.slice(0, lineStart)}${editedBlock}${content.slice(lineEnd)}`,
-    selectionStart: Math.max(lineStart, start - removedBeforeStart),
-    selectionEnd: Math.max(lineStart, end - removedBeforeEnd),
-  }
 }
