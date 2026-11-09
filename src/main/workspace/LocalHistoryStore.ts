@@ -1,19 +1,15 @@
 /**
  * 工作台本地历史：每次保存把文件内容存一份带时间戳的快照，独立于 Git。
  *
- * 照搬 desktop `workspace/workbench/LocalHistoryStore.ts`；唯一适配：desktop 的模块级
- * 单例依赖 `storagePathService`，独立应用改为构造注入 `WorkbenchAppStoragePaths`
- * （数据根随应用入口而定），快照区布局与裁剪语义保形。
- *
  * 布局：`<workbench-local-history>/<bucket>/{index.json, <id>.snap}`，bucket 由
  * 项目根+文件相对路径哈希得到；index 里 entries 按新→旧排列，超过上限自动裁剪。
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { isNumber, isObject, isString, Log } from '@velaros-ai/velaros/core'
+import { isFiniteNumber, isObject, isString, Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
@@ -80,10 +76,10 @@ class WorkbenchLocalHistoryStore {
       const id = this.createSnapshotId()
       writeFileSync(join(bucketDir, `${id}.snap`), content, 'utf8')
 
-      index.path = path
       index.entries.unshift({ id, savedAt: Date.now(), size: content.length, hash })
-      this.pruneExcessSnapshots(bucketDir, index)
+      const expired = index.entries.splice(MAX_SNAPSHOTS_PER_FILE)
       writeFileSync(join(bucketDir, INDEX_FILE_NAME), JSON.stringify(index), 'utf8')
+      this.removeSnapshots(bucketDir, expired)
     } catch (error) {
       this.log.warn('写入本地历史快照失败', { projectRoot, path, error })
     }
@@ -176,35 +172,25 @@ class WorkbenchLocalHistoryStore {
 
     const targetDir = this.bucketDir(projectRoot, to)
     const target = this.readIndex(targetDir, to)
-    await mkdir(targetDir, { recursive: true })
-    const moved: StoredLocalHistoryEntry[] = []
-    for (const entry of source.entries) {
-      if (!SNAPSHOT_ID_PATTERN.test(entry.id)) continue
-      const renamed = await rename(
-        join(sourceDir, `${entry.id}.snap`),
-        join(targetDir, `${entry.id}.snap`)
-      )
-        .then(() => true)
-        .catch(() => false)
-      if (renamed) moved.push(entry)
-    }
     const known = new Set(target.entries.map((entry) => entry.id))
+    const incoming = source.entries.filter((entry) => !known.has(entry.id))
+    await mkdir(targetDir, { recursive: true })
+    // 先复制，目标快照与索引全部写成后才删源；途中失败仍能从源桶恢复整份历史。
+    for (const entry of incoming) {
+      await copyFile(join(sourceDir, `${entry.id}.snap`), join(targetDir, `${entry.id}.snap`))
+    }
     const merged: LocalHistoryIndex = {
       path: to,
-      entries: [...moved.filter((entry) => !known.has(entry.id)), ...target.entries].sort(
-        (left, right) => right.savedAt - left.savedAt
-      ),
+      entries: [...incoming, ...target.entries].sort((left, right) => right.savedAt - left.savedAt),
     }
-    this.pruneExcessSnapshots(targetDir, merged)
+    const expired = merged.entries.splice(MAX_SNAPSHOTS_PER_FILE)
     await writeFile(join(targetDir, INDEX_FILE_NAME), JSON.stringify(merged), 'utf8')
+    this.removeSnapshots(targetDir, expired)
     await rm(sourceDir, { recursive: true, force: true })
   }
 
-  private pruneExcessSnapshots(bucketDir: string, index: LocalHistoryIndex): void {
-    if (index.entries.length <= MAX_SNAPSHOTS_PER_FILE) return
-
-    const removed = index.entries.splice(MAX_SNAPSHOTS_PER_FILE)
-    for (const entry of removed) {
+  private removeSnapshots(bucketDir: string, entries: readonly StoredLocalHistoryEntry[]): void {
+    for (const entry of entries) {
       try {
         rmSync(join(bucketDir, `${entry.id}.snap`), { force: true })
       } catch (error) {
@@ -222,7 +208,14 @@ class WorkbenchLocalHistoryStore {
       const entries = Array.isArray(parsed.entries)
         ? parsed.entries.filter(
             (entry): entry is StoredLocalHistoryEntry =>
-              isObject(entry) && isString(entry.id) && isNumber(entry.savedAt)
+              isObject(entry) &&
+              isString(entry.id) &&
+              SNAPSHOT_ID_PATTERN.test(entry.id) &&
+              isFiniteNumber(entry.savedAt) &&
+              isFiniteNumber(entry.size) &&
+              Number.isSafeInteger(entry.size) &&
+              entry.size >= 0 &&
+              isString(entry.hash)
           )
         : []
       return { path, entries }

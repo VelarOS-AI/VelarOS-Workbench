@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import {
   link,
   lstat,
@@ -287,6 +288,28 @@ void describe('Workbench file operations', () => {
       } finally {
         await rm(otherRoot, { recursive: true, force: true })
       }
+    })
+  })
+
+  void test('a failed history transfer preserves the source snapshots after renaming a file', async () => {
+    await withWorkspace(async ({ projectRoot, parts }) => {
+      const path = 'source.ts'
+      await writeFile(join(projectRoot, path), '')
+      await parts.files.saveFile({ projectRoot, path, content: 'saved history\n' })
+      const snapshot = parts.files.listLocalHistory({ projectRoot, path }).entries[0]!
+      const targetBucket = createHash('sha1').update(`${projectRoot}\u0000target.ts`).digest('hex')
+      // 用目录占住目标快照文件名，令真实文件传输失败，不能因此删除源桶。
+      await mkdir(
+        join(parts.storagePaths.getWorkbenchLocalHistoryDir(), targetBucket, `${snapshot.id}.snap`),
+        { recursive: true }
+      )
+
+      await parts.files.renameEntry({ projectRoot, path, newName: 'target.ts' })
+      assert.equal(await readFile(join(projectRoot, 'target.ts'), 'utf8'), 'saved history\n')
+      assert.equal(
+        parts.files.readLocalHistorySnapshot({ projectRoot, path, id: snapshot.id }).content,
+        'saved history\n'
+      )
     })
   })
 })

@@ -32,7 +32,7 @@ const MaxBytesPerChar = 4
 const BomAndSplitCharBytes = 8
 
 /**
- * 文本似然门（照搬 desktop `workspace/workbench/TextFile.ts`）：NUL 立拒 + 控制字节占比 <8%。
+ * 文本似然门：NUL 立拒 + 控制字节占比 <8%。
  * 带 BOM 的 UTF-16 按 16 位码元判断——它的 ASCII 字符本来就带一个 0 字节。
  */
 function isLikelyTextFile(buffer: Uint8Array): boolean {
@@ -132,5 +132,5 @@ function cutAtCharBoundary(content: string, maxChars: number): string {
   return content.slice(0, last >= 0xd800 && last <= 0xdbff ? end - 1 : end)
 }
 
-export { isLikelyTextFile, isLikelyTextFile as isLikelyWorkbenchTextFile, readWorkbenchTextFile }
+export { isLikelyTextFile, readWorkbenchTextFile }
 export type { WorkbenchTextFileSnapshot }
