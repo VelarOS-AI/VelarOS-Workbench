@@ -33,6 +33,11 @@ interface UseWorkbenchTreeControllerOptions {
   activeProject: Nullable<WorkbenchProject>
 }
 
+interface WorkbenchTreeDirectoryRead {
+  result: WorkbenchListDirectoryResult
+  isCurrent: () => boolean
+}
+
 export interface WorkbenchTreeLoadOptions {
   quiet?: boolean
   replace?: boolean
@@ -41,6 +46,8 @@ export interface WorkbenchTreeLoadOptions {
 export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeControllerOptions) {
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const activeProjectRef = useLatest(activeProject)
+  const directoryRequests = useMemo(() => new Map<string, object>(), [activeProject?.id])
+  const directoryRequestsRef = useLatest(directoryRequests)
 
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set([ROOT_PATH]))
   const [childrenByPath, setChildrenByPath] = useState<Map<string, WorkbenchDirectoryEntry[]>>(
@@ -58,10 +65,12 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
     [childrenByPath, selectedEntryPath]
   )
 
-  const discardUnavailableDirectory = useMemoizedFn((path: string): void => {
-    if (isWorkbenchTreeRoot({ path })) return
+  const discardUnavailableDirectory = useMemoizedFn((path: string, isCurrent: () => boolean): void => {
+    if (isWorkbenchTreeRoot({ path }) || !isCurrent()) return
 
     setExpandedPaths((current) => {
+      if (!isCurrent()) return current
+
       const next = new Set(current)
       for (const expandedPath of current) {
         if (isSameOrChildPath(expandedPath, path)) next.delete(expandedPath)
@@ -69,6 +78,8 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
       return next
     })
     setChildrenByPath((current) => {
+      if (!isCurrent()) return current
+
       const next = new Map(current)
       for (const cachedPath of current.keys()) {
         if (isSameOrChildPath(cachedPath, path)) next.delete(cachedPath)
@@ -85,7 +96,7 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
       return next
     })
     setSelectedEntryPath((current) =>
-      current && isSameOrChildPath(current, path) ? null : current
+      isCurrent() && current && isSameOrChildPath(current, path) ? null : current
     )
   })
 
@@ -94,8 +105,17 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
       project: WorkbenchProject,
       path: string,
       options: WorkbenchTreeLoadOptions = {}
-    ): Promise<Nullable<WorkbenchListDirectoryResult>> => {
+    ): Promise<Nullable<WorkbenchTreeDirectoryRead>> => {
       const owningProjectId = project.id
+      if (activeProjectRef.current?.id !== owningProjectId) return null
+
+      const requests = directoryRequestsRef.current
+      const request = {}
+      requests.set(path, request)
+      const isCurrent = (): boolean =>
+        activeProjectRef.current?.id === owningProjectId &&
+        directoryRequestsRef.current === requests &&
+        requests.get(path) === request
 
       try {
         const result = Result.unwrap(
@@ -107,14 +127,14 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
           })
         )
 
-        if (activeProjectRef.current?.id !== owningProjectId) return null
+        if (!isCurrent()) return null
 
-        return result
+        return { result, isCurrent }
       } catch (error) {
-        if (activeProjectRef.current?.id !== owningProjectId) return null
+        if (!isCurrent()) return null
 
         const appError = AppError.from(error)
-        if (appError.code === 'NOT_FOUND') discardUnavailableDirectory(path)
+        if (appError.code === 'NOT_FOUND') discardUnavailableDirectory(path, isCurrent)
         if (!options.quiet) {
           messageLatest.current.error({
             title: tLatest.current('workbench.loadDirectoryFailed'),
@@ -127,12 +147,16 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
   )
 
   const commitDirectoryResults = useMemoizedFn(
-    (results: readonly WorkbenchListDirectoryResult[], replace = false): void => {
-      if (isEmpty(results)) return
+    (reads: readonly WorkbenchTreeDirectoryRead[], replace = false): void => {
+      if (isEmpty(reads)) return
 
       setChildrenByPath((current) => {
+        // 批量读取可能还在等别的目录，提交时再核一次，不能让旧结果覆盖 mutation 后的新读取。
+        const currentReads = reads.filter((read) => read.isCurrent())
+        if (isEmpty(currentReads)) return current
+
         const next = replace ? new Map<string, WorkbenchDirectoryEntry[]>() : new Map(current)
-        results.forEach((result) => {
+        currentReads.forEach(({ result }) => {
           next.set(result.path, result.entries)
           if (result.path === ROOT_PATH) return
 
@@ -160,9 +184,11 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
       path: string,
       options: WorkbenchTreeLoadOptions = {}
     ): Promise<Nullable<WorkbenchListDirectoryResult>> => {
-      const result = await requestDirectory(project, path, options)
-      if (result) commitDirectoryResults([result], !!options.replace)
-      return result
+      const read = await requestDirectory(project, path, options)
+      if (!read?.isCurrent()) return null
+
+      commitDirectoryResults([read], !!options.replace)
+      return read.result
     }
   )
 
@@ -188,7 +214,7 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
         if (activeProjectRef.current?.id !== project.id) return
 
         commitDirectoryResults(
-          results.filter((result): result is WorkbenchListDirectoryResult => !!result)
+          results.filter((result): result is WorkbenchTreeDirectoryRead => !!result)
         )
       }
     }
@@ -208,6 +234,7 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
   })
 
   const resetTree = useMemoizedFn((): void => {
+    directoryRequestsRef.current.clear()
     setExpandedPaths(new Set([ROOT_PATH]))
     setChildrenByPath(new Map())
     setSelectedEntryPath(null)
@@ -330,6 +357,9 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
   )
 
   const pruneTreeCache = useMemoizedFn((path: string): void => {
+    for (const requestedPath of directoryRequestsRef.current.keys()) {
+      if (isSameOrChildPath(requestedPath, path)) directoryRequestsRef.current.delete(requestedPath)
+    }
     setChildrenByPath((current) => {
       const next = new Map(current)
       for (const key of current.keys()) {

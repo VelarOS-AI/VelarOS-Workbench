@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
+
 import { useWorkbenchHostRuntime } from '../host/WorkbenchHostProvider'
 import {
   listWorkbenchEditorConfigPaths,
@@ -12,6 +16,7 @@ import type { WorkbenchOpenEditorTab } from '../types/workbenchTypes'
 
 /** `.editorconfig` 一般只有几行；再大的只读前面这些。 */
 const MaxEditorConfigChars = 64 * 1024
+const log = Log.tag('workbench-editor-config')
 
 interface EditorConfigCache {
   projectRoot: string
@@ -32,7 +37,8 @@ let cache: Nullable<EditorConfigCache> = null
  * 当前文件生效的 `.editorconfig` 设置：从文件所在目录一路往上读到项目根，遇到 `root = true` 为止。
  *
  * 打开着的 `.editorconfig` 直接用编辑器里的正文（改了没存也生效）；其余从磁盘读，同一个 `revision`（工作区在编辑器
- * 之外的改动次数）内只读一次。还没读回来，或者读的不是这个文件时为 null。
+ * 之外的改动次数）内缓存正文与真实缺失；读取失败不缓存，后续自然请求可以重试。
+ * 还没读回来，或者读的不是这个文件时为 null。
  */
 export function useWorkbenchEditorConfig({
   projectRoot,
@@ -63,7 +69,14 @@ export function useWorkbenchEditorConfig({
       if (!text) {
         text = hostRuntime.kernel.project
           .readWorkbenchFile({ projectRoot, path: configPath, maxChars: MaxEditorConfigChars })
-          .then((result) => (result.ok ? result.data.content : null), () => null)
+          .then((result) => Result.unwrap(result).content)
+          .catch((error: unknown) => {
+            const appError = AppError.from(error)
+            if (appError.code === 'NOT_FOUND') return null
+
+            if (texts.get(configPath) === text) texts.delete(configPath)
+            throw appError
+          })
         texts.set(configPath, text)
       }
       return text
@@ -71,19 +84,26 @@ export function useWorkbenchEditorConfig({
 
     let cancelled = false
     const configPaths = listWorkbenchEditorConfigPaths(path)
-    void Promise.all(configPaths.map(read)).then((contents) => {
-      if (cancelled) return
-      const locations: WorkbenchEditorConfigLocation[] = []
-      contents.forEach((content, index) => {
-        if (content === null) return
-        const configPath = configPaths[index]!
-        locations.push({
-          directory: configPath.slice(0, Math.max(0, configPath.lastIndexOf('/'))),
-          file: parseWorkbenchEditorConfig(content),
+    void Promise.all(configPaths.map(read))
+      .then((contents) => {
+        if (cancelled) return
+        const locations: WorkbenchEditorConfigLocation[] = []
+        contents.forEach((content, index) => {
+          if (content === null) return
+          const configPath = configPaths[index]!
+          locations.push({
+            directory: configPath.slice(0, Math.max(0, configPath.lastIndexOf('/'))),
+            file: parseWorkbenchEditorConfig(content),
+          })
         })
+        setState({ projectRoot, path, properties: resolveWorkbenchEditorConfig(locations, path) })
       })
-      setState({ projectRoot, path, properties: resolveWorkbenchEditorConfig(locations, path) })
-    })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        const appError = AppError.from(error)
+        log.warn('读取 .editorconfig 失败', { projectRoot, path, code: appError.code, error: appError })
+        setState(null)
+      })
     return () => {
       cancelled = true
     }
