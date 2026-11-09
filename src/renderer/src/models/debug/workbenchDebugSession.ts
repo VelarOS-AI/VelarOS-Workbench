@@ -5,6 +5,7 @@
  * 一个窗口一次只调试一个程序：新的一次开始之前先结束上一次。状态是模块里的一份快照，调试面板和编辑器
  * （停在哪一行、断点对没对上、悬停看值）都订阅它。这个模块按需加载——第一次起调试、或者编辑器挂上时才来。
  */
+import { Log } from '@velaros-ai/velaros/core'
 import { AppError, type ErrorCode } from '@velaros-ai/velaros/core/error'
 
 import type {
@@ -91,6 +92,8 @@ const EmptySnapshot: WorkbenchDebugSnapshot = {
   lastEnd: null,
 }
 
+const log = Log.tag('WorkbenchDebugSession')
+
 export function workbenchBreakpointKey(path: string, line: number): string {
   return `${path.replace(/\\/gu, '/')}\0${line}`
 }
@@ -115,7 +118,9 @@ export class WorkbenchDebugSessionController {
   private pauseSequence = 0
   /** 已经交给正在跑的程序的那份断点与异常开关：变了才再发。 */
   private sentBreakpoints: Nullable<readonly WorkbenchDebuggerBreakpoint[]> = null
-  private sentExceptionPause = true
+  private sentExceptionPause: Nullable<boolean> = null
+  /** 同一程序的配置有序确认；旧回执不能越过后一次变更。 */
+  private breakpointSync: Promise<void> = Promise.resolve()
 
   public constructor(private readonly dependencies: WorkbenchDebugSessionDependencies) {}
 
@@ -241,6 +246,7 @@ export class WorkbenchDebugSessionController {
       this.dependencies.publishStatus('running')
       this.starting = false
       for (const event of this.pendingEvents.splice(0)) this.receive(event)
+      await this.syncBreakpoints()
       return result.value
     } finally {
       this.starting = false
@@ -290,6 +296,7 @@ export class WorkbenchDebugSessionController {
         return
       case 'ended':
         this.sentBreakpoints = null
+        this.sentExceptionPause = null
         this.update({
           session: null,
           pause: null,
@@ -313,33 +320,53 @@ export class WorkbenchDebugSessionController {
   }
 
   /** 断点或异常开关变了：正在调试这个项目的话，把新的一份交给正在跑的程序。 */
-  private async syncBreakpoints(): Promise<void> {
+  private syncBreakpoints(): Promise<void> {
+    const sessionId = this.snapshot.session?.sessionId
+    if (!sessionId || this.starting) return Promise.resolve()
+
+    const pending = this.breakpointSync.then(() => this.syncCurrentBreakpoints(sessionId))
+    this.breakpointSync = pending.catch((error: unknown) => {
+      if (this.snapshot.session?.sessionId === sessionId)
+        log.warn('同步调试断点或异常暂停设置失败', { sessionId, error: AppError.getMessage(error) })
+    })
+    return this.breakpointSync
+  }
+
+  private async syncCurrentBreakpoints(sessionId: string): Promise<void> {
     const session = this.snapshot.session
-    if (!session) return
+    if (!session || session.sessionId !== sessionId) return
 
     const pauseOnUncaughtExceptions = this.dependencies.readExceptionPause(session.projectRoot)
     if (pauseOnUncaughtExceptions !== this.sentExceptionPause) {
-      this.sentExceptionPause = pauseOnUncaughtExceptions
-      void this.dependencies.debuggerBridge().setExceptionPause({
-        sessionId: session.sessionId,
-        uncaught: pauseOnUncaughtExceptions,
-      })
+      try {
+        const result = await this.dependencies.debuggerBridge().setExceptionPause({
+          sessionId,
+          uncaught: pauseOnUncaughtExceptions,
+        })
+        if (!result.ok) throw new AppError(result.code ?? 'UNKNOWN', result.message)
+        if (this.snapshot.session?.sessionId !== sessionId) return
+        this.sentExceptionPause = pauseOnUncaughtExceptions
+      } catch (error) {
+        if (this.snapshot.session?.sessionId === sessionId) this.sentExceptionPause = null
+        throw error
+      }
     }
 
     const breakpoints = this.dependencies.readBreakpoints(session.projectRoot)
     if (breakpoints === this.sentBreakpoints) return
-    this.sentBreakpoints = breakpoints
-    const result = await this.dependencies.debuggerBridge().setBreakpoints({
-      sessionId: session.sessionId,
-      breakpoints: [...breakpoints],
-    })
-    // 等回复的工夫会话可能已经结束、或者断点又变了一次（那一次自己会更新）。
-    if (
-      result.ok &&
-      this.snapshot.session?.sessionId === session.sessionId &&
-      this.sentBreakpoints === breakpoints
-    )
+    try {
+      const result = await this.dependencies.debuggerBridge().setBreakpoints({
+        sessionId,
+        breakpoints: [...breakpoints],
+      })
+      if (!result.ok) throw new AppError(result.code ?? 'UNKNOWN', result.message)
+      if (this.snapshot.session?.sessionId !== sessionId) return
+      this.sentBreakpoints = breakpoints
       this.update({ breakpointStatuses: toStatusMap(result.value.breakpoints) })
+    } catch (error) {
+      if (this.snapshot.session?.sessionId === sessionId) this.sentBreakpoints = null
+      throw error
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useWorkbenchCommandIpcSubscriptions } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandIpcSubscriptions'
 import { useWorkbenchCommandPackageSuggestions } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandPackageSuggestions'
 import { useWorkbenchCommandProjectBootstrap } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandProjectBootstrap'
@@ -26,7 +26,7 @@ import {
 import { startWorkbenchDebugRunSession } from '@renderer/models/debug/workbenchDebugBridge'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
-import { isPresent, toNullable } from '@velaros-ai/velaros/core'
+import { isPresent, Log, toNullable } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { Result } from '@velaros-ai/velaros/core/result'
 
@@ -36,7 +36,7 @@ import {
 } from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
-import { useLatest, useMemoizedFn, useUnmount } from '../support/genericHooks'
+import { useLatest, useMemoizedFn } from '../support/genericHooks'
 
 export type {
   WorkbenchRunOutputLine,
@@ -47,6 +47,34 @@ export type {
 interface UseWorkbenchCommandControllerOptions {
   activeProject: Nullable<WorkbenchProject>
   rootEntries: WorkbenchDirectoryEntry[]
+}
+
+interface WorkbenchCommandResourceOwner {
+  projectId: Nullable<string>
+  signal: AbortSignal
+  sessionIds: Set<string>
+  restarts: Map<string, AbortController>
+}
+
+const log = Log.tag('workbench-command-controller')
+
+/** 回收只在真实退出后确认；失败仍保留在 owner 中，不能伪报资源已释放。 */
+async function releaseCommandSession(
+  owner: WorkbenchCommandResourceOwner,
+  sessionId: string
+): Promise<void> {
+  try {
+    Result.unwrap(
+      await workbenchHost.kernel.project.stopWorkbenchTerminalSession({
+        sessionId,
+        waitForExit: true,
+      })
+    )
+    owner.sessionIds.delete(sessionId)
+    discardWorkbenchTerminalOutput(sessionId)
+  } catch (error) {
+    log.warn('回收终端会话失败', { sessionId, error: AppError.getMessage(error) })
+  }
 }
 
 export function useWorkbenchCommandController({
@@ -71,6 +99,8 @@ export function useWorkbenchCommandController({
   const [lastLaunchedCommand, setLastLaunchedCommand] = useState('')
   const runSessionsRef = useLatest(runSessions)
   const activeProjectRef = useLatest(activeProject)
+  const resourceOwnerRef = useRef<Nullable<WorkbenchCommandResourceOwner>>(null)
+  const activeProjectId = activeProject?.id ?? null
   const runConfigurations = useMemo(
     () =>
       buildWorkbenchRunConfigurations({
@@ -84,19 +114,33 @@ export function useWorkbenchCommandController({
     .sort()
     .join('\n')
 
-  useUnmount(() => {
-    terminalSessionsRef.current.forEach((session) => {
-      void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId: session.id })
-    })
-    runSessionsRef.current.forEach((session) => {
-      void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId: session.id })
-    })
-  })
+  // 提交阶段撤销旧 owner，覆盖卸载到被动 effect 清理之间的迟到回执。
+  useLayoutEffect(() => {
+    const controller = new AbortController()
+    const owner: WorkbenchCommandResourceOwner = {
+      projectId: activeProjectId,
+      signal: controller.signal,
+      sessionIds: new Set(),
+      restarts: new Map(),
+    }
+    resourceOwnerRef.current = owner
+    return () => {
+      controller.abort()
+      for (const restart of owner.restarts.values()) restart.abort()
+      if (resourceOwnerRef.current === owner) resourceOwnerRef.current = null
+      for (const sessionId of owner.sessionIds) void releaseCommandSession(owner, sessionId)
+    }
+  }, [activeProjectId])
+
+  const ownsCurrentProject = (owner: WorkbenchCommandResourceOwner): boolean =>
+    !owner.signal.aborted && resourceOwnerRef.current === owner
 
   /** 关闭终端标签及其会话。 */
   const closeTerminalSessions = useMemoizedFn((sessionIds: readonly string[]): void => {
+    const owner = resourceOwnerRef.current
+    if (!owner || !ownsCurrentProject(owner)) return
     for (const sessionId of sessionIds) {
-      void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
+      void releaseCommandSession(owner, sessionId)
       discardWorkbenchTerminalOutput(sessionId)
     }
     setTerminalSessions((current) => {
@@ -128,7 +172,8 @@ export function useWorkbenchCommandController({
   const createTerminalSessionForProject = useMemoizedFn(
     async (project: WorkbenchProject): Promise<void> => {
       const owningProject = project
-      const owningProjectId = owningProject.id
+      const owner = resourceOwnerRef.current
+      if (!owner || owner.projectId !== owningProject.id || !ownsCurrentProject(owner)) return
 
       try {
         const result = Result.unwrap(
@@ -137,10 +182,9 @@ export function useWorkbenchCommandController({
           })
         )
 
-        if (activeProjectRef.current?.id !== owningProjectId) {
-          void workbenchHost.kernel.project.stopWorkbenchTerminalSession({
-            sessionId: result.sessionId,
-          })
+        owner.sessionIds.add(result.sessionId)
+        if (!ownsCurrentProject(owner)) {
+          await releaseCommandSession(owner, result.sessionId)
           return
         }
 
@@ -163,7 +207,7 @@ export function useWorkbenchCommandController({
         setTerminalSessions((current) => [...current, session])
         setActiveTerminalSessionId(result.sessionId)
       } catch (error) {
-        if (activeProjectRef.current?.id !== owningProjectId) return
+        if (!ownsCurrentProject(owner)) return
 
         const appError = AppError.from(error)
         messageLatest.current.error({
@@ -184,7 +228,6 @@ export function useWorkbenchCommandController({
   useWorkbenchCommandProjectBootstrap({
     activeProjectId: activeProject?.id,
     activeProjectRef,
-    terminalSessionsRef,
     setTerminalSessions,
     setActiveTerminalSessionId,
     setCommandHistory,
@@ -369,13 +412,13 @@ export function useWorkbenchCommandController({
       label: string,
       launch?: WorkbenchRunSessionLaunchOptions
     ): Promise<string | null> => {
-      const owningProjectId = project.id
+      const owner = resourceOwnerRef.current
+      if (!owner || owner.projectId !== project.id || !ownsCurrentProject(owner)) return null
       const result = await startRunSessionProcess(project, command, launch)
 
-      if (activeProjectRef.current?.id !== owningProjectId) {
-        void workbenchHost.kernel.project.stopWorkbenchTerminalSession({
-          sessionId: result.sessionId,
-        })
+      owner.sessionIds.add(result.sessionId)
+      if (!ownsCurrentProject(owner)) {
+        await releaseCommandSession(owner, result.sessionId)
         return null
       }
 
@@ -405,8 +448,16 @@ export function useWorkbenchCommandController({
       launch?: WorkbenchRunSessionLaunchOptions
     ): Promise<string | null> => {
       const project = activeProjectRef.current
+      const owner = resourceOwnerRef.current
       const command = commandInput.trim()
-      if (!project || !command) return null
+      if (
+        !project ||
+        !command ||
+        !owner ||
+        owner.projectId !== project.id ||
+        !ownsCurrentProject(owner)
+      )
+        return null
 
       // 记住最近一次运行的命令：侧边栏 ▶ 默认指向它，并进入右键切换列表。运行配置起的不算——同一条命令换了
       // 目录、变量就是另一回事，它们在菜单里有自己的一行。调试也不算：▶ 是运行。
@@ -415,6 +466,7 @@ export function useWorkbenchCommandController({
       try {
         return await startRunSessionForProject(project, command, label?.trim() || command, launch)
       } catch (error) {
+        if (!ownsCurrentProject(owner)) return null
         const appError = AppError.from(error)
         messageLatest.current.error({
           title: tLatest.current('workbench.commandFailed'),
@@ -445,7 +497,23 @@ export function useWorkbenchCommandController({
   const restartRunSession = useMemoizedFn(async (sessionId: string): Promise<void> => {
     const session = runSessionsRef.current.find((candidate) => candidate.id === sessionId)
     const project = activeProjectRef.current
-    if (!session?.command || !project) return
+    const owner = resourceOwnerRef.current
+    if (
+      !session?.command ||
+      !project ||
+      !owner ||
+      owner.projectId !== project.id ||
+      !ownsCurrentProject(owner)
+    )
+      return
+    if (owner.restarts.has(sessionId)) return
+
+    const restart = new AbortController()
+    owner.restarts.set(sessionId, restart)
+    const canRestart = (): boolean =>
+      ownsCurrentProject(owner) &&
+      !restart.signal.aborted &&
+      runSessionsRef.current.some((candidate) => candidate.id === sessionId)
 
     const command = session.command
     const label = session.title
@@ -458,8 +526,15 @@ export function useWorkbenchCommandController({
           waitForExit: true,
         })
       )
+      owner.sessionIds.delete(sessionId)
       discardWorkbenchTerminalOutput(sessionId)
+      if (!canRestart()) return
       const result = await startRunSessionProcess(project, command, launch)
+      owner.sessionIds.add(result.sessionId)
+      if (!canRestart()) {
+        await releaseCommandSession(owner, result.sessionId)
+        return
+      }
       const fresh: WorkbenchTerminalSessionView = {
         id: result.sessionId,
         title: label,
@@ -474,16 +549,25 @@ export function useWorkbenchCommandController({
       setActiveRunSessionId(result.sessionId)
       publishWorkbenchRunSessionRestart(sessionId, result.sessionId)
     } catch (error) {
+      if (!canRestart()) {
+        log.warn('重启运行会话失败', { sessionId, error: AppError.getMessage(error) })
+        return
+      }
       const appError = AppError.from(error)
       messageLatest.current.error({
         title: tLatest.current('workbench.commandFailed'),
         description: appError.message,
       })
+    } finally {
+      owner.restarts.delete(sessionId)
     }
   })
 
   const closeRunSession = useMemoizedFn((sessionId: string): void => {
-    void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
+    const owner = resourceOwnerRef.current
+    if (!owner || !ownsCurrentProject(owner)) return
+    owner.restarts.get(sessionId)?.abort()
+    void releaseCommandSession(owner, sessionId)
     discardWorkbenchTerminalOutput(sessionId)
     setRunSessions((current) => {
       const next = current.filter((session) => session.id !== sessionId)

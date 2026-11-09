@@ -143,6 +143,7 @@ function createHarness(options: { startResults?: Array<'ok' | 'fail' | 'hold'> }
   })
 
   return {
+    bridge,
     session,
     calls,
     statuses,
@@ -336,6 +337,79 @@ void describe('debug session in the window', () => {
     await starting
     assert.equal(harness.session.getSnapshot().pause?.reason, 'breakpoint')
     assert.deepEqual(harness.statuses, ['running', 'paused'])
+  })
+
+  void test('reconciles settings changed while the program is starting', async () => {
+    const harness = createHarness({ startResults: ['hold'] })
+    const starting = harness.start()
+    await tick()
+    harness.setBreakpoints([{ path: 'src/b.ts', line: 8 }])
+    harness.setExceptionPause(false)
+    assert.deepEqual(harness.calls.map(([method]) => method), ['start'])
+
+    harness.release()
+    await starting
+    assert.deepEqual(harness.calls.slice(1), [
+      ['setExceptionPause', { sessionId: 'debug-1', uncaught: false }],
+      ['setBreakpoints', { sessionId: 'debug-1', breakpoints: [{ path: 'src/b.ts', line: 8 }] }],
+    ])
+    assert.equal(
+      harness.session
+        .getSnapshot()
+        .breakpointStatuses.get(workbenchBreakpointKey('src/b.ts', 8))?.verified,
+      true
+    )
+  })
+
+  void test('retries rejected breakpoints on the next settings change', async () => {
+    const harness = createHarness()
+    await harness.start()
+    const sendBreakpoints = harness.bridge.setBreakpoints
+    let attempts = 0
+    harness.bridge.setBreakpoints = async (request) => {
+      attempts += 1
+      if (attempts === 1) return { ok: false, code: 'UNAVAILABLE', message: 'Inspector unavailable' }
+      return sendBreakpoints(request)
+    }
+
+    harness.setBreakpoints([{ path: 'src/b.ts', line: 8 }])
+    await tick()
+    assert.equal(attempts, 1)
+    assert.equal(harness.session.getSnapshot().breakpointStatuses.size, 0)
+
+    harness.setExceptionPause(false)
+    await tick()
+    assert.equal(attempts, 2)
+    assert.equal(
+      harness.session
+        .getSnapshot()
+        .breakpointStatuses.get(workbenchBreakpointKey('src/b.ts', 8))?.verified,
+      true
+    )
+  })
+
+  void test('retries rejected exception settings on the next breakpoint change', async () => {
+    const harness = createHarness()
+    await harness.start()
+    const sendExceptionPause = harness.bridge.setExceptionPause
+    let attempts = 0
+    harness.bridge.setExceptionPause = async (request) => {
+      attempts += 1
+      if (attempts === 1) return { ok: false, code: 'UNAVAILABLE', message: 'Inspector unavailable' }
+      return sendExceptionPause(request)
+    }
+
+    harness.setExceptionPause(false)
+    await tick()
+    assert.equal(attempts, 1)
+
+    harness.setBreakpoints([{ path: 'src/b.ts', line: 8 }])
+    await tick()
+    assert.equal(attempts, 2)
+    assert.deepEqual(harness.calls.slice(1), [
+      ['setExceptionPause', { sessionId: 'debug-1', uncaught: false }],
+      ['setBreakpoints', { sessionId: 'debug-1', breakpoints: [{ path: 'src/b.ts', line: 8 }] }],
+    ])
   })
 
   void test('shows the panel when the debugger could not attach, so the reason is seen', async () => {

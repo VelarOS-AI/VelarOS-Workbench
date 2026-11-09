@@ -3,7 +3,6 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import { type WorkbenchRunCommandResult } from '@shared/contracts/workbench'
 
-import { useWorkbenchHostRuntime } from '../../host/WorkbenchHostProvider'
 import {
   readWorkbenchCommandHistory,
   type WorkbenchCommandHistoryItem,
@@ -13,13 +12,11 @@ import type {
   WorkbenchTerminalSessionView,
 } from '../../models/commands/workbenchCommandLines'
 import type { WorkbenchCommandSuggestion } from '../../models/commands/workbenchCommandSuggestions'
-import { discardWorkbenchTerminalOutput } from '../../models/commands/workbenchTerminalOutputBus'
 import type { WorkbenchProject } from '../../models/project/workbenchProjects'
 
 interface UseWorkbenchCommandProjectBootstrapOptions {
   activeProjectId?: string
   activeProjectRef: MutableRefObject<Nullable<WorkbenchProject>>
-  terminalSessionsRef: MutableRefObject<WorkbenchTerminalSessionView[]>
   setTerminalSessions: Dispatch<SetStateAction<WorkbenchTerminalSessionView[]>>
   setActiveTerminalSessionId: Dispatch<SetStateAction<Nullable<string>>>
   setCommandHistory: Dispatch<SetStateAction<WorkbenchCommandHistoryItem[]>>
@@ -36,7 +33,6 @@ interface UseWorkbenchCommandProjectBootstrapOptions {
 export function useWorkbenchCommandProjectBootstrap({
   activeProjectId,
   activeProjectRef,
-  terminalSessionsRef,
   setTerminalSessions,
   setActiveTerminalSessionId,
   setCommandHistory,
@@ -49,12 +45,7 @@ export function useWorkbenchCommandProjectBootstrap({
   setIsValidationStale,
   createTerminalSession,
 }: UseWorkbenchCommandProjectBootstrapOptions): void {
-  const hostRuntime = useWorkbenchHostRuntime()
   useEffect(() => {
-    terminalSessionsRef.current.forEach((session) => {
-      void hostRuntime.kernel.project.stopWorkbenchTerminalSession({ sessionId: session.id })
-      discardWorkbenchTerminalOutput(session.id)
-    })
     setTerminalSessions([])
     setActiveTerminalSessionId(null)
 
@@ -75,7 +66,6 @@ export function useWorkbenchCommandProjectBootstrap({
     activeProjectId,
     activeProjectRef,
     createTerminalSession,
-    hostRuntime,
     setActiveTerminalSessionId,
     setCommandHistory,
     setCommandInput,
@@ -86,6 +76,5 @@ export function useWorkbenchCommandProjectBootstrap({
     setIsValidationStale,
     setRunOutputLines,
     setTerminalSessions,
-    terminalSessionsRef,
   ])
 }
