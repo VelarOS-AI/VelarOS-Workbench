@@ -5,6 +5,9 @@ project navigation, editing, language intelligence, Git, terminals, run surfaces
 history, and runs its chat on the VelarOS Platform agent runtime with the shared `@velaros-ai/ui`
 conversation surface.
 
+Workbench is open source under the [Apache License 2.0](LICENSE). This repository contains the
+application source and can be developed without a checkout of VelarOS Desktop.
+
 Workbench uses one project per window so multiple projects can stay open with isolated editor, Git,
 terminal, language-service, and Agent state. Open folders from the start screen or File menu, pass a
 folder to the application from the operating system, or drag one or more folders into a Workbench
@@ -99,13 +102,16 @@ apply to engine sessions.
 首次使用从声明的 GitHub Release 恢复归档；已有缓存时可用 `--verify-only` 离线核验：
 
 ```bash
+git clone https://github.com/VelarOS-AI/VelarOS-Workbench.git
+cd VelarOS-Workbench
 bun scripts/release/platformSnapshot.mjs
 bun install --frozen-lockfile
 bun run dev
 ```
 
 准备命令只从声明的 GitHub Release 恢复正式包，不猜 release tag。
-缺少缓存时需要具备对应仓库读取权限的 `gh`。Platform 与 UI 改动由对应 owner 构建为固定归档，Workbench
+缺少缓存时需要安装并配置 `gh`，归档来自公开的 Platform 与 UI 仓库；不需要私有 npm registry token。
+Platform 与 UI 改动由对应 owner 构建为固定归档，Workbench
 只消费公开入口，不引用兄弟仓源码或共享 node_modules。基础和扩展必须同版切换。
 
 开发验证按影响范围选择类型/lint 分区和必要行为测试，复用已通过结果；完整 `bun run check` 留给需要全量检查的交付。
@@ -137,6 +143,9 @@ on matching native hosts, either locally or through the
 hosted in Desktop's existing signing environment. Native builds may run in parallel; platform
 finalization is serialized to preserve every verified platform in the signed catalog. Electron Builder
 publishing remains disabled, and this repository's old CI sentinels remain inactive.
+
+VelarOS Desktop remains a separate private repository. Access to its official signing workflow is
+not required for local development or packaging from this source tree.
 
 The public candidate release uses separate manifests: `candidate-*.json` marks a complete build,
 while the Ed25519-signed schema-2 `catalog-*.json` is the only manifest Cloud imports. The catalog
