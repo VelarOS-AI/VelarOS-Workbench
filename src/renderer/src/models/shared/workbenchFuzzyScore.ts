@@ -33,19 +33,30 @@ const WordSeparators: ReadonlySet<string> = new Set(['_', '-', '.', ' ', '"', "'
 const NoScore = -1_000_000
 
 // 打分矩阵按需扩容、反复复用：快速打开每敲一个字要给成千上万个文件打分，不能每次都分配。
-let matchScores = new Int32Array(0)
-let bestScores = new Int32Array(0)
-let runLengths = new Int32Array(0)
-let extendsRun = new Uint8Array(0)
+let runIntercepts = new Int32Array(0)
+let hullPrevious = new Int32Array(0)
+let matchedRunStarts = new Int32Array(0)
+let runPrefixEnds = new Int32Array(0)
+let diagonalScores = new Int32Array(0)
+let diagonalTails = new Int32Array(0)
+let rowScores = new Int32Array(0)
+let rowEnds = new Int32Array(0)
 
-function ensureMatrixCapacity(size: number): void {
-  if (matchScores.length >= size) return
-
-  const capacity = Math.max(size, matchScores.length * 2, 256)
-  matchScores = new Int32Array(capacity)
-  bestScores = new Int32Array(capacity)
-  runLengths = new Int32Array(capacity)
-  extendsRun = new Uint8Array(capacity)
+function ensureMatrixCapacity(size: number, targetLength: number): void {
+  if (runIntercepts.length < size) {
+    const capacity = Math.max(size, runIntercepts.length * 2, 256)
+    runIntercepts = new Int32Array(capacity)
+    hullPrevious = new Int32Array(capacity)
+    matchedRunStarts = new Int32Array(capacity)
+    runPrefixEnds = new Int32Array(capacity)
+  }
+  if (diagonalScores.length < targetLength) {
+    const capacity = Math.max(targetLength, diagonalScores.length * 2, 256)
+    diagonalScores = new Int32Array(capacity)
+    diagonalTails = new Int32Array(capacity)
+    rowScores = new Int32Array(capacity * 2)
+    rowEnds = new Int32Array(capacity * 2)
+  }
 }
 
 /** `query` 的字符按顺序都在 `target` 里（两者都应已是小写）：打分前的快速筛选。 */
@@ -94,20 +105,6 @@ function scoreCharacter(
   return score
 }
 
-/** 第 `queryIndex` 个查询字符在 `target[0..limit]` 里取得最高分的最靠前位置。 */
-function findBestPosition(
-  queryIndex: number,
-  limit: number,
-  targetLength: number
-): number {
-  const row = queryIndex * targetLength
-  const best = bestScores[row + limit]
-  for (let targetIndex = queryIndex; targetIndex <= limit; targetIndex += 1) {
-    if (matchScores[row + targetIndex] === best) return targetIndex
-  }
-  return limit
-}
-
 /**
  * 给 `target` 按 `query` 打分；查询字符不能按顺序全在目标里时返回 null。空查询不算匹配。
  * 热路径上的调用方可以传入算好的小写形式。
@@ -125,73 +122,123 @@ export function scoreWorkbenchFuzzy(
   const queryLower = lowercase?.query ?? query.toLowerCase()
   if (!isWorkbenchFuzzySubsequence(targetLower, queryLower)) return null
 
-  // matchScores[i][j]：第 i 个查询字符恰好落在 target[j] 时，前 i+1 个字符的最高总分；
-  // bestScores[i][j]：第 i 个查询字符落在 target[0..j] 里任意一处时的最高总分。
-  const size = queryLength * targetLength
-  ensureMatrixCapacity(size)
-  matchScores.fill(NoScore, 0, size)
-  bestScores.fill(NoScore, 0, size)
+  // 同一格的最高分可能只有较短的连续后缀，不能丢掉以后靠连续奖励胜出的候选。
+  // 每条匹配对角线用上凸包保留这些run；每个候选只入栈、出栈一次，仍为O(m*n)。
+  ensureMatrixCapacity(queryLength * targetLength, targetLength)
+  const diagonalCount = targetLength - queryLength + 1
+  diagonalScores.fill(0, 0, diagonalCount)
+  diagonalTails.fill(-1, 0, diagonalCount)
+  let previousRow = 0
+  let currentRow = targetLength
 
   for (let queryIndex = 0; queryIndex < queryLength; queryIndex += 1) {
     const row = queryIndex * targetLength
-    const previousRow = row - targetLength
     const queryCode = queryLower.charCodeAt(queryIndex)
-    // 后面还有 queryLength - queryIndex - 1 个字符要放，这一个最多只能放到这里。
     const lastTargetIndex = targetLength - queryLength + queryIndex
+    let bestScore = NoScore
+    let bestEnd = -1
 
     for (let targetIndex = queryIndex; targetIndex <= lastTargetIndex; targetIndex += 1) {
       const cell = row + targetIndex
+      const diagonal = targetIndex - queryIndex
+      let matchScore = NoScore
       if (targetLower.charCodeAt(targetIndex) === queryCode) {
-        if (queryIndex === 0) {
-          matchScores[cell] = scoreCharacter(query, target, 0, targetIndex, 0)
-          runLengths[cell] = 1
-          extendsRun[cell] = 0
-        } else {
-          // 接着上一个字符连着命中，或者与它隔开（它落在 targetIndex - 2 及以前）。
-          const extended = matchScores[previousRow + targetIndex - 1]
-          const separated = targetIndex >= 2 ? bestScores[previousRow + targetIndex - 2] : NoScore
-          const extendedScore =
-            extended > NoScore
-              ? extended +
-                scoreCharacter(query, target, queryIndex, targetIndex, runLengths[previousRow + targetIndex - 1])
+        // base不含连续奖励或camel起点奖励；后者只属于新run的首字符。
+        const base = scoreCharacter(query, target, queryIndex, targetIndex, 1) - ConsecutiveBonus
+        const prefixScore =
+          queryIndex === 0
+            ? 0
+            : targetIndex > queryIndex
+              ? rowScores[previousRow + targetIndex - 2]
               : NoScore
-          const separatedScore =
-            separated > NoScore
-              ? separated + scoreCharacter(query, target, queryIndex, targetIndex, 0)
-              : NoScore
+        let tail = diagonalTails[diagonal]
 
-          if (extendedScore > NoScore && extendedScore >= separatedScore) {
-            matchScores[cell] = extendedScore
-            runLengths[cell] = runLengths[previousRow + targetIndex - 1] + 1
-            extendsRun[cell] = 1
-          } else if (separatedScore > NoScore) {
-            matchScores[cell] = separatedScore
-            runLengths[cell] = 1
-            extendsRun[cell] = 0
+        if (prefixScore > NoScore) {
+          // run从s开始、在i结束时，连续奖励为5*(i-s+1)*(i-s)/2。
+          // 去掉公共的base前缀和+5*i*(i+1)/2后，候选是B_s-5*s*i。
+          // B_s收进gap前缀、run首字符camel奖励及起点常数，矩阵格标识起点s。
+          const intercept =
+            prefixScore +
+            scoreCharacter(query, target, queryIndex, targetIndex, 0) - base -
+            diagonalScores[diagonal] +
+            ConsecutiveBonus * queryIndex * (queryIndex - 1) / 2
+          runIntercepts[cell] = intercept
+          runPrefixEnds[cell] =
+            queryIndex === 0 ? -1 : rowEnds[previousRow + targetIndex - 2]
+
+          // s递增，斜率递减。删掉不可能单独胜出的中间线，不丢仍有未来优势的run。
+          while (tail >= 0 && hullPrevious[tail] >= 0) {
+            const before = hullPrevious[tail]
+            const beforeStart = Math.floor(before / targetLength)
+            const tailStart = Math.floor(tail / targetLength)
+            if (
+              (intercept - runIntercepts[tail]) * (tailStart - beforeStart) <
+              (runIntercepts[tail] - runIntercepts[before]) * (queryIndex - tailStart)
+            )
+              break
+            tail = before
           }
+          hullPrevious[cell] = tail
+          tail = cell
         }
+
+        diagonalScores[diagonal] += base
+        // i单调递增；旧线斜率更大，一旦不差于尾线，尾线以后也不会再胜出。
+        while (tail >= 0 && hullPrevious[tail] >= 0) {
+          const before = hullPrevious[tail]
+          const beforeScore =
+            runIntercepts[before] -
+            ConsecutiveBonus * queryIndex * Math.floor(before / targetLength)
+          const tailScore =
+            runIntercepts[tail] -
+            ConsecutiveBonus * queryIndex * Math.floor(tail / targetLength)
+          if (beforeScore < tailScore) break
+          tail = before
+        }
+        diagonalTails[diagonal] = tail
+        if (tail >= 0) {
+          matchedRunStarts[cell] = tail
+          matchScore =
+            diagonalScores[diagonal] +
+            ConsecutiveBonus * queryIndex * (queryIndex + 1) / 2 +
+            runIntercepts[tail] -
+            ConsecutiveBonus * queryIndex * Math.floor(tail / targetLength)
+        }
+      } else {
+        // 字符不匹配便断开连续段，不能让旧run穿过这个位置。
+        diagonalScores[diagonal] = 0
+        diagonalTails[diagonal] = -1
       }
 
-      const left = targetIndex > queryIndex ? bestScores[cell - 1] : NoScore
-      bestScores[cell] = Math.max(left, matchScores[cell])
+      // 同分保留更早的结束位置；同结束位置的run同分优先延长，沿用原有规则。
+      if (matchScore > bestScore) {
+        bestScore = matchScore
+        bestEnd = cell
+      }
+      rowScores[currentRow + targetIndex] = bestScore
+      rowEnds[currentRow + targetIndex] = bestEnd
     }
+
+    const completedRow = currentRow
+    currentRow = previousRow
+    previousRow = completedRow
   }
 
-  const lastRow = (queryLength - 1) * targetLength
-  const lastTargetIndex = targetLength - 1
-  const score = bestScores[lastRow + lastTargetIndex]
+  const score = rowScores[previousRow + targetLength - 1]
   if (score <= NoScore) return null
 
-  // 从最后一个查询字符往回找命中位置：连着命中的接上一格，隔开的在它前面两格以内取最高分的最靠前一处。
+  // 每个候选保存run前的最优前缀末端；按整段run回溯，不重新扫描矩阵。
   const positions = Array.from<number>({ length: queryLength })
-  let targetIndex = findBestPosition(queryLength - 1, lastTargetIndex, targetLength)
-  for (let queryIndex = queryLength - 1; queryIndex >= 0; queryIndex -= 1) {
-    positions[queryIndex] = targetIndex
-    if (queryIndex === 0) break
-
-    targetIndex = extendsRun[queryIndex * targetLength + targetIndex]
-      ? targetIndex - 1
-      : findBestPosition(queryIndex - 1, targetIndex - 2, targetLength)
+  let end = rowEnds[previousRow + targetLength - 1]
+  while (end >= 0) {
+    const start = matchedRunStarts[end]
+    const firstQueryIndex = Math.floor(start / targetLength)
+    const lastQueryIndex = Math.floor(end / targetLength)
+    const lastTargetIndex = end % targetLength
+    for (let queryIndex = lastQueryIndex; queryIndex >= firstQueryIndex; queryIndex -= 1) {
+      positions[queryIndex] = lastTargetIndex - lastQueryIndex + queryIndex
+    }
+    end = runPrefixEnds[start]
   }
 
   return { score, positions }

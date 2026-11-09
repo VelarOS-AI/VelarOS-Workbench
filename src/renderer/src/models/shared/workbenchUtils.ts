@@ -2,21 +2,11 @@ import { isEmpty } from '@velaros-ai/velaros/core'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
-import type { WorkbenchProject } from '../project/workbenchProjects'
-
 export const ROOT_PATH = '.'
 
 /** 文件树中的合成项目根行，路径始终为根路径常量。 */
 export function isWorkbenchTreeRoot(entry: Pick<WorkbenchDirectoryEntry, 'path'>): boolean {
   return entry.path === ROOT_PATH
-}
-
-export function sortProjects(projects: WorkbenchProject[]): WorkbenchProject[] {
-  return [...projects].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-
-    return (b.lastOpenedAt ?? b.createdAt) - (a.lastOpenedAt ?? a.createdAt)
-  })
 }
 
 export function fileLanguage(path: Nullable<string>): string {

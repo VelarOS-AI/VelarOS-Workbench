@@ -30,6 +30,8 @@ void describe('Workbench fuzzy score', () => {
 
   void test('a consecutive run scores higher than the same letters apart', () => {
     assert.ok(score('format.ts', 'format') > score('fo-rm-at.ts', 'format'))
+    // `ab` 的早期高分不能抹掉后来 `abc` 的完整连续候选。
+    assert.deepEqual(scoreWorkbenchFuzzy('axabc', 'abc'), { score: 21, positions: [2, 3, 4] })
     // 连着的越长越值钱：`shortcuts` 整段命中在文件名里，不去拼前面零散的字母。
     assert.deepEqual(
       positions('workbenchKeyboardShortcuts.ts', 'shortcuts'),
