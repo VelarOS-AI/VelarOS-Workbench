@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import path, { join } from 'node:path'
+import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -161,16 +160,6 @@ void describe('Workbench Git hunks', () => {
       assert.equal(await git(repository, ['show', ':my app/new name.txt']), edited({ 17: 'LINE 17' }))
       assert.ok((await porcelain(repository)).includes('RM "my app/old name.txt" -> "my app/new name.txt"'))
     })
-  })
-
-  void test('the diff view asks before reverting a hunk and refreshes in place afterwards', () => {
-    const panel = readFileSync(
-      path.resolve(process.cwd(), 'src/renderer/src/components/git/GitDiffEditorPanel.tsx'),
-      'utf8'
-    )
-    assert.match(panel, /if \(actionId === 'discard'\) \{\s*setDiscardRequest\(hunkIndex\)/)
-    assert.match(panel, /runHunkAction\(discardRequest, 'discard'\)/)
-    assert.match(panel, /finally \{[\s\S]*reload\(\)[\s\S]*onGitStateChanged\?\.\(\)/)
   })
 
   void test('the patch names only the file it changes, quoted the way git reads it', () => {

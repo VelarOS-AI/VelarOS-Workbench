@@ -34,6 +34,7 @@ import {
   isWorkbenchGitWholeFilePatch,
   parseWorkbenchGitFilePatches,
   type WorkbenchGitFilePatch,
+  type WorkbenchGitHunkSelector,
 } from '@shared/workbenchGitPatch'
 
 import {
@@ -62,6 +63,15 @@ interface GitDiffEditorPanelProps {
   hasUnsavedOpenTabs: boolean
   /** 按块暂存、回滚之后刷新 Git 状态（提交面板、文件树的颜色）。 */
   onGitStateChanged?: () => Promise<void> | void
+}
+
+interface GitHunkActionRequest {
+  projectRoot: string
+  path: string
+  originalPath?: string
+  group: WorkbenchGitChangeItem['group']
+  hunkIndex: number
+  hunk: WorkbenchGitHunkSelector
 }
 
 /** git 的补丁（未跟踪文件没有）。 */
@@ -107,21 +117,51 @@ export function GitDiffEditorPanel({
   )
   /** 正在处理的那一块（从 0 起）。 */
   const [pendingHunk, setPendingHunk] = useState<Nullable<number>>(null)
-  /** 等用户确认回滚的那一块。 */
-  const [discardRequest, setDiscardRequest] = useState<Nullable<number>>(null)
+  /** 等用户确认的原始目标；差异刷新后仍由主进程核对同一块，不按索引重取。 */
+  const [discardRequest, setDiscardRequest] = useState<Nullable<GitHunkActionRequest>>(null)
 
-  async function runHunkAction(hunkIndex: number, action: WorkspaceGitHunkAction): Promise<void> {
-    const hunk = patch?.hunks[hunkIndex]
+  useEffect(() => {
     setDiscardRequest(null)
-    if (!hunk || pendingHunk !== null) return
+  }, [item.group, item.originalPath, item.path, projectRoot])
+
+  function captureHunkRequest(hunkIndex: number): Nullable<GitHunkActionRequest> {
+    const hunk = patch?.hunks[hunkIndex]
+    if (!hunk) return null
+    return {
+      projectRoot,
+      path: item.path,
+      originalPath: item.originalPath,
+      group: item.group,
+      hunkIndex,
+      hunk: { header: hunk.header, lines: [...hunk.lines] },
+    }
+  }
+
+  function checkHunkActionAllowed(actionId: string): boolean {
+    if (actionId === 'unstage' || !hasUnsavedOpenTabs) return true
+    messageLatest.current.warning({
+      title: tLatest.current('workbench.gitUnsavedBlockedTitle'),
+      description: tLatest.current('workbench.gitUnsavedBlockedDescription'),
+    })
+    return false
+  }
+
+  async function runHunkAction(request: GitHunkActionRequest, action: WorkspaceGitHunkAction): Promise<void> {
+    setDiscardRequest(null)
+    if (
+      pendingHunk !== null ||
+      request.projectRoot !== projectRoot || request.path !== item.path ||
+      request.originalPath !== item.originalPath || request.group !== item.group
+    ) return
+    if (!checkHunkActionAllowed(action)) return
     try {
-      setPendingHunk(hunkIndex)
+      setPendingHunk(request.hunkIndex)
       Result.unwrap(
-        await workbenchHost.kernel.workspace.performWorkspaceGitHunkAction(projectRoot, {
+        await workbenchHost.kernel.workspace.performWorkspaceGitHunkAction(request.projectRoot, {
           action,
-          path: item.path,
-          originalPath: item.originalPath,
-          hunks: [{ header: hunk.header, lines: hunk.lines }],
+          path: request.path,
+          originalPath: request.originalPath,
+          hunks: [request.hunk],
         })
       )
     } catch (actionError) {
@@ -143,18 +183,14 @@ export function GitDiffEditorPanel({
 
   const handleHunkAction = useMemoizedFn((hunkIndex: number, actionId: string): void => {
     if (pendingHunk !== null) return
-    if (actionId !== 'unstage' && hasUnsavedOpenTabs) {
-      messageLatest.current.warning({
-        title: tLatest.current('workbench.gitUnsavedBlockedTitle'),
-        description: tLatest.current('workbench.gitUnsavedBlockedDescription'),
-      })
-      return
-    }
+    const request = captureHunkRequest(hunkIndex)
+    if (!request) return
+    if (!checkHunkActionAllowed(actionId)) return
     if (actionId === 'discard') {
-      setDiscardRequest(hunkIndex)
+      setDiscardRequest(request)
       return
     }
-    if (actionId === 'stage' || actionId === 'unstage') void runHunkAction(hunkIndex, actionId)
+    if (actionId === 'stage' || actionId === 'unstage') void runHunkAction(request, actionId)
   })
 
   // 按块操作只在暂存、未暂存这两侧的差异上有；新建、删除、二进制、没读完整的补丁只能整个文件操作。
@@ -268,7 +304,7 @@ export function GitDiffEditorPanel({
           <DialogHeader>
             <DialogTitle>{t('workbench.gitDiscardHunkConfirmTitle')}</DialogTitle>
             <DialogDescription>
-              {t('workbench.gitDiscardHunkConfirm', { path: item.path })}
+              {t('workbench.gitDiscardHunkConfirm', { path: discardRequest?.path ?? item.path })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
