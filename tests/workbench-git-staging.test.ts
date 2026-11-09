@@ -32,6 +32,31 @@ import {
 } from './helpers/gitRepository'
 
 void describe('Workbench Git staging area', () => {
+  void test('unstages a batch longer than the Windows command line without changing files', async () => {
+    await withRepository(async (root) => {
+      const paths = Array.from(
+        { length: 256 },
+        (_, index) => `${String(index).padStart(3, '0')}-${'x'.repeat(120)}[entry].txt`
+      )
+      assert.ok(paths.join(' ').length > 32_767)
+      await Promise.all(paths.map((path) => writeFile(join(root, path), 'base\n')))
+      const service = createGitService()
+      await service.performFileAction(root, paths, 'stage')
+      const unborn = await service.performFileAction(root, paths, 'unstage')
+      assert.equal(unborn.fileAction.status.stagedFiles, 0)
+      assert.equal(unborn.fileAction.status.untrackedFiles, paths.length)
+
+      await commitAll(root, 'base')
+      await Promise.all(paths.map((path) => writeFile(join(root, path), 'changed\n')))
+      await service.performFileAction(root, paths, 'stage')
+      const unstaged = await service.performFileAction(root, paths, 'unstage')
+      assert.equal(unstaged.fileAction.status.stagedFiles, 0)
+      assert.equal(unstaged.fileAction.status.unstagedFiles, paths.length)
+      assert.equal(await readFile(join(root, paths[0]!), 'utf8'), 'changed\n')
+      assert.equal(await readFile(join(root, paths.at(-1)!), 'utf8'), 'changed\n')
+    })
+  })
+
   void test('stages and unstages several files at once', async () => {
     await withRepository(async (root) => {
       await writeFile(join(root, 'a.txt'), 'a\n')

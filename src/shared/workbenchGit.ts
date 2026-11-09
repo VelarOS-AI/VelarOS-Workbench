@@ -101,7 +101,6 @@ export interface WorkbenchGitSwitchBranchRequest extends WorkbenchGitRootRequest
   branch: string
   create?: boolean
   startPoint?: string
-  locale?: AppLocale
 }
 
 export interface WorkbenchGitCreateBranchRequest extends WorkbenchGitRootRequest {

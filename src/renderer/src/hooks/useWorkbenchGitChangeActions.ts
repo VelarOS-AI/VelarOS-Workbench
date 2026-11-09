@@ -2,7 +2,6 @@ import { type FormEvent, useState } from 'react'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 
-import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import { isPresent } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { Result } from '@velaros-ai/velaros/core/result'
@@ -22,7 +21,6 @@ type WorkbenchGitChangeTranslate = Pick<
 
 export interface UseWorkbenchGitChangeActionsParams {
   workspaceRoot: string
-  locale: AppLocale
   hasUnsavedOpenTabs: boolean
   status: Nullable<SystemWorkspaceGitSummary['status']>
   onRefresh: () => Promise<void> | void
@@ -33,7 +31,6 @@ export interface UseWorkbenchGitChangeActionsParams {
 
 export function useWorkbenchGitChangeActions({
   workspaceRoot,
-  locale,
   hasUnsavedOpenTabs,
   status,
   onRefresh,
@@ -123,11 +120,7 @@ export function useWorkbenchGitChangeActions({
     try {
       setPendingBranchAction(`switch:${targetBranch}`)
       const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(
-          workspaceRoot,
-          targetBranch,
-          locale
-        )
+        await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(workspaceRoot, targetBranch)
       )
       await onRepositoryChangedLatest.current()
       messageLatest.current.success({

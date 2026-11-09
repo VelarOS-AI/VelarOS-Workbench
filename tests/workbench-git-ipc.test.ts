@@ -61,7 +61,6 @@ void describe('Workbench Git IPC requests', () => {
           branch: 'feature/menu',
           githubToken: undefined,
           privateKeyPath: '~/.ssh/id_ed25519',
-          sshKeyPath: undefined,
           operationId: undefined,
         },
       },

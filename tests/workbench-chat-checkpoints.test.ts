@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -17,6 +25,84 @@ async function git(root: string, args: string[]): Promise<string> {
 }
 
 void describe('Workbench chat checkpoints', () => {
+  void test('queues a snapshot before a later checkpoint and fixes each alias to its admitted root', async () => {
+    const base = await realpath(await mkdtemp(join(tmpdir(), 'workbench-checkpoint-order-')))
+    const project = join(base, 'project')
+    const other = join(base, 'other')
+    const alias = join(base, 'project-alias')
+    const service = new WorkbenchChatCheckpointService(() => join(base, 'indexes'))
+    const rootGate = Promise.withResolvers<void>()
+    const commandGate = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<{ root: string; command: string | undefined }>()
+    const pending: Array<Promise<unknown>> = []
+    try {
+      for (const root of [project, other]) {
+        await mkdir(root)
+        await git(root, ['init', '-q'])
+        await writeFile(join(root, 'tracked.txt'), root === project ? 'base\n' : 'other\n')
+        await git(root, ['add', '-A'])
+        await git(root, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base'])
+      }
+      await symlink(project, alias, process.platform === 'win32' ? 'junction' : 'dir')
+      await writeFile(join(project, 'staged.txt'), 'user staged\n')
+      await git(project, ['add', 'staged.txt'])
+      const headBefore = await git(project, ['rev-parse', 'HEAD'])
+      const indexBefore = await git(project, ['write-tree'])
+      await writeFile(join(project, 'tracked.txt'), 'final\n')
+
+      const controlled = service as unknown as {
+        resolveRoot: (root: string) => Promise<string>
+        runGit: (root: string, args: string[], env?: Record<string, string>) => Promise<string>
+      }
+      const resolveRoot = controlled.resolveRoot.bind(service)
+      const runGit = controlled.runGit.bind(service)
+      // 先到请求若仍在入队前等待异步根解析，后到的别名请求就会先执行 rev-parse。
+      controlled.resolveRoot = async (root) => {
+        if (root === project) await rootGate.promise
+        return resolveRoot(root)
+      }
+      const commands: string[] = []
+      let firstCommand = true
+      controlled.runGit = async (root, args, env) => {
+        commands.push(args[0] ?? '')
+        if (firstCommand) {
+          firstCommand = false
+          started.resolve({ root, command: args[0] })
+          await commandGate.promise
+        }
+        return runGit(root, args, env)
+      }
+
+      const snapshot = service.snapshotWorkingTree(project)
+      const checkpoint = service.capture({ workspaceRoot: alias, sessionId: 's', checkpointId: 'next' })
+      pending.push(snapshot, checkpoint)
+      assert.deepEqual(await started.promise, { root: project, command: 'add' })
+      // 后到请求已经按别名原目标入队：等候时别名换了目标，也不能换仓库操作。
+      await unlink(alias)
+      await symlink(other, alias, process.platform === 'win32' ? 'junction' : 'dir')
+      rootGate.resolve()
+      commandGate.resolve()
+      const [tree, captured] = await Promise.all([snapshot, checkpoint])
+      assert.ok(captured.commitId)
+      assert.deepEqual(commands.slice(0, 3), ['add', 'write-tree', 'rev-parse'])
+      assert.equal(await git(project, ['show', `${tree}:tracked.txt`]), 'final\n')
+      assert.equal(await git(project, ['show', `${captured.commitId}:tracked.txt`]), 'final\n')
+      assert.equal(
+        (await git(project, ['rev-parse', 'refs/velaros/checkpoints/s/next'])).trim(),
+        captured.commitId
+      )
+      assert.equal((await git(other, ['for-each-ref', 'refs/velaros/checkpoints'])).trim(), '')
+      assert.equal(await git(project, ['rev-parse', 'HEAD']), headBefore)
+      assert.equal(await git(project, ['write-tree']), indexBefore)
+      await assert.rejects(service.snapshotWorkingTree(join(base, 'missing')), { code: 'ENOENT' })
+    } finally {
+      rootGate.resolve()
+      commandGate.resolve()
+      await Promise.allSettled(pending)
+      await rm(base, { recursive: true, force: true })
+    }
+  })
+
   void test('captures a turn under a private ref without touching the user index or HEAD', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-'))
     const indexes = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-indexes-'))

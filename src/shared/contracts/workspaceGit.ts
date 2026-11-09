@@ -129,7 +129,6 @@ export type WorkspaceGitFileAction = 'discard' | 'stage' | 'unstage' | 'resolve'
 export interface WorkspaceGitRemoteActionOptions {
   githubToken?: string
   privateKeyPath?: string
-  sshKeyPath?: string
   /** 上传时指定本地分支；不给就是当前分支。 */
   branch?: string
   /** 这次操作的编号，发起方自己起；给了之后凭它中途取消这次操作。 */
@@ -172,11 +171,6 @@ export interface WorkspaceGitFileActionResult {
   /** 相对项目根。 */
   paths: string[]
   status: WorkspaceGitStatusResult
-}
-
-export interface WorkspaceGitRestoreResult {
-  commitSha: string
-  changedFiles: number
 }
 
 /** 会停在半路等用户接着处理的操作：合并、变基、拣选提交、撤销提交。 */

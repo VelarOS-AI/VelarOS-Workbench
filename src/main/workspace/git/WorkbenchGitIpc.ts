@@ -331,7 +331,7 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
   if (action !== 'fetch' && action !== 'pull' && action !== 'sync' && action !== 'upload')
     return invalidRequest()
   const record = input as Record<string, unknown>
-  for (const key of ['branch', 'githubToken', 'privateKeyPath', 'sshKeyPath', 'operationId']) {
+  for (const key of ['branch', 'githubToken', 'privateKeyPath', 'operationId']) {
     if (record[key] !== undefined && typeof record[key] !== 'string') return invalidRequest()
   }
   if (record['operationId'] !== undefined && !isOperationId(record['operationId']))
@@ -343,7 +343,6 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
     branch: optionalWhen(isString, record['branch']),
     githubToken: optionalWhen(isString, record['githubToken']),
     privateKeyPath: optionalWhen(isString, record['privateKeyPath']),
-    sshKeyPath: optionalWhen(isString, record['sshKeyPath']),
     // 没带编号的操作照常跑，只是取消不了。
     operationId: optionalWhen(isString, record['operationId']),
   }

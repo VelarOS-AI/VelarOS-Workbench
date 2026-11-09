@@ -83,7 +83,7 @@ export function WorkbenchGitBranchControl({
   onRepositoryChanged,
   onOpenCommitTool,
 }: WorkbenchGitBranchControlProps): Nullable<ReactElement> {
-  const { locale, messageLatest, t, tLatest } = useStableWorkbenchMessageTranslate()
+  const { messageLatest, t, tLatest } = useStableWorkbenchMessageTranslate()
   const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
   const [menuOpen, setMenuOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -157,7 +157,6 @@ export function WorkbenchGitBranchControl({
         await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(
           workspaceRoot,
           target.branch,
-          locale,
           target.options
         )
       )
@@ -204,7 +203,6 @@ export function WorkbenchGitBranchControl({
             await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(
               workspaceRoot,
               name,
-              locale,
               { create: true }
             )
           ).branch

@@ -344,7 +344,6 @@ export interface WorkbenchWorkspaceKernelPort {
   switchWorkspaceGitBranch(
     workspaceRoot: string,
     branch: string,
-    locale?: AppLocale,
     options?: { create?: boolean; startPoint?: string }
   ): Promise<Result<SystemWorkspaceGitSwitchBranchResult>>
   createWorkspaceGitBranch(
@@ -356,7 +355,7 @@ export interface WorkbenchWorkspaceKernelPort {
     action: SystemWorkspaceGitActionRequest['action'],
     options?: Pick<
       SystemWorkspaceGitActionRequest,
-      'branch' | 'githubToken' | 'privateKeyPath' | 'sshKeyPath' | 'operationId'
+      'branch' | 'githubToken' | 'privateKeyPath' | 'operationId'
     >
   ): Promise<Result<SystemWorkspaceGitActionResult>>
   /** 取消一个带着 `operationId` 发起的远端操作；它已经结束时 `cancelled` 为 false。 */

@@ -795,8 +795,6 @@ export class WorkbenchGitService {
       rootPath,
       previousBranch,
       branch: targetBranch,
-      autoCommit: null,
-      restoredAutoCommit: null,
       summary: await this.getSummary(rootPath),
     }
   }
@@ -1476,12 +1474,12 @@ export class WorkbenchGitService {
 
   private async unstage(rootPath: string, paths: readonly string[]): Promise<void> {
     if (paths.length === 0) return
-    const pathspecs = paths.map((path) => this.toLiteralPathspec(path))
-    if (!(await this.readHeadCommit(rootPath))) {
-      await this.runGit(rootPath, ['rm', '--cached', '--ignore-unmatch', '--', ...pathspecs])
-      return
-    }
-    await this.runGit(rootPath, ['restore', '--staged', '--', ...pathspecs])
+    const args = (await this.readHeadCommit(rootPath))
+      ? ['restore', '--staged']
+      : ['rm', '--cached', '--ignore-unmatch']
+    await this.runGit(rootPath, [...args, '--pathspec-from-file=-', '--pathspec-file-nul'], {
+      input: paths.map((path) => this.toLiteralPathspec(path)).join('\0'),
+    })
   }
 
   /**
@@ -2106,7 +2104,7 @@ export class WorkbenchGitService {
         `url.https://x-access-token:${encodeURIComponent(token)}@github.com/.insteadOf`
       env[`GIT_CONFIG_VALUE_${index}`] = 'https://github.com/'
     }
-    const keyPath = options.privateKeyPath?.trim() || options.sshKeyPath?.trim()
+    const keyPath = options.privateKeyPath?.trim()
     if (keyPath) {
       const normalized =
         keyPath === '~'

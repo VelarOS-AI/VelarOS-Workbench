@@ -13,7 +13,6 @@ export const standaloneWorkbenchProductRuntimeValue: WorkbenchProductRuntimeValu
     git: {
       githubToken: '',
       privateKeyPath: '',
-      sshKeyPath: '',
     },
   },
   ui: {

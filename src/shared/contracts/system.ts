@@ -16,7 +16,6 @@ import type {
   WorkspaceGitOperationState,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionResult,
-  WorkspaceGitRestoreResult,
   WorkspaceGitStash,
   WorkspaceGitStashActionResult,
   WorkspaceGitStatusResult,
@@ -36,8 +35,6 @@ export type SystemDefaultEditorId =
 export interface SystemGitConfig {
   githubToken: string
   privateKeyPath: string
-  /** @deprecated Use privateKeyPath. */
-  sshKeyPath: string
 }
 
 export interface WorkspaceRootEntry {
@@ -127,8 +124,6 @@ export interface SystemWorkspaceGitSwitchBranchResult {
   rootPath: string
   previousBranch: Nullable<string>
   branch: string
-  autoCommit: Nullable<WorkspaceGitCommitResult>
-  restoredAutoCommit: Nullable<WorkspaceGitRestoreResult>
   summary: SystemWorkspaceGitSummary
 }
 
@@ -203,7 +198,6 @@ export interface SystemWorkspaceGitActionRequest {
   branch?: string
   githubToken?: string
   privateKeyPath?: string
-  sshKeyPath?: string
   /** 这次操作的编号：给了之后凭它中途取消。 */
   operationId?: string
 }

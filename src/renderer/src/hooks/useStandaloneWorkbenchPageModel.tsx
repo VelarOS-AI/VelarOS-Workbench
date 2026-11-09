@@ -509,9 +509,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
       })
   )
   const effectiveGitSshKeyPath =
-    projectGitSettings.settings.gitSshKeyPath.trim() ||
-    globalGitConfig.privateKeyPath ||
-    globalGitConfig.sshKeyPath
+    projectGitSettings.settings.gitSshKeyPath.trim() || globalGitConfig.privateKeyPath
   const shellStyle: CSSProperties = {
     ...layout.style,
     ...workbenchPreferences.style,
@@ -634,7 +632,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
 
   const gitChangeActions = useWorkbenchGitChangeActions({
     workspaceRoot: workbench.activeProject?.rootPath ?? '',
-    locale,
     hasUnsavedOpenTabs: workbench.hasUnsavedOpenTabs,
     status: toNullable(gitState.summary?.status),
     onRefresh: refreshGitPanelWithWorkspace,

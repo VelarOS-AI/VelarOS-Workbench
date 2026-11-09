@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { mkdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -93,8 +94,7 @@ export class WorkbenchChatCheckpointService {
   public async capture(
     request: WorkbenchChatCheckpointCaptureRequest
   ): Promise<WorkbenchChatCheckpointCaptureResult> {
-    const root = await this.resolveRoot(request.workspaceRoot)
-    return this.serialize(root, async () => {
+    return this.serialize(request.workspaceRoot, async (root) => {
       if (!(await this.isInsideWorkTree(root))) return { commitId: null }
       try {
         const env = { GIT_INDEX_FILE: await this.persistentIndexFile(root) }
@@ -125,8 +125,7 @@ export class WorkbenchChatCheckpointService {
 
   /** 删除检查点的影子 ref（检查点被淘汰、会话被移除时调用）；ref 已不在按幂等处理。 */
   public async delete(request: WorkbenchChatCheckpointDeleteRequest): Promise<void> {
-    const root = await this.resolveRoot(request.workspaceRoot)
-    await this.serialize(root, async () => {
+    await this.serialize(request.workspaceRoot, async (root) => {
       for (const checkpointId of request.checkpointIds) {
         await this.runGit(root, [
           'update-ref',
@@ -147,8 +146,7 @@ export class WorkbenchChatCheckpointService {
    */
   public async snapshotWorkingTree(workspaceRoot: string, settleMs = 0): Promise<string> {
     const settleUntil = Date.now() + settleMs
-    const root = await this.resolveRoot(workspaceRoot)
-    const tree = await this.serialize(root, async () => {
+    const tree = await this.serialize(workspaceRoot, async (root) => {
       const wait = settleUntil - Date.now()
       if (wait > 0) await delay(wait)
       const env = { GIT_INDEX_FILE: await this.persistentIndexFile(root) }
@@ -233,10 +231,14 @@ export class WorkbenchChatCheckpointService {
     return join(directory, 'index')
   }
 
-  /** 同一个根上的捕获 / 拍照 / 删除排队执行：它们共用 index 与工作树，并发只会互相踩。 */
-  private serialize<T>(root: string, task: () => Promise<T>): Promise<T> {
+  /** 同步认定真实根并排队，首个 await 前占好顺序；队内始终使用这一次认定的根，不再跟随原别名。 */
+  private serialize<T>(workspaceRoot: string, task: (root: string) => Promise<T>): Promise<T> {
+    const root = realpathSync.native(this.rootPath(workspaceRoot))
     const previous = this.rootQueues.get(root) ?? Promise.resolve()
-    const next = previous.catch(() => undefined).then(task)
+    const next = previous.then(async () => {
+      await this.assertRootDirectory(root)
+      return task(root)
+    })
     const settled = next.catch(() => undefined)
     this.rootQueues.set(root, settled)
     void settled.then(() => {
@@ -246,12 +248,20 @@ export class WorkbenchChatCheckpointService {
   }
 
   private async resolveRoot(workspaceRoot: string): Promise<string> {
+    const root = await realpath(this.rootPath(workspaceRoot))
+    await this.assertRootDirectory(root)
+    return root
+  }
+
+  private rootPath(workspaceRoot: string): string {
     if (!workspaceRoot.trim() || !isAbsolute(workspaceRoot))
       throw new AppError('VALIDATION', workbenchMainText('git.rootInvalid'))
-    const root = await realpath(resolve(workspaceRoot))
+    return resolve(workspaceRoot)
+  }
+
+  private async assertRootDirectory(root: string): Promise<void> {
     if (!(await stat(root)).isDirectory())
       throw new AppError('VALIDATION', workbenchMainText('git.rootMissing'))
-    return root
   }
 
   private async runGit(
