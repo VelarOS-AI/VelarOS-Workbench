@@ -1,6 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
-import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+
+import { isPlainObject } from '@velaros-ai/velaros/core'
+import { writeFileAtomically } from '@velaros-ai/velaros/core/utils/FilePersistence'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -23,7 +26,7 @@ interface StoredModelCredentials {
 export class WorkbenchModelCredentialStore {
   readonly #credentialPath: string
   readonly #keyPath: string
-  #credentials: StoredModelCredentials | null = null
+  #credentials: Promise<StoredModelCredentials> | null = null
   #key: Promise<Buffer> | null = null
   #writeQueue: Promise<void> = Promise.resolve()
 
@@ -33,44 +36,53 @@ export class WorkbenchModelCredentialStore {
   }
 
   public async getApiKey(provider: string): Promise<string> {
-    return (await this.#read()).apiKeys[provider] ?? ''
+    const { apiKeys } = await this.#read()
+    return Object.hasOwn(apiKeys, provider) ? apiKeys[provider]! : ''
   }
 
   public async setApiKey(provider: string, apiKey: string): Promise<void> {
-    this.#writeQueue = this.#writeQueue.catch(() => undefined).then(async () => {
-      const credentials = await this.#read()
-      const apiKeys = { ...credentials.apiKeys }
-      if (apiKey) apiKeys[provider] = apiKey
-      else delete apiKeys[provider]
+    this.#writeQueue = this.#writeQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const credentials = await this.#read()
+        const apiKeys = { ...credentials.apiKeys }
+        if (apiKey) apiKeys[provider] = apiKey
+        else delete apiKeys[provider]
 
-      this.#credentials = { version: 1, apiKeys }
-      await mkdir(this.rootDir, { recursive: true, mode: 0o700 })
-      const temporaryPath = `${this.#credentialPath}.tmp-${process.pid}-${Date.now()}`
-      await writeFile(
-        temporaryPath,
-        this.#encrypt(JSON.stringify(this.#credentials), await this.#loadOrCreateKey()),
-        { mode: 0o600 }
-      )
-      await rename(temporaryPath, this.#credentialPath)
-    })
+        const next: StoredModelCredentials = { version: 1, apiKeys }
+        await mkdir(this.rootDir, { recursive: true, mode: 0o700 })
+        await writeFileAtomically(
+          this.#credentialPath,
+          this.#encrypt(JSON.stringify(next), await this.#loadOrCreateKey()),
+          { mode: 0o600 }
+        )
+        this.#credentials = Promise.resolve(next)
+      })
     return this.#writeQueue
   }
 
-  async #read(): Promise<StoredModelCredentials> {
-    if (this.#credentials) return this.#credentials
-    try {
-      const encrypted = await readFile(this.#credentialPath)
-      const parsed = JSON.parse(
-        this.#decrypt(encrypted, await this.#loadOrCreateKey())
-      ) as Partial<StoredModelCredentials>
-      this.#credentials = {
-        version: 1,
-        apiKeys: readApiKeys(parsed.apiKeys),
-      }
-    } catch {
-      this.#credentials = { version: 1, apiKeys: {} }
-    }
+  #read(): Promise<StoredModelCredentials> {
+    this.#credentials ??= this.#readFile().catch((error: unknown) => {
+      this.#credentials = null
+      throw error
+    })
     return this.#credentials
+  }
+
+  async #readFile(): Promise<StoredModelCredentials> {
+    let encrypted: Buffer
+    try {
+      encrypted = await readFile(this.#credentialPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, apiKeys: {} }
+      throw error
+    }
+    const parsed: unknown = JSON.parse(
+      this.#decrypt(encrypted, validateKey(await readFile(this.#keyPath)))
+    )
+    if (!isPlainObject(parsed) || parsed.version !== 1)
+      throw new Error(workbenchMainText('account.modelCredentialStoreInvalid'))
+    return { version: 1, apiKeys: readApiKeys(parsed.apiKeys) }
   }
 
   #encrypt(value: string, key: Buffer): Buffer {
@@ -84,20 +96,15 @@ export class WorkbenchModelCredentialStore {
   #decrypt(value: Buffer, key: Buffer): string {
     const prefixLength = CredentialPayloadPrefix.length
     if (
-      key.length !== CredentialKeyBytes
-      || value.length < prefixLength + CredentialIvBytes + CredentialTagBytes
-      || !value.subarray(0, prefixLength).equals(CredentialPayloadPrefix)
+      value.length < prefixLength + CredentialIvBytes + CredentialTagBytes ||
+      !value.subarray(0, prefixLength).equals(CredentialPayloadPrefix)
     ) {
       throw new Error(workbenchMainText('account.modelCredentialStoreInvalid'))
     }
     const ivStart = prefixLength
     const tagStart = ivStart + CredentialIvBytes
     const encryptedStart = tagStart + CredentialTagBytes
-    const decipher = createDecipheriv(
-      'aes-256-gcm',
-      key,
-      value.subarray(ivStart, tagStart)
-    )
+    const decipher = createDecipheriv('aes-256-gcm', key, value.subarray(ivStart, tagStart))
     decipher.setAAD(CredentialPayloadPrefix)
     decipher.setAuthTag(value.subarray(tagStart, encryptedStart))
     return Buffer.concat([
@@ -139,13 +146,19 @@ export class WorkbenchModelCredentialStore {
 }
 
 function readApiKeys(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  if (!isPlainObject(value))
+    throw new Error(workbenchMainText('account.modelCredentialStoreInvalid'))
   return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    Object.entries(value).map(([provider, apiKey]) => {
+      if (typeof apiKey !== 'string')
+        throw new Error(workbenchMainText('account.modelCredentialStoreInvalid'))
+      return [provider, apiKey]
+    })
   )
 }
 
 function validateKey(key: Buffer): Buffer {
-  if (key.length !== CredentialKeyBytes) throw new Error(workbenchMainText('account.modelCredentialKeyInvalid'))
+  if (key.length !== CredentialKeyBytes)
+    throw new Error(workbenchMainText('account.modelCredentialKeyInvalid'))
   return key
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
+import { setTimeout as delay } from 'node:timers/promises'
 
 import { optionalWhen } from '@velaros-ai/velaros/core'
 import type {
@@ -19,8 +20,10 @@ import type {
 import { getWorkbenchManagedModelProviderLabel } from '../../shared/workbenchModel'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
-import type { WorkbenchCloudSession } from './WorkbenchSharedAccountStore'
-import { type WorkbenchSharedAccountStore } from './WorkbenchSharedAccountStore'
+import type {
+  WorkbenchCloudSession,
+  WorkbenchSharedAccountStore,
+} from './WorkbenchSharedAccountStore'
 
 const DefaultCloudBaseUrl = 'https://8.152.209.233/api'
 const DeviceIdHeader = 'X-VelarOS-Device-Id'
@@ -69,7 +72,10 @@ export class WorkbenchAccountService {
   #sessionRevision = 0
   #pendingRefresh: PendingSessionRefresh | null = null
   #rejectedSession: WorkbenchCloudSession | null = null
-  #signInOperation: Promise<WorkbenchAccountState> | null = null
+  #signInOperation: {
+    readonly controller: AbortController
+    readonly promise: Promise<WorkbenchAccountState>
+  } | null = null
   #publicModelPricing: {
     readonly catalog: ModelPricingCatalog
     readonly expiresAt: number
@@ -100,18 +106,24 @@ export class WorkbenchAccountService {
   }
 
   public signIn(): Promise<WorkbenchAccountState> {
-    if (this.#signInOperation) return this.#signInOperation
+    if (this.#signInOperation) return this.#signInOperation.promise
     this.#sessionRevision += 1
     this.#pendingRefresh = null
     this.#rejectedSession = null
-    const operation = this.#performGoogleSignIn().finally(() => {
-      if (this.#signInOperation === operation) this.#signInOperation = null
-    })
+    const controller = new AbortController()
+    const operation = {
+      controller,
+      promise: this.#performGoogleSignIn(controller.signal).finally(() => {
+        if (this.#signInOperation === operation) this.#signInOperation = null
+      }),
+    }
     this.#signInOperation = operation
-    return operation
+    return operation.promise
   }
 
   public async signOut(): Promise<WorkbenchAccountState> {
+    this.#signInOperation?.controller.abort(new Error(workbenchMainText('account.signInRequired')))
+    this.#signInOperation = null
     this.#sessionRevision += 1
     this.#pendingRefresh = null
     this.#rejectedSession = null
@@ -128,10 +140,6 @@ export class WorkbenchAccountService {
       }).catch(() => undefined)
     }
     return { status: 'signed-out' }
-  }
-
-  public getPluginArtifactBaseUrl(): string {
-    return `${this.#baseUrl}/v1/plugins/`
   }
 
   public getManagedModelBaseUrl(providerId: WorkbenchManagedModelProviderId): string {
@@ -243,26 +251,14 @@ export class WorkbenchAccountService {
     }
   }
 
-  public async fetchPluginResource(input: URL): Promise<Response> {
-    const base = new URL(this.getPluginArtifactBaseUrl())
-    if (input.origin !== base.origin || !input.pathname.startsWith(base.pathname)) {
-      throw new Error(workbenchMainText('account.untrustedPluginUrl'))
-    }
-    await this.ensureSignedIn()
-    const session = await this.#requireActiveSession()
-    return this.fetchImpl(input, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        [DeviceIdHeader]: await this.store.getDeviceId(),
-      },
-    })
-  }
-
-  async #performGoogleSignIn(): Promise<WorkbenchAccountState> {
+  async #performGoogleSignIn(signal: AbortSignal): Promise<WorkbenchAccountState> {
     const deviceId = await this.store.getDeviceId()
+    signal.throwIfAborted()
     const started = await this.#request<GoogleDesktopStart>('/v1/auth/google/desktop/start', {
       headers: { [DeviceIdHeader]: deviceId },
+      signal,
     })
+    signal.throwIfAborted()
     const authorizationUrl = new URL(started.authorizationUrl)
     if (
       authorizationUrl.protocol !== 'https:' ||
@@ -271,6 +267,7 @@ export class WorkbenchAccountService {
       throw new Error(workbenchMainText('account.untrustedSignInUrl'))
     }
     await this.openExternal(authorizationUrl.toString())
+    signal.throwIfAborted()
     const deadline = Math.min(
       Date.now() + GoogleSignInTimeoutMs,
       Number.isFinite(Date.parse(started.expiresAt))
@@ -279,9 +276,10 @@ export class WorkbenchAccountService {
     )
     let retryAfterMs = Math.max(500, started.pollAfterMs)
     while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, retryAfterMs))
+      await delay(retryAfterMs, undefined, { signal })
       const result = await this.#request<GoogleDesktopResult>('/v1/auth/google/desktop/session', {
         headers: { [DeviceIdHeader]: deviceId },
+        signal,
         body: {
           attemptId: started.attemptId,
           exchangeToken: started.exchangeToken,
@@ -296,7 +294,8 @@ export class WorkbenchAccountService {
         retryAfterMs = Math.max(500, result.retryAfterMs)
         continue
       }
-      await this.store.save(result.session)
+      await this.store.save(result.session, signal)
+      signal.throwIfAborted()
       return { status: 'signed-in', account: result.session.account }
     }
     throw new Error(workbenchMainText('account.signInTimedOut'))
@@ -304,11 +303,18 @@ export class WorkbenchAccountService {
 
   async #request<T = unknown>(
     path: string,
-    input: { readonly headers?: Record<string, string>; readonly body?: unknown }
+    input: {
+      readonly headers?: Record<string, string>
+      readonly body?: unknown
+      readonly signal?: AbortSignal
+    }
   ): Promise<T> {
     const response = await this.fetchImpl(`${this.#baseUrl}${path}`, {
       method: 'POST',
-      signal: AbortSignal.timeout(CloudRequestTimeoutMs),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(CloudRequestTimeoutMs),
+        ...(input.signal ? [input.signal] : []),
+      ]),
       headers: { 'Content-Type': 'application/json', ...input.headers },
       body: JSON.stringify(input.body ?? {}),
     })

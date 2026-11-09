@@ -150,3 +150,42 @@ test('logout while refresh awaits its network result cannot revive the binding',
     await f.close()
   }
 })
+
+test('logout cancels an outstanding Google sign-in and rejects its late session result', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'workbench-signin-logout-'))
+  const store = new WorkbenchSharedAccountStore({ rootDir })
+  const entered = Promise.withResolvers<void>()
+  const response = Promise.withResolvers<Response>()
+  let requestSignal: AbortSignal | undefined
+  try {
+    const service = new WorkbenchAccountService(
+      store,
+      async () => {},
+      'https://cloud.example.com',
+      (async (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input).endsWith('/start'))
+          return Response.json({
+            authorizationUrl: 'https://accounts.google.com/authorize',
+            attemptId: 'attempt-1',
+            exchangeToken: 'exchange-1',
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            pollAfterMs: 0,
+          })
+        requestSignal = init?.signal ?? undefined
+        entered.resolve()
+        return response.promise
+      }) as typeof fetch
+    )
+    const login = service.signIn()
+    const rejected = assert.rejects(login)
+    await entered.promise
+
+    await service.signOut()
+    assert.equal(requestSignal?.aborted, true)
+    response.resolve(Response.json({ status: 'complete', session: session('a', 'late', true) }))
+    await rejected
+    assert.equal(await store.load(), null)
+  } finally {
+    await rm(rootDir, { recursive: true, force: true })
+  }
+})

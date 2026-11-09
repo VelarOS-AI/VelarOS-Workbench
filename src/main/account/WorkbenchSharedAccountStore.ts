@@ -39,11 +39,6 @@ interface SharedAccountRegistry {
   readonly updatedAt: string
 }
 
-interface LegacyDesktopAccountState {
-  readonly deviceId: string
-  readonly session: WorkbenchCloudSession | null
-}
-
 interface WorkbenchSharedAccountStoreOptions {
   readonly productId?: string
   readonly rootDir?: string
@@ -67,7 +62,7 @@ export class WorkbenchSharedAccountStore {
   }
 
   public async getDeviceId(): Promise<string> {
-    return (await this.#loadOrCreate()).deviceId
+    return this.#mutate((registry) => ({ registry, value: registry.deviceId }))
   }
 
   public async load(): Promise<WorkbenchCloudSession | null> {
@@ -93,20 +88,23 @@ export class WorkbenchSharedAccountStore {
     })
   }
 
-  public async save(session: WorkbenchCloudSession): Promise<void> {
-    await this.#mutate((registry) => ({
-      registry: {
-        ...registry,
-        sessions: { ...registry.sessions, [session.account.id]: session },
-        productBindings: {
-          ...registry.productBindings,
-          [this.#productId]: session.account.id,
+  public async save(session: WorkbenchCloudSession, signal?: AbortSignal): Promise<void> {
+    await this.#mutate((registry) => {
+      signal?.throwIfAborted()
+      return {
+        registry: {
+          ...registry,
+          sessions: { ...registry.sessions, [session.account.id]: session },
+          productBindings: {
+            ...registry.productBindings,
+            [this.#productId]: session.account.id,
+          },
+          lastUsedAccountId: session.account.id,
+          updatedAt: new Date().toISOString(),
         },
-        lastUsedAccountId: session.account.id,
-        updatedAt: new Date().toISOString(),
-      },
-      value: undefined,
-    }))
+        value: undefined,
+      }
+    })
   }
 
   /** 仅替换发起续期的那份凭据；其他产品已续期或用户退出后，不覆盖新状态。 */
@@ -167,27 +165,6 @@ export class WorkbenchSharedAccountStore {
     })
   }
 
-  async #loadOrCreate(): Promise<SharedAccountRegistry> {
-    const existing = await this.#readRegistry()
-    if (existing) return existing
-    return this.#withLock(async () => {
-      const raced = await this.#readRegistry()
-      if (raced) return raced
-      const legacy = this.#readLegacyDesktopState()
-      const session = legacy?.session ?? null
-      const registry: SharedAccountRegistry = {
-        schemaVersion: 1,
-        deviceId: legacy?.deviceId ?? (await deriveDeviceId()),
-        sessions: session ? { [session.account.id]: session } : {},
-        productBindings: {},
-        lastUsedAccountId: session?.account.id ?? null,
-        updatedAt: new Date().toISOString(),
-      }
-      await this.#writeRegistry(registry)
-      return registry
-    })
-  }
-
   async #mutate<T>(
     operation: (registry: SharedAccountRegistry) => {
       readonly registry: SharedAccountRegistry
@@ -195,32 +172,32 @@ export class WorkbenchSharedAccountStore {
     }
   ): Promise<T> {
     return this.#withLock(async () => {
-      const registry = (await this.#readRegistry()) ?? (await this.#createRegistry())
+      const existing = await this.#readRegistry()
+      const registry: SharedAccountRegistry = existing ?? {
+        schemaVersion: 1,
+        deviceId: await deriveDeviceId(),
+        sessions: {},
+        productBindings: {},
+        lastUsedAccountId: null,
+        updatedAt: new Date().toISOString(),
+      }
       const result = operation(registry)
-      if (result.registry !== registry) await this.#writeRegistry(result.registry)
+      if (!existing || result.registry !== registry) await this.#writeRegistry(result.registry)
       return result.value
     })
   }
 
-  async #createRegistry(): Promise<SharedAccountRegistry> {
-    const legacy = this.#readLegacyDesktopState()
-    const session = legacy?.session ?? null
-    return {
-      schemaVersion: 1,
-      deviceId: legacy?.deviceId ?? (await deriveDeviceId()),
-      sessions: session ? { [session.account.id]: session } : {},
-      productBindings: {},
-      lastUsedAccountId: session?.account.id ?? null,
-      updatedAt: new Date().toISOString(),
-    }
-  }
-
   async #readRegistry(): Promise<SharedAccountRegistry | null> {
+    let encrypted: Buffer
     try {
-      const encrypted = await readFile(this.#registryPath)
-      return parseRegistry(JSON.parse(this.#decrypt(encrypted)))
+      encrypted = await readFile(this.#registryPath)
     } catch (error) {
       if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw new Error(workbenchMainText('account.sharedStateUnreadable'), { cause: error })
+    }
+    try {
+      return parseRegistry(JSON.parse(this.#decrypt(encrypted)))
+    } catch (error) {
       throw new Error(workbenchMainText('account.sharedStateUnreadable'), { cause: error })
     }
   }
@@ -230,20 +207,6 @@ export class WorkbenchSharedAccountStore {
     await writeFileAtomically(this.#registryPath, this.#encrypt(JSON.stringify(registry)), {
       mode: 0o600,
     })
-  }
-
-  #readLegacyDesktopState(): LegacyDesktopAccountState | null {
-    try {
-      const sharedBase = dirname(dirname(dirname(this.#rootDir)))
-      const legacyRoot = join(sharedBase, 'storage')
-      const encrypted = readFileSync(join(legacyRoot, 'cloud-account-state.local-v1.bin'))
-      const key = readFileSync(join(legacyRoot, 'credential-storage.key'))
-      const parsed = JSON.parse(decryptCredential(encrypted, key)) as Record<string, unknown>
-      const session = isSession(parsed.session) ? parsed.session : null
-      return typeof parsed.deviceId === 'string' ? { deviceId: parsed.deviceId, session } : null
-    } catch {
-      return null
-    }
   }
 
   #encrypt(value: string): Buffer {
@@ -256,7 +219,7 @@ export class WorkbenchSharedAccountStore {
   }
 
   #decrypt(value: Buffer): string {
-    return decryptCredential(value, this.#loadOrCreateKey())
+    return decryptCredential(value, readFileSync(this.#keyPath))
   }
 
   #loadOrCreateKey(): Buffer {
