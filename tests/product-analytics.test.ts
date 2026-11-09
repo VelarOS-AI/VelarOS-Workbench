@@ -116,6 +116,66 @@ describe('WorkbenchProductAnalyticsReporter', () => {
     expect(attempts).toBe(2)
   })
 
+  test('an old upload cannot subtract usage collected after analytics is re-enabled', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-analytics-reenabled-test-'))
+    temporaryRoots.push(dataRoot)
+    let now = Date.parse('2026-08-27T00:00:00.000Z')
+    const firstUpload = Promise.withResolvers<Response>()
+    const requests: RequestInit[] = []
+    const reporter = await WorkbenchProductAnalyticsReporter.create({
+      dataRoot,
+      appVersion: '1.2.3',
+      isActive: () => true,
+      now: () => now,
+      fetchImpl: (async (_input, init) => {
+        requests.push(init ?? {})
+        return requests.length === 1 ? firstUpload.promise : new Response(null, { status: 202 })
+      }) as typeof fetch,
+    })
+    expect(reporter).toBeDefined()
+    reporter!.setConsentState({
+      noticeResolved: true,
+      reportingAllowed: true,
+      onNoticeRequired: () => undefined,
+    })
+    try {
+      reporter!.recordRunStarted({
+        executionId: 'old-run',
+        sessionId: 'old-chat',
+        projectRoot: null,
+        modelSelection: null,
+      })
+      reporter!.recordAgentEvent({ type: 'tool-start', toolName: 'script' }, null)
+      now += 60_000
+      const uploading = reporter!.flush(true)
+      expect(requests).toHaveLength(1)
+
+      reporter!.setEnabled(false)
+      reporter!.setEnabled(true)
+      reporter!.recordRunStarted({
+        executionId: 'new-run',
+        sessionId: 'new-chat',
+        projectRoot: null,
+        modelSelection: null,
+      })
+      reporter!.recordAgentEvent({ type: 'tool-start', toolName: 'script' }, null)
+      firstUpload.resolve(new Response(null, { status: 202 }))
+      await uploading
+      now += 60_000
+      await reporter!.flush(true)
+
+      expect(requests).toHaveLength(2)
+      expect(JSON.parse(String(requests[1]?.body))).toMatchObject({
+        activeSeconds: 60,
+        conversationCount: 1,
+        toolCallCount: 1,
+      })
+    } finally {
+      firstUpload.resolve(new Response(null, { status: 202 }))
+      await reporter!.dispose()
+    }
+  })
+
   test('requests one explicit choice after thirty active minutes and keeps usage blocked', async () => {
     const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-analytics-consent-test-'))
     temporaryRoots.push(dataRoot)

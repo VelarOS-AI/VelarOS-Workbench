@@ -314,11 +314,13 @@ export class WorkbenchProductAnalyticsReporter {
     if (!force && now - this.#lastUploadAttemptAt < UploadIntervalMs) return Promise.resolve()
     this.#lastUploadAttemptAt = now
     const activeSeconds = this.#pendingActiveSeconds
-    const metrics = cloneMetrics(this.#metrics)
+    const pendingMetrics = this.#metrics
+    const metrics = cloneMetrics(pendingMetrics)
     const operation = this.#upload(now, activeSeconds, metrics)
       .then(() => {
+        if (this.#metrics !== pendingMetrics) return
         this.#pendingActiveSeconds = Math.max(0, this.#pendingActiveSeconds - activeSeconds)
-        subtractMetrics(this.#metrics, metrics)
+        subtractMetrics(pendingMetrics, metrics)
       })
       .catch(() => undefined)
       .finally(() => {
