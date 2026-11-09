@@ -5,7 +5,7 @@
  * 需要 PATH 上有 `node`。
  */
 import { strict as assert } from 'node:assert'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -17,6 +17,7 @@ import type {
 } from '../../../shared/workbenchDebugger'
 import { CommandHelper } from '../CommandHelper'
 import { PathResolver } from '../PathResolver'
+import { ProbeResourceOwner } from '../terminal/ProbeResourceOwner'
 import { TerminalSessions } from '../terminal/TerminalSessions'
 
 import { createTerminalDebugLauncher } from './WorkbenchDebugLaunch'
@@ -45,11 +46,14 @@ function isProcessAlive(pid: number): boolean {
 }
 
 async function waitFor(predicate: () => boolean, message: string, timeoutMs = 15_000): Promise<void> {
+  probe.signal.throwIfAborted()
   const deadline = Date.now() + timeoutMs
   while (!predicate()) {
+    probe.signal.throwIfAborted()
     if (Date.now() > deadline) throw new Error(message)
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
+  probe.signal.throwIfAborted()
   assertionCount += 1
 }
 
@@ -69,10 +73,18 @@ function readNumber(output: string, marker: string): number {
   return Number(new RegExp(`${marker} (\\d+)`, 'u').exec(output)?.[1])
 }
 
+const probe = new ProbeResourceOwner()
+await probe.connect()
 const projectRoot = mkdtempSync(join(tmpdir(), 'velaros-workbench-debug-probe-'))
 const pathResolver = new PathResolver()
-const terminal = new TerminalSessions(pathResolver, new CommandHelper())
+const terminal = new TerminalSessions(pathResolver, new CommandHelper(), probe.ptyFactory)
 const debug = new WorkbenchDebugSessions(pathResolver, createTerminalDebugLauncher(terminal))
+probe.setCleanup(async () => {
+  const errors: unknown[] = []
+  try { await debug.closeAllSessions() } catch (error) { errors.push(error) }
+  try { await terminal.closeAllSessions() } catch (error) { errors.push(error) }
+  if (errors.length) throw new AggregateError(errors, 'Debug probe service cleanup failed')
+})
 
 async function start(
   request: Omit<WorkbenchDebuggerStartRequest, 'projectRoot' | 'pauseOnUncaughtExceptions'>,
@@ -92,6 +104,7 @@ async function start(
     },
     ownerId
   )
+  await probe.admitted()
   return {
     sessionId: started.sessionId,
     terminalSessionId: started.terminalSessionId,
@@ -104,6 +117,7 @@ async function start(
 }
 
 try {
+  await probe.registerTemporaryRoot(projectRoot)
   writeFileSync(
     join(projectRoot, 'long.js'),
     [
@@ -217,9 +231,7 @@ try {
   await terminal.closeAllSessions()
   await waitFor(() => theirs.ended() !== undefined && !isProcessAlive(theirPid), '应用退出时调试的程序必须结束')
 } finally {
-  await debug.closeAllSessions()
-  await terminal.closeAllSessions()
-  rmSync(projectRoot, { recursive: true, force: true })
+  await probe.close()
 }
 
 console.info(`debug probe passed (${assertionCount} assertions)`)

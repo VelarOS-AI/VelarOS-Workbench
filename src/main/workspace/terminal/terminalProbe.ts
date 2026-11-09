@@ -3,13 +3,14 @@
  * 经 `scripts/probe/runTerminalProbe.mjs` 在 Electron 运行时里跑（node-pty 在 bun 下收不到数据）。
  */
 import { strict as assert } from 'node:assert'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { CommandHelper } from '../CommandHelper'
 import { PathResolver } from '../PathResolver'
 
+import { ProbeResourceOwner } from './ProbeResourceOwner'
 import { buildTerminalEnvironment, clampTerminalDimension, TerminalSessions } from './TerminalSessions'
 
 let assertionCount = 0
@@ -35,11 +36,14 @@ function isProcessAlive(pid: number): boolean {
 }
 
 async function waitFor(predicate: () => boolean, message: string, timeoutMs = 8_000): Promise<void> {
+  probe.signal.throwIfAborted()
   const deadline = Date.now() + timeoutMs
   while (!predicate()) {
+    probe.signal.throwIfAborted()
     if (Date.now() > deadline) throw new Error(message)
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
+  probe.signal.throwIfAborted()
   assertionCount += 1
 }
 
@@ -51,13 +55,23 @@ equal(clampTerminalDimension(undefined, 80, 1000), 80, '没给尺寸用默认值
 equal(clampTerminalDimension(0, 80, 1000), 1, '尺寸至少 1')
 equal(clampTerminalDimension(5000, 24, 500), 500, '尺寸不超过上限')
 
+const probe = new ProbeResourceOwner()
+await probe.connect()
 const projectRoot = mkdtempSync(join(tmpdir(), 'velaros-workbench-terminal-probe-'))
 const pathResolver = new PathResolver()
-const terminal = new TerminalSessions(pathResolver, new CommandHelper())
+const terminal = new TerminalSessions(pathResolver, new CommandHelper(), probe.ptyFactory)
+const startTerminal: TerminalSessions['startTerminalSession'] = async (...args) => {
+  probe.signal.throwIfAborted()
+  const started = await terminal.startTerminalSession(...args)
+  await probe.admitted()
+  return started
+}
+probe.setCleanup(() => terminal.closeAllSessions())
 
 try {
+  await probe.registerTemporaryRoot(projectRoot)
   await assert.rejects(
-    terminal.startTerminalSession({ projectRoot, cwd: '..' }, () => undefined),
+    startTerminal({ projectRoot, cwd: '..' }, () => undefined),
     /超出工程范围/,
     '终端 cwd 越界必须拒绝'
   )
@@ -66,7 +80,7 @@ try {
   // 一次性命令（运行卡）：命令退出即收口。
   let commandOutput = ''
   let commandClosed = false
-  const command = await terminal.startTerminalSession(
+  const command = await startTerminal(
     { projectRoot, initialCommand: process.platform === 'win32' ? 'echo VELAROS_TERMINAL_PROBE_OK' : "printf 'VELAROS_TERMINAL_PROBE_OK\\n'" },
     (event) => {
       commandOutput += event.chunk
@@ -88,7 +102,7 @@ try {
     mkdirSync(join(projectRoot, 'packages', 'api'), { recursive: true })
     let configuredOutput = ''
     let configuredClosed = false
-    await terminal.startTerminalSession(
+    await startTerminal(
       {
         projectRoot,
         cwd: 'packages/api',
@@ -112,7 +126,7 @@ try {
   // 交互 shell：真终端有回显；中文原样进出；尺寸可调；Ctrl+C 只打断不退出。
   let shellOutput = ''
   let shellClosed = false
-  const shell = await terminal.startTerminalSession(
+  const shell = await startTerminal(
     { projectRoot, cols: 120, rows: 40 },
     (event) => {
       shellOutput += event.chunk
@@ -145,7 +159,7 @@ try {
   if (process.platform !== 'win32') {
     const marker = `VELAROS_TERMINAL_PROBE_BG_${process.pid}`
     let backgroundOutput = ''
-    const background = await terminal.startTerminalSession(
+    const background = await startTerminal(
       { projectRoot, initialCommand: `nohup sleep 300 >/dev/null 2>&1 & echo ${marker} $!; wait` },
       (event) => {
         backgroundOutput += event.chunk
@@ -159,7 +173,7 @@ try {
     await waitFor(() => !isProcessAlive(sleepPid), '停止运行卡必须连它放到后台的任务一起结束')
   }
 
-  const other = await terminal.startTerminalSession({ projectRoot }, () => undefined, 202)
+  const other = await startTerminal({ projectRoot }, () => undefined, 202)
   assert.throws(
     () => terminal.writeTerminalInput({ sessionId: shell.sessionId, input: 'echo denied\r' }, 202),
     /不属于当前项目窗口/,
@@ -178,8 +192,7 @@ try {
   terminal.writeTerminalInput({ sessionId: other.sessionId, input: 'exit\r' }, 202)
   await terminal.closeAllSessions()
 } finally {
-  await terminal.closeAllSessions()
-  rmSync(projectRoot, { recursive: true, force: true })
+  await probe.close()
 }
 
 console.info(`terminal probe passed (${assertionCount} assertions)`)

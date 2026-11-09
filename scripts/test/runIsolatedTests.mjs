@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+
+import { OwnedChildProcess, unclosedTerminationCommands } from '../processLifecycle.mjs'
 
 const maximumConcurrency = 4
 // Windows 同时启动多组 Git/PTY 集成测试会争抢磁盘；逐文件执行保留每项原有超时预算。
@@ -55,16 +57,12 @@ async function main() {
   const testFiles = await discoverTestFiles(testsRoot)
   if (testFiles.length === 0) throw new Error(`No test files found under ${testsRoot}.`)
 
-  const activeChildren = new Set()
+  const activeChildren = new Map()
   let interruptedSignal
-  let forceKillTimer
 
   const stopChildren = (signal) => {
     interruptedSignal ??= signal
-    for (const child of activeChildren) terminateProcessTree(child, signal)
-    forceKillTimer ??= setTimeout(() => {
-      for (const child of activeChildren) terminateProcessTree(child, 'SIGKILL')
-    }, 1_500)
+    for (const owner of activeChildren.values()) void owner.stop(signal).catch(console.error)
   }
   const onSigint = () => stopChildren('SIGINT')
   const onSigterm = () => stopChildren('SIGTERM')
@@ -84,8 +82,9 @@ async function main() {
   } finally {
     process.off('SIGINT', onSigint)
     process.off('SIGTERM', onSigterm)
-    if (forceKillTimer) clearTimeout(forceKillTimer)
-    for (const child of activeChildren) terminateProcessTree(child, 'SIGKILL')
+    const cleanup = await Promise.allSettled([...activeChildren.values()].map((owner) => owner.stop('SIGKILL')))
+    for (const result of cleanup) if (result.status === 'rejected') console.error(result.reason)
+    if (activeChildren.size || unclosedTerminationCommands.size) process.exitCode = 1
   }
 
   let failureCount = 0
@@ -102,15 +101,16 @@ async function main() {
   console.info(`\n${summary}`)
 
   if (interruptedSignal) process.exitCode = interruptedSignal === 'SIGINT' ? 130 : 143
-  else if (failureCount > 0) process.exitCode = 1
+  else if (failureCount > 0 || activeChildren.size || unclosedTerminationCommands.size) process.exitCode = 1
 }
 
-function runTestFile({ activeChildren, file, repositoryRoot }) {
+export function runTestFile({ activeChildren, file, repositoryRoot, spawnChild = spawn, timeoutMs = testFileTimeoutMilliseconds }) {
   return new Promise((resolve) => {
     const startedAt = performance.now()
+    const deadlineAt = Date.now() + timeoutMs
     const relativeFile = path.relative(repositoryRoot, file)
     const preload = path.join(repositoryRoot, 'scripts/test/setRepositoryCwd.mjs')
-    const child = spawn('bun', ['test', '--preload', preload, file], {
+    const child = spawnChild('bun', ['test', '--preload', preload, file], {
       // Bun 1.3.13 loses piped child stdout when its initial cwd is this repository root.
       // Initialize one level above it, then let the preload restore the cwd expected by tests.
       cwd: path.dirname(repositoryRoot),
@@ -124,69 +124,27 @@ function runTestFile({ activeChildren, file, repositoryRoot }) {
     })
     const stdout = []
     const stderr = []
-    let spawnError
-    let timedOut = false
-    const timeout = setTimeout(() => {
-      timedOut = true
-      terminateProcessTree(child, 'SIGKILL')
-      child.stdout.destroy()
-      child.stderr.destroy()
-    }, testFileTimeoutMilliseconds)
-
-    activeChildren.add(child)
+    const owner = new OwnedChildProcess(child, { deadlineAt, label: `test ${relativeFile}` })
+    activeChildren.set(child, owner)
     child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)))
     child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)))
-    child.once('error', (error) => {
-      spawnError = error
-    })
-    child.once('close', (code, signal) => {
-      clearTimeout(timeout)
-      activeChildren.delete(child)
-      terminateProcessTree(child, 'SIGTERM')
+    void owner.done.then(({ record, timedOut, stopped, error }) => {
+      if (record) activeChildren.delete(child)
       const capturedStdout = Buffer.concat(stdout).toString('utf8')
       const capturedStderr = Buffer.concat(stderr).toString('utf8')
       resolve({
-        code,
+        code: record?.code ?? null,
         durationMilliseconds: performance.now() - startedAt,
         file,
-        ok: !spawnError && !timedOut && code === 0,
-        signal,
-        spawnError,
-        stderr: timedOut
-          ? `${capturedStderr}\nTest file exceeded ${testFileTimeoutMilliseconds}ms: ${relativeFile}\n`
-          : capturedStderr,
+        ok: !!record && !timedOut && !stopped && !error && record.code === 0,
+        signal: record?.signal ?? null,
+        spawnError: error,
+        stderr: timedOut ? `${capturedStderr}\nTest file exceeded its ${timeoutMs}ms budget: ${relativeFile}\n` : capturedStderr,
         stdout: capturedStdout,
         testCount: readTestCount(`${capturedStdout}\n${capturedStderr}`),
       })
     })
   })
-}
-
-function terminateProcessTree(child, signal) {
-  const pid = child.pid
-  if (!pid) return
-
-  if (process.platform === 'win32') {
-    spawnSync('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' })
-    return
-  }
-
-  try {
-    process.kill(-pid, signal)
-    return
-  } catch (error) {
-    if (error?.code !== 'ESRCH') {
-      console.error(`Unable to signal process group ${pid}: ${error.message ?? String(error)}`)
-    }
-  }
-
-  try {
-    child.kill(signal)
-  } catch (error) {
-    if (error?.code !== 'ESRCH') {
-      console.error(`Unable to signal process ${pid}: ${error.message ?? String(error)}`)
-    }
-  }
 }
 
 function interruptedResult(file, signal) {

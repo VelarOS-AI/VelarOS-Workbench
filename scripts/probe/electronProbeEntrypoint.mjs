@@ -8,6 +8,19 @@ try {
   process.exitCode = 1
 }
 
+if (process.send && process.connected) {
+  try {
+    await new Promise((resolve, reject) => {
+      process.send({ type: 'probe-finished', exitCode: process.exitCode ?? 0 }, (error) =>
+        error ? reject(error) : resolve()
+      )
+    })
+  } catch (error) {
+    console.error('Probe completion delivery failed', error)
+    process.exitCode = 1
+  }
+}
+
 await new Promise((resolve) => process.stdout.write('', resolve))
 await new Promise((resolve) => process.stderr.write('', resolve))
 process.exit(process.exitCode ?? 0)
