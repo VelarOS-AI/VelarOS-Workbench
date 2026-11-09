@@ -273,6 +273,55 @@ void describe('Workbench file watcher recovery', () => {
     })
   })
 
+  void test('raw observers learn when watching is unavailable on arrival and resume after recovery', async () => {
+    await withRoot(async (root) => {
+      const fake = createFakeWatch()
+      fake.failWith = new Error('ENOSPC: System limit for number of file watchers reached')
+      const watcher = new WorkbenchFileWatcher({
+        watch: fake.watch,
+        restartBaseDelayMs: 10,
+      })
+      const firstPaths: string[] = []
+      const secondPaths: string[] = []
+      let firstErrors = 0
+      let secondErrors = 0
+      try {
+        const first = await watcher.observeRawPaths(root, {
+          onPath: (path) => firstPaths.push(path),
+          onError: () => {
+            firstErrors += 1
+          },
+        })
+        assert.equal(firstErrors, 1)
+
+        const second = await watcher.observeRawPaths(root, {
+          onPath: (path) => secondPaths.push(path),
+          onError: () => {
+            secondErrors += 1
+          },
+        })
+        assert.equal(secondErrors, 1)
+        assert.equal(firstErrors, 1)
+        assert.equal(fake.watchers.length, 0)
+
+        fake.failWith = null
+        await waitFor(() => fake.watchers.length === 1, 'raw observation recovery')
+        fake.changes[0]!('src/a.ts')
+        assert.deepEqual(firstPaths, ['src/a.ts'])
+        assert.deepEqual(secondPaths, ['src/a.ts'])
+        assert.equal(firstErrors, 1)
+        assert.equal(secondErrors, 1)
+
+        first.stop()
+        assert.equal(fake.watchers[0]!.closed, false)
+        second.stop()
+        assert.equal(fake.watchers[0]!.closed, true)
+      } finally {
+        watcher.dispose()
+      }
+    })
+  })
+
   void test('restarts back off and stop once nobody listens', async () => {
     await withRoot(async (root) => {
       const fake = createFakeWatch()

@@ -78,7 +78,7 @@ export interface WorkbenchRawPathObserver {
    * 要看路径自己的时间戳。
    */
   onPath(path: string): void
-  /** 监听出错或报了一个没有路径的事件：从这里起可能漏掉了事件。 */
+  /** 注册时监听不可用、运行中出错或报了一个没有路径的事件：可能漏掉了事件。 */
   onError(): void
 }
 
@@ -193,7 +193,9 @@ export class WorkbenchFileWatcher implements WorkbenchRawPathSource {
     observer: WorkbenchRawPathObserver
   ): Promise<{ workspaceRoot: string; stop: () => void }> {
     const rootPath = await this.resolveRoot(workspaceRoot)
-    this.ensureRootWatch(rootPath).rawObservers.add(observer)
+    const rootWatch = this.ensureRootWatch(rootPath)
+    rootWatch.rawObservers.add(observer)
+    if (rootWatch.watcher === null) observer.onError()
     let stopped = false
     return {
       workspaceRoot: rootPath,
