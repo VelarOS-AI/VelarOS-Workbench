@@ -1,4 +1,11 @@
-import { type ReactElement, useCallback, useEffect, useState } from 'react'
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { BrainIcon, EyeIcon, EyeSlashIcon, TrashIcon } from '@phosphor-icons/react'
 import {
   useWorkbenchI18n,
@@ -22,6 +29,16 @@ const MemoryTypeLabels: Record<MemoryType, WorkbenchMessageKey> = {
   reference: 'workbench.settingsMemoryTypeReference',
 }
 
+interface WorkbenchMemoryViewOwner {
+  projectRoot: Nullable<string>
+  removal: Nullable<{ entryId: string }>
+}
+
+interface WorkbenchMemorySettingsError {
+  kind: 'load' | 'remove'
+  message: string
+}
+
 /**
  * 这个项目已存的长期记忆（与 Desktop 的记忆设置同一套）：能看正文、能删，删之前再点一次确认。
  * 记忆由模型在对话里存和删；这里不提供新建与编辑，要改内容直接改记忆目录里的 Markdown 文件。
@@ -35,12 +52,28 @@ export function WorkbenchMemorySettings({
   const [entries, setEntries] = useState<Nullable<WorkbenchMemoryEntry[]>>(null)
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(0)
-  const [error, setError] = useState<Nullable<string>>(null)
+  const [error, setError] = useState<Nullable<WorkbenchMemorySettingsError>>(null)
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set())
   const [confirmingId, setConfirmingId] = useState<Nullable<string>>(null)
   const [removingId, setRemovingId] = useState<Nullable<string>>(null)
+  const viewOwnerRef = useRef<Nullable<WorkbenchMemoryViewOwner>>(null)
+
+  useLayoutEffect(() => {
+    const owner: WorkbenchMemoryViewOwner = { projectRoot, removal: null }
+    viewOwnerRef.current = owner
+    setEntries(null)
+    setLoading(Boolean(projectRoot))
+    setError(null)
+    setRemovingId(null)
+    setConfirmingId(null)
+    return () => {
+      if (viewOwnerRef.current === owner) viewOwnerRef.current = null
+    }
+  }, [projectRoot])
 
   const refresh = useCallback(async (): Promise<void> => {
+    const owner = viewOwnerRef.current
+    if (!owner || owner.projectRoot !== projectRoot) return
     if (!projectRoot) {
       setEntries(null)
       return
@@ -49,14 +82,15 @@ export function WorkbenchMemorySettings({
     const result = await window.velarosWorkbenchMemory
       .listEntries({ projectRoot })
       .catch((cause: unknown) => ({ ok: false as const, message: String(cause) }))
+    if (viewOwnerRef.current !== owner) return
     setLoading(false)
     if (result.ok) {
       setEntries(result.value)
       setError(null)
     } else {
-      setError(t('workbench.settingsMemoryLoadFailed', { error: result.message }))
+      setError({ kind: 'load', message: result.message })
     }
-  }, [projectRoot, t])
+  }, [projectRoot])
 
   useEffect(() => {
     setEntries(null)
@@ -67,15 +101,20 @@ export function WorkbenchMemorySettings({
   }, [refresh])
 
   const remove = async (entry: WorkbenchMemoryEntry): Promise<void> => {
-    if (!projectRoot) return
+    const owner = viewOwnerRef.current
+    if (!projectRoot || !owner || owner.projectRoot !== projectRoot || owner.removal) return
+    const removal = { entryId: entry.id }
+    owner.removal = removal
     setRemovingId(entry.id)
     const result = await window.velarosWorkbenchMemory
       .removeEntry({ projectRoot, id: entry.id })
       .catch((cause: unknown) => ({ ok: false as const, message: String(cause) }))
+    if (viewOwnerRef.current !== owner || owner.removal !== removal) return
+    owner.removal = null
     setRemovingId(null)
-    setConfirmingId(null)
+    setConfirmingId((current) => current === removal.entryId ? null : current)
     if (!result.ok) {
-      setError(t('workbench.settingsMemoryRemoveFailed', { error: result.message }))
+      setError({ kind: 'remove', message: result.message })
       return
     }
     setEntries((current) => current?.filter((candidate) => candidate.id !== entry.id) ?? null)
@@ -109,7 +148,12 @@ export function WorkbenchMemorySettings({
     <div className={styles.workbenchSettingsSectionPanel} data-workbench-memory-settings="true">
       {error && (
         <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-          {error}
+          {t(
+            error.kind === 'load'
+              ? 'workbench.settingsMemoryLoadFailed'
+              : 'workbench.settingsMemoryRemoveFailed',
+            { error: error.message }
+          )}
         </Text>
       )}
       {pages > 1 && (
@@ -166,7 +210,7 @@ export function WorkbenchMemorySettings({
                       <Button
                         size="sm"
                         variant="destructive"
-                        disabled={removingId === entry.id}
+                        disabled={removingId !== null}
                         onClick={() => void remove(entry)}
                       >
                         {t('workbench.settingsMemoryRemoveConfirm')}
@@ -193,7 +237,12 @@ export function WorkbenchMemorySettings({
                         size="icon-sm"
                         variant="ghost"
                         label={t('workbench.settingsMemoryRemove')}
-                        onClick={() => setConfirmingId(entry.id)}
+                        disabled={removingId !== null}
+                        onClick={() => {
+                          const owner = viewOwnerRef.current
+                          if (owner && owner.projectRoot === projectRoot && !owner.removal)
+                            setConfirmingId(entry.id)
+                        }}
                       >
                         <TrashIcon size={15} />
                       </IconButton>
