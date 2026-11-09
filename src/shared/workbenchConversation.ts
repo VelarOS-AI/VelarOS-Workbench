@@ -380,7 +380,8 @@ export interface WorkbenchConversationRecoveryPage {
   hasMore: boolean
 }
 export interface WorkbenchConversationEventEnvelope {
-  streamId?: string
+  inputId: string
+  streamId: string
   sequence?: number
   emittedAt?: number
   sessionId: string

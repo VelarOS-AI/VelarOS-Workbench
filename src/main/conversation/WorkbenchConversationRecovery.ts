@@ -107,6 +107,7 @@ export class WorkbenchConversationRecovery {
     if (!lane || lane.run.id !== run.id) throw new AppError('UNAVAILABLE', '会话恢复记录已关闭')
     if (lane.failure) throw lane.failure
     const envelope = {
+      inputId: run.inputId,
       projectRoot: run.projectRoot,
       sessionId: run.sessionId,
       event,
@@ -160,11 +161,28 @@ export class WorkbenchConversationRecovery {
     const { run } = JSON.parse(lines.shift()!) as {
       run: WorkbenchConversationRecoveryRun
     }
+    if (
+      run.projectRoot !== ref.projectRoot ||
+      run.sessionId !== ref.sessionId ||
+      !run.inputId ||
+      !run.id
+    )
+      throw new AppError('CONFLICT', '会话运行身份与恢复请求不符。')
     const all = lines
       .filter(Boolean)
       .map(
         (line) => (JSON.parse(line) as { envelope: WorkbenchConversationEventEnvelope }).envelope
       )
+      .map((envelope) => {
+        if (
+          (envelope.inputId !== undefined && envelope.inputId !== run.inputId) ||
+          (envelope.streamId !== undefined && envelope.streamId !== run.id) ||
+          envelope.projectRoot !== run.projectRoot ||
+          envelope.sessionId !== run.sessionId
+        )
+          throw new AppError('CONFLICT', '会话事件身份与运行记录不符。')
+        return { ...envelope, inputId: run.inputId, streamId: run.id }
+      })
     const last = all.at(-1)?.event
     const terminal =
       last?.type === 'state' && ['done', 'error', 'aborted'].includes(last.payload.kind)

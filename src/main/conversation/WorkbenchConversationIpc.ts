@@ -321,6 +321,8 @@ export async function prepareWindowConversation(options: {
           journalFailure = error
           deliver({
             ...ref,
+            inputId: run.inputId,
+            streamId: run.id,
             event: {
               type: 'state',
               payload: {
@@ -355,10 +357,10 @@ export async function prepareWindowConversation(options: {
 }
 
 /** 一轮运行的展示流直接推给发起它的窗口；窗口已经没了就丢掉（运行会因窗口销毁被停下）。 */
-export function createWindowSink(
+function createWindowSink(
   sender: WebContents,
   ref: WorkbenchConversationRef,
-  persist?: (
+  persist: (
     event: WorkbenchConversationStreamEvent,
     deliver: (envelope: WorkbenchConversationEventEnvelope) => void
   ) => void
@@ -372,8 +374,7 @@ export function createWindowSink(
     }
   }
   const send = (event: WorkbenchConversationStreamEvent): void => {
-    if (persist) persist(event, deliver)
-    else deliver({ ...ref, event })
+    persist(event, deliver)
   }
   return {
     notice: (kind, payload) => send({ type: 'notice', kind, payload }),

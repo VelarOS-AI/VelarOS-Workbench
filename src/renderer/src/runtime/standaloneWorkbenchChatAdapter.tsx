@@ -2,6 +2,7 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -123,6 +124,7 @@ import {
 import {
   forgetStandaloneChatSession,
   registerStandaloneChatSession,
+  resolveStandaloneChatSessionProjectRoot,
 } from './standaloneChatSessionRegistry'
 import { sendWorkbenchComposerDraft } from './standaloneComposerSubmission'
 import { useStandaloneModelPricing } from './standaloneModelPricing'
@@ -159,6 +161,11 @@ import {
   isStoredStandaloneCheckpoint,
   type StandaloneChatCheckpoint,
 } from './standaloneWorkbenchCheckpoints'
+import {
+  type StandaloneConversationStreamRun,
+  type StandaloneConversationSubmission,
+  StandaloneWorkbenchConversationRecovery,
+} from './standaloneWorkbenchConversationRecovery'
 import {
   getStandaloneWorkbenchManagedProvider,
   isStandaloneWorkbenchManagedProviderId,
@@ -223,9 +230,7 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
 }
 
 /** 正在跑的一轮：从发出这一条消息，到主进程推来这一轮的终态。 */
-interface ActiveConversationRun {
-  readonly projectRoot: string
-  readonly sessionId: string
+interface ActiveConversationRun extends StandaloneConversationStreamRun {
   /** 这一轮的界面身份（用户消息与运行消息同一组）。 */
   readonly scope: { readonly runId: string; readonly turnId: string }
   readonly goalMode: boolean
@@ -246,7 +251,6 @@ interface HotConversationStore {
   stateUpdateTargets: Map<string, string>
   listeners: Set<() => void>
   activeRuns: Map<string, ActiveConversationRun>
-  pendingSubmissions: Set<string>
   peerPreparations: Map<string, AbortController>
   idSequence: number
 }
@@ -256,7 +260,6 @@ const inactiveStates = hotStore?.inactiveStates ?? new Map<string, StandaloneCha
 const stateUpdateTargets = hotStore?.stateUpdateTargets ?? new Map<string, string>()
 const listeners = hotStore?.listeners ?? new Set<() => void>()
 const activeRuns = hotStore?.activeRuns ?? new Map<string, ActiveConversationRun>()
-const pendingSubmissions = hotStore?.pendingSubmissions ?? new Set<string>()
 /** 停止要等主进程把这一轮收完（关运行时、释放脚本进程）；超过这么久还没回音就按停止失败收尾。 */
 const WorkbenchAgentStopSettlementTimeoutMs = 15_000
 /** 随消息发出的图片：单张上限与张数上限（再大的图描述成附件路径，由 Agent 自己看）。 */
@@ -336,17 +339,25 @@ function createState(
     engine: null,
     revision: 0,
   }
-  registerStandaloneChatSession(empty.sessionId, projectRoot)
-  if (!restoreStored || !projectRoot || typeof window === 'undefined') return empty
+  const registerEmpty = (): StandaloneChatState => {
+    registerStandaloneChatSession(empty.sessionId, projectRoot)
+    return empty
+  }
+  if (!restoreStored || !projectRoot || typeof window === 'undefined') return registerEmpty()
   try {
     const raw = window.localStorage.getItem(chatStorageKey(projectRoot))
-    if (!raw) return empty
+    if (!raw) return registerEmpty()
     const stored = JSON.parse(raw) as Record<string, unknown>
-    if (stored.version !== 2 || !Array.isArray(stored.sessions)) return empty
+    if (stored.version !== 2 || !Array.isArray(stored.sessions)) return registerEmpty()
     const restored = stored.sessions
       .map((candidate) => restoreStoredState(candidate, empty))
       .filter((candidate): candidate is StandaloneChatState => candidate !== null)
-    if (restored.length === 0) return empty
+    if (restored.length === 0) return registerEmpty()
+    for (const session of restored) {
+      const registeredRoot = resolveStandaloneChatSessionProjectRoot(session.sessionId)
+      if (registeredRoot && registeredRoot !== projectRoot)
+        throw new AppError('CONFLICT', '会话已绑定到其它项目。')
+    }
     for (const session of restored) registerStandaloneChatSession(session.sessionId, projectRoot)
     const activeSessionId =
       typeof stored.activeSessionId === 'string' ? stored.activeSessionId : restored[0]!.sessionId
@@ -357,8 +368,9 @@ function createState(
       restored.filter((candidate) => candidate.sessionId !== active.sessionId)
     )
     return active
-  } catch {
-    return empty
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    return registerEmpty()
   }
 }
 
@@ -524,11 +536,12 @@ function useStandaloneChatState(projectRoot: string): StandaloneChatState {
  * 不是 git 仓库或捕获失败时 commitId 为 null——照样记下边界，这一轮只是没有「本轮改动」。
  */
 async function captureRunCheckpoint(
-  projectRoot: string,
-  sessionId: string,
+  run: ActiveConversationRun,
+  submission: StandaloneConversationSubmission,
   captureMessageCount: number,
   label: string
 ): Promise<StandaloneChatCheckpoint> {
+  const { projectRoot, sessionId } = run
   const checkpointId = nextId('workbench-checkpoint')
   const captured = await window.velarosWorkbenchGit
     .captureChatCheckpoint({
@@ -543,6 +556,15 @@ async function captureRunCheckpoint(
     captureMessageCount,
     createdAt: Date.now(),
     commitId: captured?.ok ? captured.value.commitId : null,
+  }
+  try {
+    conversationRecovery.assertSubmission(submission)
+    if (findActiveRun(projectRoot, sessionId) !== run)
+      throw new AppError('CANCELLED', '运行准备已撤销。')
+  } catch (error) {
+    releaseCheckpointRefs(projectRoot, sessionId, [checkpoint])
+    releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
+    throw error
   }
   let evicted: StandaloneChatCheckpoint[] = []
   updateSession(projectRoot, sessionId, (state) => {
@@ -662,11 +684,14 @@ function captureRunChanges(
 
 async function prepareWorkbenchPeerTask(
   task: WorkbenchPeerTask,
-  signal: AbortSignal
+  signal: AbortSignal,
+  acknowledge: () => Promise<void>
 ): Promise<void> {
   const projectRoot = task.projectRoot
+  const ownerSignal = AbortSignal.any([conversationRecovery.projectSignal(projectRoot), signal])
+  ownerSignal.throwIfAborted()
   const targetKey = runKey(projectRoot, task.sessionId)
-  if (pendingSubmissions.has(targetKey) || activeRuns.has(targetKey))
+  if (conversationRecovery.hasSubmission(projectRoot, task.sessionId) || activeRuns.has(targetKey))
     throw new AppError('CONFLICT', '目标会话正在提交或运行。')
   let target = readSession(projectRoot, task.sessionId)
   if (!target && task.newSession) {
@@ -676,66 +701,77 @@ async function prepareWorkbenchPeerTask(
       target,
     ])
   }
-  if (!target || target.engine || isActiveChatRun(target.status))
-    throw new AppError('CONFLICT', '目标会话暂时无法接收任务。')
-  signal.throwIfAborted()
-  pendingSubmissions.add(targetKey)
-  const scope = { runId: task.inputId, turnId: nextId('turn') }
-  const message: ChatMessage = {
-    ...createTextMessage('user', task.text),
-    id: task.inputId,
-    ...scope,
-    conversationKind: 'turn-input',
+  const submission = conversationRecovery.claimSubmission(projectRoot, task.sessionId, ownerSignal)
+  let run: Nullable<ActiveConversationRun> = null
+  let acknowledging = false
+  const revokePreparation = (): void => {
+    if (run && !acknowledging) finishRun(run, { kind: 'aborted', message: '运行准备已撤销。' })
   }
-  const run = createActiveRun({
-    projectRoot,
-    sessionId: task.sessionId,
-    scope,
-    goalMode: false,
-    runChangeCapture: null,
-  })
-  activeRuns.set(targetKey, run)
-  ensureConversationEventSubscription()
-  updateSession(projectRoot, task.sessionId, (state) => ({
-    ...state,
-    messages: [...state.messages, message],
-    status: 'running',
-    teamPhase: 'creating-task',
-    activeTurn: null,
-    completedTurns: 0,
-    lastError: null,
-    connectionRetryAttempt: null,
-    connectionRetryMaxAttempts: null,
-    connectionRetryMessage: null,
-    awaitingInputQuestion: null,
-    awaitingConfirmationMessage: null,
-    awaitingConfirmationId: null,
-    awaitingConfirmationExecutionId: null,
-    lastRunStartedAt: Date.now(),
-    lastRunFinishedAt: null,
-    workerThreads: [],
-    revision: state.revision + 1,
-  }))
+  submission.signal.addEventListener('abort', revokePreparation, { once: true })
   try {
-    const checkpoint = await captureRunCheckpoint(
+    await conversationRecovery.ensureProject(projectRoot)
+    conversationRecovery.assertSubmission(submission)
+    target = readSession(projectRoot, task.sessionId)
+    if (!target || target.engine || isActiveChatRun(target.status) || activeRuns.has(targetKey))
+      throw new AppError('CONFLICT', '目标会话暂时无法接收任务。')
+    const scope = { runId: task.inputId, turnId: nextId('turn') }
+    const message: ChatMessage = {
+      ...createTextMessage('user', task.text),
+      id: task.inputId,
+      ...scope,
+      conversationKind: 'turn-input',
+    }
+    run = createActiveRun({
       projectRoot,
-      task.sessionId,
-      target.messages.length,
-      task.text
-    )
-    run.runChangeCapture = createRunChangeCapture(projectRoot, task.sessionId, checkpoint)
-    signal.throwIfAborted()
-    await syncWorkbenchPeerCatalog(projectRoot)
-    signal.throwIfAborted()
-  } catch (error) {
-    finishRun(run, {
-      kind: signal.aborted ? 'aborted' : 'error',
-      message: AppError.getMessage(error),
+      sessionId: task.sessionId,
+      inputId: task.inputId,
+      sessionOwner: submission.session,
+      streamId: null,
+      lastSequence: 0,
+      scope,
+      goalMode: false,
+      runChangeCapture: null,
     })
-    run.runChangeCapture?.finish()
+    activeRuns.set(targetKey, run)
+    ensureConversationEventSubscription()
+    updateSession(projectRoot, task.sessionId, (state) => ({
+      ...state,
+      messages: [...state.messages, message],
+      status: 'running',
+      teamPhase: 'creating-task',
+      activeTurn: null,
+      completedTurns: 0,
+      lastError: null,
+      connectionRetryAttempt: null,
+      connectionRetryMaxAttempts: null,
+      connectionRetryMessage: null,
+      awaitingInputQuestion: null,
+      awaitingConfirmationMessage: null,
+      awaitingConfirmationId: null,
+      awaitingConfirmationExecutionId: null,
+      lastRunStartedAt: Date.now(),
+      lastRunFinishedAt: null,
+      workerThreads: [],
+      revision: state.revision + 1,
+    }))
+    const checkpoint = await captureRunCheckpoint(run, submission, target.messages.length, task.text)
+    run.runChangeCapture = createRunChangeCapture(projectRoot, task.sessionId, checkpoint)
+    await syncWorkbenchPeerCatalog(projectRoot)
+    conversationRecovery.assertSubmission(submission)
+    if (findActiveRun(projectRoot, task.sessionId) !== run)
+      throw new AppError('CANCELLED', '运行准备已撤销。')
+    acknowledging = true
+    await acknowledge()
+  } catch (error) {
+    if (run)
+      finishRun(run, {
+        kind: submission.signal.aborted ? 'aborted' : 'error',
+        message: AppError.getMessage(error),
+      })
     throw error
   } finally {
-    pendingSubmissions.delete(targetKey)
+    submission.signal.removeEventListener('abort', revokePreparation)
+    conversationRecovery.releaseSubmission(submission)
   }
 }
 
@@ -808,34 +844,42 @@ function receiveWorkbenchPeerEvent(event: WorkbenchPeerEvent): void {
   if (peerPreparations.has(task.inputId)) return
   const controller = new AbortController()
   peerPreparations.set(task.inputId, controller)
+  let acknowledged = false
+  const acknowledge = async (error?: string): Promise<void> => {
+    acknowledged = true
+    const result = await window.velarosWorkbenchSessionPeers.acknowledge({
+      projectRoot,
+      sessionId: task.sessionId,
+      inputId: task.inputId,
+      error,
+    })
+    if (!result.ok) throw new AppError('UNAVAILABLE', result.message)
+  }
   const preparation =
     event.type === 'prepare-guidance'
-      ? Promise.resolve().then(() => prepareWorkbenchPeerGuidance(task, controller.signal))
-      : prepareWorkbenchPeerTask(task, controller.signal)
-  void preparation
-    .then(
-      () =>
-        window.velarosWorkbenchSessionPeers.acknowledge({
-          projectRoot,
-          sessionId: task.sessionId,
-          inputId: task.inputId,
-        }),
-      (error: unknown) =>
-        window.velarosWorkbenchSessionPeers.acknowledge({
-          projectRoot,
-          sessionId: task.sessionId,
-          inputId: task.inputId,
-          error: AppError.getMessage(error).slice(0, 8000),
+      ? Promise.resolve().then(() => {
+          const signal = conversationRecovery.preparationSignal(
+            projectRoot,
+            task.sessionId,
+            controller.signal
+          )
+          prepareWorkbenchPeerGuidance(task, signal)
+          signal.throwIfAborted()
+          return acknowledge()
         })
-    )
-    .then((result) => {
-      if (!result.ok) cancel(result.message)
-    })
-    .catch((error: unknown) => {
+      : prepareWorkbenchPeerTask(task, controller.signal, acknowledge)
+  void preparation
+    .catch(async (error: unknown) => {
       cancel(AppError.getMessage(error))
-      log.warn('会话任务回执失败', { error })
+      if (!acknowledged) {
+        await acknowledge(AppError.getMessage(error).slice(0, 8000)).catch((reason: unknown) => {
+          log.warn('会话任务回执失败', { error: reason })
+        })
+      } else log.warn('会话任务回执失败', { error })
     })
-    .finally(() => peerPreparations.delete(task.inputId))
+    .finally(() => {
+      if (peerPreparations.get(task.inputId) === controller) peerPreparations.delete(task.inputId)
+    })
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -848,150 +892,64 @@ function ensureConversationEventSubscription(): void {
   peerEventSubscription ??= window.velarosWorkbenchSessionPeers.onEvent(receiveWorkbenchPeerEvent)
   if (conversationEventSubscription) return
   conversationEventSubscription =
-    window.velarosWorkbenchConversation.onEvent(applyConversationEnvelope)
+    window.velarosWorkbenchConversation.onEvent((envelope) => conversationRecovery.receive(envelope))
 }
 
-const recoveryProjects = new Map<string, WorkbenchConversationEventEnvelope[]>()
-const recoveredProjects = new Set<string>()
-const streamCursors = new Map<string, number>()
-const streamGaps = new Map<string, WorkbenchConversationEventEnvelope[]>()
-
-/** 订阅在回读之前建立；回读期间缓存实时事件，按序号去重后补齐。 */
-async function recoverProjectConversations(projectRoot: string): Promise<void> {
-  if (recoveredProjects.has(projectRoot) || recoveryProjects.has(projectRoot)) return
-  const buffered: WorkbenchConversationEventEnvelope[] = []
-  recoveryProjects.set(projectRoot, buffered)
-  try {
-    for (const initial of readAllStates(projectRoot)) {
-      if (findActiveRun(projectRoot, initial.sessionId)) continue
-      let after = 0
-      let streamId: string | undefined
-      let prepared = false
-      for (;;) {
-        const result = await window.velarosWorkbenchConversation.recover({
-          projectRoot,
-          sessionId: initial.sessionId,
-          streamId,
-          after,
-        })
-        if (!result.ok) throw new AppError('UNAVAILABLE', result.message)
-        const page = result.value
-        if (!page) break
-        if (!prepared) {
-          const message = initial.messages.find((item) => item.id === page.run.inputId)
-          const scope = {
-            runId: message?.runId ?? page.run.inputId,
-            turnId: message?.turnId ?? page.run.inputId,
-          }
-          const run = createActiveRun({
-            projectRoot,
-            sessionId: initial.sessionId,
-            scope,
-            goalMode: page.run.goalMode,
-            runChangeCapture: null,
-          })
-          activeRuns.set(runKey(projectRoot, initial.sessionId), run)
-          streamCursors.set(page.run.id, 0)
-          updateSession(projectRoot, initial.sessionId, (state) => ({
-            ...state,
-            messages: state.messages.filter(
-              (item) => item.role !== 'assistant' || item.runId !== scope.runId
-            ),
-            workerThreads: [],
-            status: 'running',
-            lastError: null,
-            lastRunStartedAt: page.run.startedAt,
-            lastRunFinishedAt: null,
-            activeTurn: null,
-            completedTurns: 0,
-            revision: state.revision + 1,
-          }))
-          prepared = true
-        }
-        for (const envelope of page.events) applyRecoveredEnvelope(envelope)
-        streamId = page.run.id
-        after = page.nextAfter
-        if (!page.hasMore) break
-      }
+const conversationRecovery = new StandaloneWorkbenchConversationRecovery<ActiveConversationRun>({
+  recover: (request) => window.velarosWorkbenchConversation.recover(request),
+  readSessions: readAllStates,
+  readRun: findActiveRun,
+  createRun: (header, sessionOwner) => {
+    const { projectRoot, sessionId } = header
+    const session = readSession(projectRoot, sessionId)
+    if (!session) throw new AppError('CANCELLED', '会话恢复已撤销。')
+    const message = session.messages.find((item) => item.id === header.inputId)
+    const scope = {
+      runId: message?.runId ?? header.inputId,
+      turnId: message?.turnId ?? header.inputId,
     }
-    recoveredProjects.add(projectRoot)
-  } catch (error) {
-    log.error('恢复会话事件失败', { projectRoot, error })
-    workbenchMessage.error({
-      title: '会话恢复失败',
-      description: AppError.getMessage(error),
+    const run = createActiveRun({
+      projectRoot,
+      sessionId,
+      inputId: header.inputId,
+      sessionOwner,
+      streamId: header.id,
+      lastSequence: 0,
+      scope,
+      goalMode: header.goalMode,
+      runChangeCapture: null,
     })
-  } finally {
-    recoveryProjects.delete(projectRoot)
-    for (const envelope of buffered) applyRecoveredEnvelope(envelope)
-    flushChatPersistence()
-  }
-}
-
-function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope): void {
-  const buffered = recoveryProjects.get(envelope.projectRoot)
-  if (buffered) {
-    buffered.push(envelope)
-    return
-  }
-  if (envelope.streamId && envelope.sequence) {
-    const pending = streamGaps.get(envelope.streamId)
-    if (pending) {
-      pending.push(envelope)
-      return
-    }
-    if (
-      envelope.sequence > (streamCursors.get(envelope.streamId) ?? 0) + 1 &&
-      findActiveRun(envelope.projectRoot, envelope.sessionId)
-    ) {
-      void recoverStreamGap(envelope)
-      return
-    }
-  }
-  applyRecoveredEnvelope(envelope)
-}
-
-/** 已连接窗口也可能漏掉一次发送；发现序号缺口后先补齐，再释放后续实时事件。 */
-async function recoverStreamGap(first: WorkbenchConversationEventEnvelope): Promise<void> {
-  const streamId = first.streamId!
-  const pending = [first]
-  streamGaps.set(streamId, pending)
-  try {
-    let after = streamCursors.get(streamId) ?? 0
-    for (;;) {
-      const result = await window.velarosWorkbenchConversation.recover({
-        projectRoot: first.projectRoot,
-        sessionId: first.sessionId,
-        streamId,
-        after,
-      })
-      if (!result.ok) throw new AppError('UNAVAILABLE', result.message)
-      const page = result.value
-      if (!page || page.run.id !== streamId)
-        throw new AppError('UNAVAILABLE', '缺失事件所属运行记录已更新，请刷新会话')
-      for (const event of page.events) applyRecoveredEnvelope(event)
-      after = page.nextAfter
-      if (!page.hasMore) break
-    }
-    for (const event of pending) applyRecoveredEnvelope(event)
-  } catch (error) {
-    log.error('补回会话事件失败', { error })
+    activeRuns.set(runKey(projectRoot, sessionId), run)
+    updateSession(projectRoot, sessionId, (state) => ({
+      ...state,
+      messages: state.messages.filter(
+        (item) => item.role !== 'assistant' || item.runId !== scope.runId
+      ),
+      workerThreads: [],
+      status: 'running',
+      lastError: null,
+      lastRunStartedAt: header.startedAt,
+      lastRunFinishedAt: null,
+      activeTurn: null,
+      completedTurns: 0,
+      revision: state.revision + 1,
+    }))
+    return run
+  },
+  apply: applyConversationEnvelope,
+  onError: (error) => {
+    log.error('恢复会话事件失败', { error })
     workbenchMessage.error({
       title: '会话同步失败',
       description: AppError.getMessage(error),
     })
-  } finally {
-    streamGaps.delete(streamId)
-  }
-}
+  },
+})
 
-function applyRecoveredEnvelope(envelope: WorkbenchConversationEventEnvelope): void {
-  if (envelope.streamId && envelope.sequence) {
-    if (envelope.sequence <= (streamCursors.get(envelope.streamId) ?? 0)) return
-    streamCursors.set(envelope.streamId, envelope.sequence)
-  }
-  const run = activeRuns.get(runKey(envelope.projectRoot, envelope.sessionId))
-  if (!run) return
+function applyConversationEnvelope(
+  run: ActiveConversationRun,
+  envelope: WorkbenchConversationEventEnvelope
+): void {
   const { event } = envelope
   if (event.type === 'notice') {
     if (event.kind === ConversationCommandOutputNotice) {
@@ -1463,16 +1421,21 @@ function StandaloneWorkbenchChatSessionSurface({
   const handledGoalContinueRunRef = useRef<Nullable<string>>(null)
   const queuedDraftCountLatest = useLatest(queuedDrafts.drafts.length)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const owner = conversationRecovery.mountProject(projectRoot)
     ensureConversationEventSubscription()
-    void recoverProjectConversations(projectRoot)
+    void conversationRecovery
+      .ensureProject(projectRoot)
+      .catch(() => {})
+      .finally(flushChatPersistence)
+    return () => conversationRecovery.releaseProject(owner)
   }, [projectRoot])
 
   useEffect(() => {
     // 目标自动续跑只对 VelarOS 自己的 Agent：外部引擎的目标归引擎自己管。
     if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun || chat.engine)
       return
-    if (recoveryProjects.has(projectRoot)) return
+    if (conversationRecovery.isRecovering(projectRoot)) return
     const sessionId = chat.sessionId
     const finishedAt = chat.lastRunFinishedAt
     const runKeyForGoal = `${sessionId}:${finishedAt}`
@@ -1842,9 +1805,21 @@ function StandaloneWorkbenchChatSessionSurface({
     }
   ): Promise<boolean> {
     const submissionKey = runKey(projectRoot, chat.sessionId)
-    if (pendingSubmissions.has(submissionKey)) return false
-    pendingSubmissions.add(submissionKey)
+    if (conversationRecovery.hasSubmission(projectRoot, chat.sessionId)) return false
+    let submission: Nullable<StandaloneConversationSubmission> = null
+    let run: Nullable<ActiveConversationRun> = null
+    let sending = false
+    const revokePreparation = (): void => {
+      if (run && !sending) finishRun(run, { kind: 'aborted', message: '运行准备已撤销。' })
+    }
     try {
+      submission = conversationRecovery.claimSubmission(projectRoot, chat.sessionId)
+      submission.signal.addEventListener('abort', revokePreparation, { once: true })
+      await conversationRecovery.ensureProject(projectRoot)
+      conversationRecovery.assertSubmission(submission)
+      const currentSession = readSession(projectRoot, chat.sessionId)
+      if (!currentSession) return false
+      const currentRun = findActiveRun(projectRoot, chat.sessionId)
       const systemNotice = options?.systemNotice
       // 宿主续跑只接在一轮正常完成之后：运行中进来的话会被当成引导注入，冒充用户发言。
       if (systemNotice && readSession(projectRoot, chat.sessionId)?.status !== 'completed')
@@ -1856,7 +1831,9 @@ function StandaloneWorkbenchChatSessionSurface({
       // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
       // 引导通道不带附件（附件由输入框入口改为结束后发送）。
       if (
-        canSteerRun &&
+        currentSession.status === 'running' &&
+        !!currentRun &&
+        !currentSession.engine &&
         !options?.queued &&
         (text || selections.length > 0 || referencedFilePaths.length > 0) &&
         draftFiles.length === 0
@@ -1874,7 +1851,7 @@ function StandaloneWorkbenchChatSessionSurface({
           draftFiles.length === 0 &&
           selections.length === 0 &&
           referencedFilePaths.length === 0) ||
-        shouldBlockStandaloneRunSubmission(chat.status, hasActiveRun, accountSignInPending)
+        shouldBlockStandaloneRunSubmission(currentSession.status, !!currentRun, accountSignInPending)
       )
         return false
       if (engine) {
@@ -1941,6 +1918,17 @@ function StandaloneWorkbenchChatSessionSurface({
       }
       const { images, describedFiles } = await readImageAttachments(draftFiles)
       const attachmentContext = await buildAttachmentContext(describedFiles)
+      conversationRecovery.assertSubmission(submission)
+      const submittingSession = readSession(projectRoot, chat.sessionId)
+      if (
+        !submittingSession ||
+        shouldBlockStandaloneRunSubmission(
+          submittingSession.status,
+          !!findActiveRun(projectRoot, chat.sessionId),
+          false
+        )
+      )
+        return false
       const currentFileContext =
         context.includedCurrentFilePath && !systemNotice
           ? `Current Workbench file: ${context.includedCurrentFilePath}`
@@ -1955,8 +1943,6 @@ function StandaloneWorkbenchChatSessionSurface({
       if (!systemNotice) goalAutoContinueRoundsRef.current.delete(chat.sessionId)
       // 只有正常完成才结束一轮：中止或失败后的下一条消息继续被打断的那一轮，按引导呈现、
       // 与上一轮归在同一组里，而不是另起一轮（与 Desktop 的 shouldContinueInterruptedConversation 一致）。
-      const submittingSession = readSession(projectRoot, chat.sessionId)
-      if (!submittingSession) return false
       const continuesInterruptedRun = isInterruptedRunStatus(submittingSession.status)
       const previousScope = submittingSession.messages.findLast(
         (message) => message.role === 'user'
@@ -2003,6 +1989,23 @@ function StandaloneWorkbenchChatSessionSurface({
           ? { ...userMessage, attachments: attachmentMetadata }
           : userMessage
       const sessionId = submittingSession.sessionId
+      const executionModes: WorkbenchExecutionMode[] = [
+        ...((options?.goalMode ?? context.goalMode) ? ['goal' as const] : []),
+        ...(context.planMode ? ['plan' as const] : []),
+      ]
+      run = createActiveRun({
+        projectRoot,
+        sessionId,
+        inputId: submittedMessage.id,
+        sessionOwner: submission.session,
+        streamId: null,
+        lastSequence: 0,
+        scope,
+        goalMode: executionModes.includes('goal'),
+        runChangeCapture: null,
+      })
+      activeRuns.set(runKey(projectRoot, sessionId), run)
+      ensureConversationEventSubscription()
       updateSession(projectRoot, sessionId, (state) => ({
         ...state,
         messages: [...state.messages, submittedMessage],
@@ -2026,24 +2029,12 @@ function StandaloneWorkbenchChatSessionSurface({
       }))
       // 开跑前拍下本轮的工作区检查点，收尾后拿它比出「本轮改动」。
       const runCheckpoint = await captureRunCheckpoint(
-        projectRoot,
-        sessionId,
+        run,
+        submission,
         submittingSession.messages.length,
         text || submittedMessage.attachments?.map((attachment) => attachment.name).join(', ') || ''
       )
-      const executionModes: WorkbenchExecutionMode[] = [
-        ...((options?.goalMode ?? context.goalMode) ? ['goal' as const] : []),
-        ...(context.planMode ? ['plan' as const] : []),
-      ]
-      const run = createActiveRun({
-        projectRoot,
-        sessionId,
-        scope,
-        goalMode: executionModes.includes('goal'),
-        runChangeCapture: createRunChangeCapture(projectRoot, sessionId, runCheckpoint),
-      })
-      activeRuns.set(runKey(projectRoot, sessionId), run)
-      ensureConversationEventSubscription()
+      run.runChangeCapture = createRunChangeCapture(projectRoot, sessionId, runCheckpoint)
       const inputText = systemNotice
         ? systemNotice.detail
         : [text, currentFileContext, fileReferenceContext, attachmentContext, browserElementContext]
@@ -2051,33 +2042,37 @@ function StandaloneWorkbenchChatSessionSurface({
             .join('\n\n')
       const runPreferences = readWorkbenchConversationRunPreferences()
       flushChatPersistence()
-      const result = await syncWorkbenchPeerCatalog(projectRoot)
-        .then(() =>
-          window.velarosWorkbenchConversation.send({
-            sessionId,
-            projectRoot,
-            inputId: submittedMessage.id,
-            text: inputText,
-            images: optionalWhen(images.length > 0, images),
-            locale,
-            model: {
-              provider: modelConfig.provider,
-              model: modelConfig.model.trim(),
-              apiKey: modelConfig.apiKey,
-              baseURL: modelConfig.baseURL.trim(),
-            },
-            reasoningLevel: context.reasoningLevel,
-            executionModes,
-            // 权限确认策略、记忆开关与搜索引擎随每一轮下发：设置页改了立刻对下一轮生效。
-            permissionMode: readWorkbenchPermissionConfirmationMode(),
-            sandbox: runPreferences.workspaceSandboxEnabled,
-            memory: runPreferences.memoryEnabled,
-            webSearchEngine: runPreferences.webSearchEngine,
-            engine: engine
-              ? { id: engine.id, model: resolveWorkbenchEngineModel(engine, engineStatus) }
-              : undefined,
-          })
-        )
+      await syncWorkbenchPeerCatalog(projectRoot)
+      conversationRecovery.assertSubmission(submission)
+      if (findActiveRun(projectRoot, sessionId) !== run)
+        throw new AppError('CANCELLED', '运行准备已撤销。')
+      // 调用后可能已被 native 接纳；迟到的项目卸载不能把成功回执改成未投递。
+      sending = true
+      const result = await window.velarosWorkbenchConversation
+        .send({
+          sessionId,
+          projectRoot,
+          inputId: submittedMessage.id,
+          text: inputText,
+          images: optionalWhen(images.length > 0, images),
+          locale,
+          model: {
+            provider: modelConfig.provider,
+            model: modelConfig.model.trim(),
+            apiKey: modelConfig.apiKey,
+            baseURL: modelConfig.baseURL.trim(),
+          },
+          reasoningLevel: context.reasoningLevel,
+          executionModes,
+          // 权限确认策略、记忆开关与搜索引擎随每一轮下发：设置页改了立刻对下一轮生效。
+          permissionMode: readWorkbenchPermissionConfirmationMode(),
+          sandbox: runPreferences.workspaceSandboxEnabled,
+          memory: runPreferences.memoryEnabled,
+          webSearchEngine: runPreferences.webSearchEngine,
+          engine: engine
+            ? { id: engine.id, model: resolveWorkbenchEngineModel(engine, engineStatus) }
+            : undefined,
+        })
         .catch((error: unknown) => ({
           ok: false as const,
           message: error instanceof Error ? error.message : String(error),
@@ -2091,13 +2086,20 @@ function StandaloneWorkbenchChatSessionSurface({
       if (result.ok) options?.onAccepted?.()
       return result.ok
     } catch (error) {
+      if (run && !sending)
+        finishRun(run, {
+          kind: submission?.signal.aborted ? 'aborted' : 'error',
+          message: AppError.getMessage(error),
+        })
+      if (submission?.signal.aborted) return false
       workbenchMessage.warning({
         title: t('workbench.chatExecutionFailed'),
         description: AppError.getMessage(error),
       })
       return false
     } finally {
-      pendingSubmissions.delete(submissionKey)
+      submission?.signal.removeEventListener('abort', revokePreparation)
+      if (submission) conversationRecovery.releaseSubmission(submission)
     }
   }
 
@@ -2523,6 +2525,7 @@ function StandaloneWorkbenchChatSessionSurface({
         <WorkbenchRunChangesScopeContext.Provider value={runChangesScope}>
           <WorkbenchWorkerThreadScopeContext.Provider value={workerThreadScope}>
             <ChatConversationPane
+              key={`${projectRoot}\0${chat.sessionId}`}
               conversation={conversation}
               conversationRefreshKey={conversationRefreshKey}
               composer={
@@ -2848,11 +2851,11 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
  * 运行状态）与它起的后台任务一并清掉。
  */
 function releaseRemovedSession(session: StandaloneChatState): void {
+  forgetStandaloneChatSession(session.sessionId)
   forgetStandaloneChatDraft(runKey(session.projectRoot, session.sessionId))
   forgetStandaloneQueuedDrafts(runKey(session.projectRoot, session.sessionId))
   releaseCheckpointRefs(session.projectRoot, session.sessionId, session.checkpoints)
   releaseRunChangeRecords(session.projectRoot, session.sessionId)
-  forgetStandaloneChatSession(session.sessionId)
   void window.velarosWorkbenchConversation
     .deleteSession({ sessionId: session.sessionId, projectRoot: session.projectRoot })
     .catch(() => {
@@ -2974,10 +2977,12 @@ if (import.meta.hot) {
       stateUpdateTargets,
       listeners,
       activeRuns,
-      pendingSubmissions,
       peerPreparations,
       idSequence,
     } satisfies HotConversationStore
+    conversationRecovery.disposePreparations()
+    for (const preparation of peerPreparations.values())
+      preparation.abort(new AppError('CANCELLED', '会话准备已热更新。'))
     conversationEventSubscription?.()
     peerEventSubscription?.()
   })
