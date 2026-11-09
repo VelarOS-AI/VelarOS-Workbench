@@ -87,6 +87,11 @@ ADR 0028 已读，产品装配方案：
 | b5defa2 | 无消费 System 合同与 workspace 旧导出别名 |
 | 3c969dc | 图片后缀查找不再读取对象原型 |
 | 578c6bf | 搜索 owner 取消并等待替换旧请求及匿名请求 |
+| d882237 | 保存/关闭采用即时草稿 owner 与有效格式 |
+| d53d719 | 退役无生产入口的绝对附件/Office 预览链 |
+| c1c8c9d | source map 无源区间截断前一段映射 |
+| fdd3431 | 空白行不参与缩进检测 |
+| 6181979 | incremental blame 支持真实 40/64 位对象名 |
 
 统一底座接入批：配套 0.9.1 基础/扩展显式装配、产品不可变执行凭据、foundation-v1 数据代际、
 无执行空闲控制、active-only tell 与错误回执、schema2 来源和正式候选拒绝门；来源 commit、
@@ -119,7 +124,8 @@ Terminal 准备取消、Debug 晚交清理失败、真实 LSP 协议/共享 disp
 
 后续 Git 顺序、argv、退役字段，跨包 TS 磁盘版本与数据配置缓存，renderer 调试确认及启动接纳均已继续收口。
 仍未完成的明确项：语言 worker 硬终止时跨线程子进程 owner、Markdown 计算取消，
-代码型配置及依赖模块完整热重载；renderer 历史读取失效、异步保存/关窗/删除期间的新草稿与其余覆盖表空白。
+代码型配置及依赖模块完整热重载；renderer 历史读取失效、删除期间的新草稿；跨后端会话删除与 journal 准入事务，
+观察卡跨回合身份及其余覆盖表空白。保存/关窗期间新草稿已由下述批次收口。
 worker 必须有真实资源所有权方案，不能靠加大 8s 预算或 best-effort PID 通知宣称解决。
 正式资产已交付：Platform v0.7.3 双包 0.9.2 已经 Release/tag→commit/asset digest/实际下载 SHA
 核验并安装，Bun 锁只变更双包 spec、integrity 与 required peer。0.9.2 的 idle trace/traceBranches 是新增只读口，
@@ -160,3 +166,16 @@ brace 展开达到 64 项就停止访问后续分支；图片类型改用 Map，
 Worker 的重试/关闭部分复用现有测试 transport，未宣称启动真实线程。node/web 类型通过，20 node / 5 web / 6 测试
 文件 scoped lint 已通过；唯一测试数组类型规则修正后只复查该文件，所有其他绿项复用。原 45s / 2GiB 预算不变。
 未执行全量回归、生产构建或安装包发布；模块覆盖表仍分别记完整、局部及未读，不能以这些批次代表全仓完成。
+
+下一组五批已提交：标签正文/格式修改同步接纳到同一 owner，再发布 React snapshot；旧保存回执只确认自己写下的版本，
+排队保存也保留请求时的有效格式。关窗静默 flush 与确认保存后都重算当前 dirty，不能用旧 saved/skipped 计数放行。
+轻量预览的两个实际 producer 都持有当前项目身份；旧绝对附件 builder/Office selector 只有测试在调用，
+因此连同死解码/保存分支、session 附件 host 口、System 合同、不可达 UI/样式整链移除。当前项目内图片只读和文本保存仍走真实项目端口。
+按 ECMA-426 保留 source map 合法单字段无源片段，mapped→unmapped→mapped 区间不再借前一段冒充源位置；
+缩进忽略纯空白行；blame 严格识别 Git 的 SHA-1 / SHA-256 40/64 位对象名及同宽全零未提交号，不扩成任意长度。
+
+本组 13 个受影响场景通过（既有保存模型 6、关窗定向 2、项目图片只读 1、source map 2、缩进 1、blame 1），
+node/web 类型、产品边界门、4 node / 9 web / 6 测试文件 scoped lint 一次通过。保存故障证据使用实际生产模型函数，
+没有复制 hook、增加测试专用生产口或 DOM 框架；完整 React / 原生窗口交互未测。没有全量回归、压力测试或重复生产构建。
+覆盖新增 Runtime 本体及 DebugSession 全算法、17 组非语言/对话 shared 桥、主文件/命令/归属账本、Windows 更新 helper 全文；
+准确文件与仍仅接缝/未读的 renderer 大组件、部分 shared 语言/对话协议、发行与工程脚本继续见 ignored 模块覆盖表。
