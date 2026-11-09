@@ -5,6 +5,10 @@
  * 只问一次，列出所有有改动的文件。
  */
 
+import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
+
+import { isDirtyTab } from './workbenchEditorTabs'
+
 /** 用户对「要不要保存」的回答。 */
 export type WorkbenchEditorCloseChoice = 'save' | 'discard' | 'cancel'
 
@@ -50,17 +54,10 @@ export function resolveWorkbenchEditorSelectionAfterClose(
 }
 
 /**
- * 关窗前先替用户存过一遍之后，还剩哪些改动没落盘：没归自动保存管的（外部冲突、被删、读不出），
- * 以及这次写盘冲突或失败的。存好的、以及已经跟磁盘一致（跳过）的都不算。
+ * 从当前标签持有的正文与格式收集未保存路径；之前某次写盘成功不代表现在的草稿已经落盘。
  */
-export function collectWorkbenchEditorUnsavedAfterFlush(
-  dirtyPaths: readonly string[],
-  flushedStatuses: ReadonlyMap<string, 'saved' | 'skipped' | 'conflict' | 'failed'>
-): string[] {
-  return dirtyPaths.filter((path) => {
-    const status = flushedStatuses.get(path)
-    return !status || status === 'conflict' || status === 'failed'
-  })
+export function collectWorkbenchEditorUnsavedPaths(tabs: Iterable<WorkbenchOpenEditorTab>): string[] {
+  return [...tabs].filter(isDirtyTab).map((tab) => tab.path)
 }
 
 /** 「重新打开关闭的标签」最多记住多少个。 */

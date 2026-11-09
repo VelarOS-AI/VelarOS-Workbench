@@ -9,6 +9,10 @@ import type {
 
 import { canSaveWorkbenchTabContent } from './workbenchEditorEditMode'
 import { isDirtyTab } from './workbenchEditorTabs'
+import {
+  resolveWorkbenchTabTextFormat,
+  resolveWorkbenchTextConversion,
+} from './workbenchEditorTextFormat'
 
 /**
  * 编辑器保存的纯逻辑：一次写盘的结果、写盘之间的快照接力、批量保存的汇总。
@@ -31,26 +35,58 @@ export interface WorkbenchEditorSavedSnapshot {
   saved: WorkbenchReadFileResult
 }
 
+/** 写盘只确认这次保存的正文与格式；等待期间的新草稿仍归当前标签持有。 */
+export function mergeWorkbenchEditorSavedTab(
+  currentTab: WorkbenchOpenEditorTab,
+  requestedTab: WorkbenchOpenEditorTab,
+  saved: WorkbenchReadFileResult
+): WorkbenchOpenEditorTab {
+  const currentFormat = resolveWorkbenchTabTextFormat(currentTab)
+  const requestedFormat = resolveWorkbenchTabTextFormat(requestedTab)
+  const unchanged =
+    currentTab.content === requestedTab.content &&
+    currentFormat.encoding === requestedFormat.encoding &&
+    currentFormat.eol === requestedFormat.eol
+
+  return {
+    ...currentTab,
+    file: saved,
+    content: currentTab.content === requestedTab.content ? saved.content : currentTab.content,
+    textConversion: resolveWorkbenchTextConversion(saved, currentFormat),
+    externalChange:
+      currentTab.externalChange === requestedTab.externalChange
+        ? undefined
+        : currentTab.externalChange,
+    unencodableSaveError: unchanged ? undefined : currentTab.unencodableSaveError,
+  }
+}
+
 const MAX_SAVED_SNAPSHOT_TRAIL = 8
 
 /**
  * 这次写盘该拿哪个快照去跟磁盘比。
  *
- * 写盘完成到 React 提交新状态之间，紧跟着的下一次保存（全部保存与自动保存交错、连按保存）手里的标签
- * 还是写盘前的快照；拿它去比，刚写下的修改时间对不上，会被当成外部修改。沿着写盘记录按对象身份往后找，
- * 用最新存下的那一份。状态已经换成别的快照（重新读了磁盘）时记录接不上，原样返回。
+ * 排队的下一次保存（全部保存与自动保存交错、连按保存）捕获的标签仍可能是上次写盘前的快照。沿着写盘
+ * 记录按对象身份往后找，用最新存下的那一份，避免误报外部修改；请求时选定的格式同时保留，不能因基线
+ * 更新就把「恢复原格式」解释成「沿用新格式」。状态换成别的快照、记录接不上时原样返回。
  */
-export function resolveWorkbenchEditorSaveBase(
-  file: WorkbenchReadFileResult,
+export function resolveWorkbenchEditorSaveTab(
+  tab: WorkbenchOpenEditorTab,
   trail: readonly WorkbenchEditorSavedSnapshot[]
-): WorkbenchReadFileResult {
-  let current = file
+): WorkbenchOpenEditorTab {
+  let current = tab.file
   for (let hop = 0; hop < trail.length; hop += 1) {
     const next = trail.find((entry) => entry.base === current)
     if (!next) break
     current = next.saved
   }
-  return current
+  return current === tab.file
+    ? tab
+    : {
+        ...tab,
+        file: current,
+        textConversion: resolveWorkbenchTextConversion(current, resolveWorkbenchTabTextFormat(tab)),
+      }
 }
 
 export function appendWorkbenchEditorSavedSnapshot(

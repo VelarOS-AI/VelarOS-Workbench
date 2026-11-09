@@ -9,7 +9,9 @@ import {
   type WorkbenchCloseGuardedWindow,
   WorkbenchWindowCloseGuard,
 } from '../src/main/projects/WorkbenchWindowCloseGuard'
-import { collectWorkbenchEditorUnsavedAfterFlush } from '../src/renderer/src/models/editor/workbenchEditorTabClose'
+import { mergeWorkbenchEditorSavedTab } from '../src/renderer/src/models/editor/workbenchEditorSaving'
+import { collectWorkbenchEditorUnsavedPaths } from '../src/renderer/src/models/editor/workbenchEditorTabClose'
+import type { WorkbenchOpenEditorTab } from '../src/renderer/src/types/workbenchTypes'
 import {
   WorkbenchWindowCloseChannels,
   type WorkbenchWindowCloseRequest,
@@ -198,19 +200,50 @@ void describe('closing a window with unsaved editor changes', () => {
     assert.equal(reloaded.destroyed, true)
   })
 
-  void test('only files still unsaved after the silent flush are put to the user', () => {
-    assert.deepEqual(
-      collectWorkbenchEditorUnsavedAfterFlush(
-        ['saved.ts', 'clean.ts', 'conflict.ts', 'failed.ts', 'deleted.ts'],
-        new Map([
-          ['saved.ts', 'saved'],
-          ['clean.ts', 'skipped'],
-          ['conflict.ts', 'conflict'],
-          ['failed.ts', 'failed'],
-        ] as const)
-      ),
-      ['conflict.ts', 'failed.ts', 'deleted.ts']
-    )
+  void test('close still sees drafts made while the captured files are being flushed', async () => {
+    const makeTab = (path: string, content = 'edited'): WorkbenchOpenEditorTab => ({
+      path,
+      content,
+      file: {
+        projectRoot: '/project',
+        path,
+        content: 'on disk',
+        size: 7,
+        modifiedAt: 1,
+        totalLines: 1,
+        truncated: false,
+        encoding: 'utf-8',
+        eol: 'lf',
+      },
+    })
+    const saved = makeTab('saved.ts')
+    const editedAgain = makeTab('edited-again.ts')
+    const clean = makeTab('became-dirty.ts', 'on disk')
+    const tabs = new Map([saved, editedAgain, clean].map((tab) => [tab.path, tab]))
+    const write = Promise.withResolvers<void>()
+    const afterFlush = write.promise.then(() => {
+      for (const requestedTab of [saved, editedAgain]) {
+        const diskFile = {
+          ...requestedTab.file,
+          content: requestedTab.content,
+          size: requestedTab.content.length,
+          modifiedAt: 2,
+        }
+        tabs.set(
+          requestedTab.path,
+          mergeWorkbenchEditorSavedTab(tabs.get(requestedTab.path)!, requestedTab, diskFile)
+        )
+      }
+      return collectWorkbenchEditorUnsavedPaths(tabs.values())
+    })
+
+    // 同一个文件有更新输入，另一个原本 clean 的文件也在 await 期间变脏。
+    tabs.set(editedAgain.path, { ...editedAgain, content: 'newer draft' })
+    tabs.set(clean.path, { ...clean, content: 'new draft in another file' })
+    write.resolve()
+    assert.deepEqual(await afterFlush, [editedAgain.path, clean.path])
+    assert.equal(tabs.get(saved.path)?.content, saved.content)
+    assert.equal(tabs.get(editedAgain.path)?.content, 'newer draft')
   })
 
   void test('main holds the quit before tearing anything down and the renderer answers', () => {
