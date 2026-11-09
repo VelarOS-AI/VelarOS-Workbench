@@ -122,6 +122,7 @@ export class WorkbenchShellHostRegistry implements WorkbenchShellHostRegistryApi
       },
       runObservationCommand: (command, options, signal) =>
         host.runObservationCommand!(command, options, signal),
+      observationSupport: () => host.observationSupport!(),
       listBackgroundTasks: (query) => this.listBackgroundTasks(query, root),
       terminateBackgroundTask: (request) => this.terminateBackgroundTask(request, root),
       inspectEnvironment: (commands) => host.inspectEnvironment(commands),

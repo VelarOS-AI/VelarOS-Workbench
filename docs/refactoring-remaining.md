@@ -23,8 +23,8 @@
 | renderer 最后阅读发现 | `49e4399`、`564b14e`、`59bcbcb`、`48e94c9` 已交付请求归属、根路径、精确 fuzzy、死链及测试运行器识别修复。 | 无已知待修；必要路径用例、类型及相关 lint 已绿；DOM 乱序未实测。 |
 | 生成命令字面参数 | `aa15f43` 已贯通 shared、terminal/debug、生成器、菜单、保存、启动项与重启。10 项 renderer、10 项 backend、三次真实 PTY 启动及一次真实 npm-prefix 查询取消/关闭故障通过。 | 无已知待修；node/web 类型与全部改动源码/测试定向 lint 已绿。实际 Corepack 下载/版本矩阵未运行；用户手写 command/raw args 保留实际 shell 语义。 |
 | Tree 与 EditorConfig | `b9bb6c6` 已交付目录读取请求归属、失败 Promise 身份移除和错误分类；仅 NOT_FOUND 缓存缺失，其他失败不应用父规则，下一次自然请求可重试。 | 无已知待修；web 类型与两文件 lint 已绿，真实 DOM 乱序未实测。 |
-| observe 预览与 peer 引用 | `a5d3ffd` 已交付 observe/execute 有界摘要副本及 destroyed peer watcher 释放；实际 Board 八项断言、原 trace/共享身份及相关检查通过。 | 展示层已收口；新的模型动态上下文、历史和缓存合同等待下行的正式 Core 包。 |
-| Platform 固定归档 | `1850cf7` 已接入 0.9.3：正式身份、一次 Bun 安装、完整三包锁及新归档原生 Node 取消/关闭用例均通过。 | 旧 0.9.1/0.9.2 证据保留；待下一份固定正式包交接后，一次接入新 observe 合同并转发真实 `observationSupport()`。 |
+| observe 预览与 peer 引用 | `a5d3ffd` 已交付 observe/execute 有界摘要副本及 destroyed peer watcher 释放；实际 Board 八项断言、原 trace/共享身份及相关检查通过。 | 展示层和新 Core 0.9.4 接入均已收口；产品未重建动态上下文、历史或缓存。 |
+| Platform 固定归档 | `1850cf7` 的 0.9.3 证明保留；当前为正式 v0.7.5 / 0.9.4，独立字节/版本/peer、一次 Bun 安装、完整三包锁均通过，真实宿主支持查询已转发。 | 无已知待修；node/web 类型、单文件 lint 和新归档真实 Node/项目编辑用例通过；旧回执不重标身份。 |
 
 Tools Worker 额外短命 isolate 使用原 H 堆上限；H 不是两个 isolate 的聚合上限，潜在总量有限增加。
 冷配置加载可能在原请求期限内明确失败，不能承诺所有大型项目仍按旧热缓存时延成功。
@@ -34,6 +34,8 @@ Tools Worker 额外短命 isolate 使用原 H 堆上限；H 不是两个 isolate
 事务撤销、真实进程树、Git 影子 index/ref、TS 热池与有界缓存、编辑器同步 owner、跨组文件状态不重复改写。
 旧 Claude CLI unknown 授权状态缺少足够版本证据支持删除，保持既有合同。
 
+截至正式 0.9.4 接入，本轮已知源码问题与必要接入验证已完成；下列未实测矩阵是证据边界，不作为继续扩大改动的清单。
+
 ## 数据、fixture 与运行矩阵
 
 - renderer 两份大语言表只核入口/合并/消费，未逐条核对翻译字面量；31 CSS、声明、HTML 未做逐字或视觉审计。
@@ -41,5 +43,5 @@ Tools Worker 额外短命 isolate 使用原 H 堆上限；H 不是两个 isolate
 - 真实 DOM、滚动/字体帧、HMR/native 连续时序、跨 OS PTY/磁盘/权限、第三方工具版本、Cloud 续期、签名安装与负载矩阵未穷尽。
 - 已脱离父链/进程组且关闭继承 stdio 的任意 daemon 后代，不在 Node 公开 ChildProcess close 合同的完整保证内。
 - observe 已确认保留，按小状态、摘要、差量和引用提供反馈；独立动态上下文及历史读取由 Platform 核心实现。
-  Workbench 等待固定正式包，接入真实宿主支持声明，不在旧包上补造核心 API；UI 预览仍保持原始 trace、
+  Workbench 已消费正式 0.9.4 并转发真实宿主支持声明，不在产品补造核心 API；UI 预览仍保持原始 trace、
   增量事实、请求指纹和 provider 前缀缓存的既有合同。

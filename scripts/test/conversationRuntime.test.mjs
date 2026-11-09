@@ -191,6 +191,12 @@ test(
       },
       { rules: [{ relativePath: 'AGENTS.md', content: '项目规则：回答要简短。' }] }
     )
+    const support = f.shells.host(f.workspace, 'danger-full-access').observationSupport()
+    assert.equal(typeof support.available, 'boolean')
+    if (!support.available) assert.equal(typeof support.reason, 'string')
+    // Windows 未注入额外只读后端；普通 exec 仍必须通过下面的真实执行断言。
+    if (process.platform === 'win32') assert.equal(support.available, false)
+    t.diagnostic(`Workbench observation support: ${JSON.stringify(support)}`)
     await writeFile(join(f.workspace, 'hello.txt'), 'before\n')
     const run = f.runtime.submit(f.sink, f.request('改一下'))
     await run.accepted

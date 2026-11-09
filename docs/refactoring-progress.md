@@ -17,8 +17,8 @@
 
 ## 实际依赖边界
 
-当前使用 Platform 正式发布 `v0.7.4` / commit `308b3f306f103ba1942b6fd383ab558c441f82f0`，
-Velaros / Capabilities 均 `0.9.3`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
+当前使用 Platform 正式发布 `v0.7.5` / commit `1b0004d773ac54c9f20f3748f9f4baed021a6481`，
+Velaros / Capabilities 均 `0.9.4`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
 全部为带哈希的本仓归档，不是兄弟仓链接；schema2 记录正式来源。0.9.1 候选及消费证明保留为历史证据。
 
 - Runtime 根入口：createRuntime、openSessionControl、createCapabilityModule、会话/笔记/trace；Node 入口为 `/node`。
@@ -32,7 +32,7 @@ Platform 只持有通用 Agent/Session、执行、上下文、交互与授权。
 
 ## 固定归档接入
 
-1. ADR 0028 / 0029 与配套双包已交付；当前消费 0.9.3 正式归档，执行与独立无执行控制口均使用公开合同。
+1. ADR 0028 / 0029 与配套双包已交付；当前消费 0.9.4 正式归档，执行与独立无执行控制口均使用公开合同。
 2. project/code/images、memory、widget、worker profile 已按实际构建后的公开声明显式装配。
 3. executionIdentity、authorizationScope 与模块绑定是通用恢复约束；Workbench 的项目与浏览器选择留在产品。
 4. manifest、Bun 锁与已安装双包均已切换；可核验来源及归档见迁移文档，不加旧接口适配或 node_modules 补丁。
@@ -358,6 +358,26 @@ raw shell 按自身规则改变 PATH，测试核对实际选中 Node 身份；�
 启动为 CANCELLED、零 PTY 输出且未到达 CLI；原 5 秒用例不变。node/web 类型与全部改动源码/测试定向 lint 通过。
 实际 Corepack 下载/版本、跨 OS 及 DOM 连续交互未运行；没有完整构建、全量回归或再次安装依赖。
 
-既有生产行为源码全文阅读剩余为零，以上新增实现另按差量审阅。当前无已知待修源码缺陷；剩余接入项是下一份
+截至 `2836ee1`，既有生产行为源码全文阅读剩余为零，以上新增实现另按差量审阅；当时剩余接入项是下一份
 固定正式 Core observe 包。用户已确认保留 observe 的小状态/摘要/差量/引用，动态上下文与历史由 Core 提供；
 收到正式身份后才转发真实 `ShellHostPort.observationSupport()`，不在旧 0.9.3 上补造支持声明或改写 provider 前缀缓存。
+
+## Platform 0.9.4 最终接入
+
+正式 `v0.7.5` / `1b0004d773ac54c9f20f3748f9f4baed021a6481` 的基础、能力包均固定为 0.9.4。
+独立核验官方公开状态、tag/source、asset digest、下载 SHA256/SHA512/长度、tar 包身份及精确 peer 后，
+执行一次 Bun 1.4.3 安装；三包完整锁身份通过，UI 1.0.0 和产品 workspace/session 归属保持原合同。
+两包版本为 0.9.4，归档的平台代际仍为 0.7。
+
+宿主仅增加一行真实 `observationSupport()` 转发。公开宿主端口为可选方法，本地工厂实际提供实现；转发与既有
+runObservationCommand 一样保留真实方法调用，不生成默认支持值。当前模型配置使用公开 AI SDK driver，
+容量包装不拆分请求；生产代码没有 compiledPrompt 旧帧标记读取，静态容量夹具保留。
+历史/动态区/采集预算/消息布局/指纹与缓存由新 Core/SDK 提供，未在产品重建。
+
+node 类型、web 类型及唯一修改 TS 文件的 scoped lint 通过。新归档的真实 NativeNode 用例增加同一宿主支持查询断言：
+Windows 无额外只读后端时 available 为 false，普通 exec 继续完成项目编辑、原生进程输出、IDE 通知和资源收尾。
+原 30 秒测试中行为约 2397ms、夹具全过程约 20.2 秒通过；只运行这一条，旧 PTY/CLI 取消/调试绿项复用。
+原 45 秒/2GiB 类型与 lint 分区保留；下载不占共享锁，安装与定向验证沿既有锁串行。
+
+0.9.1/0.9.2/0.9.3 原字节与回执保持历史身份，发布方 Linux 归档证明未改称本地 Windows 采集证据。
+没有全量回归、完整生产构建、新跨 OS/供应商缓存/模型选择率或签名安装矩阵。已知源码修复、审计记录和此次正式接入均已收口。

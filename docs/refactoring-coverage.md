@@ -10,7 +10,7 @@
 
 | 模块 | 当前实际覆盖 | 证据边界 |
 | --- | --- | --- |
-| main engines / account / model / conversation | 引擎、凭据及账号存储主体；Runtime、Dispatcher、Recovery、普通及 peer IPC、脚本/观察/规则/投影、Console 与 composition 已全文核对。账号和模型 IPC 本体已补全文；恢复票据实施差异已审。 | 既有源码剩余 0；新 Core observe 合同待固定包接入。 |
+| main engines / account / model / conversation | 引擎、凭据及账号存储主体；Runtime、Dispatcher、Recovery、普通及 peer IPC、脚本/观察/规则/投影、Console 与 composition 已全文核对。账号和模型 IPC 本体已补全文；恢复票据实施差异已审。 | 既有源码剩余 0；Core 0.9.4 接入、真实支持查询和普通 exec 必要场景已验收。 |
 | main projects / workspace | 项目身份、窗口、关闭与安全主体；workspace 顶层生产文件、terminal 六文件、watch 两文件、Git 八文件与实际 IPC 已全文；本轮死链/watch 及结构化启动差量已审。 | 既有源码剩余 0；OS 磁盘/终端矩阵未穷尽。 |
 | main language | TS host/features、缓存、lint/formatter、Markdown、worker/client/scheduler/protocol/IPC 已全文；已交付 LSP owner/传输及取消接线已复审。 | 既有源码剩余 0；Tools Worker 差量和实际打包/RPC/退出已验收。 |
 | main debug / browser / analytics / updates | DebugSession 全算法及其余 debug 生产模块、main browser、统计与更新服务/Windows helper 已全文；本轮补完 renderer DebugPanel、AgentBrowserPanel、WebviewDebugPanel 与实际装配。 | 既有源码剩余 0；真实 Node/CDP 及 updater 必要场景已测，Electron 调试页面交互未测。 |
@@ -28,7 +28,7 @@
 | Windows updater helper 目录回收 | `d5e6ec7`：真实持有 worker 句柄，匹配终态回执与停止 ACK；原生安装收尾、恢复、错回执及目录保留、替换、取消已验收。 |
 | probe / isolated test 宿主强杀边界 | `9c2b932`：缺清理回执真实故障、entrypoint 以及实际 Electron/PTY 原 17 项断言通过；延迟 force 和实际 close 均由 owner 等待。 |
 | renderer 新发现与生成命令 | `49e4399` 等叶修复及 `aa15f43` 结构化启动已交付；实际 PTY 字面 argv、raw shell、npm 及真实查询取消/关闭通过，配置/菜单/重启模型和真实 Node/CDP 接线通过。 |
-| Core observe 动态上下文 | 用户已确认保留 observe；Workbench 展示副本修复已交付，新的动态区、历史及宿主支持声明等待下一份固定正式 Core 包。 |
+| Core observe 动态上下文 | 正式 v0.7.5 / 0.9.4 已一次接入，模型沿公开 SDK 完整编码；真实宿主支持查询已转发，Windows 无只读后端及普通 exec 实际行为已验收。历史、动态区和预算留在 Core。 |
 
 树读取路径代际与 EditorConfig 非缺失错误缓存已在 `b9bb6c6` 修复，web 类型及两文件 lint 通过；未冒称真实 DOM 故障重现。
 observe 预览副本与销毁 peer watcher 已在 `a5d3ffd` 交付，实际 Board 八项断言通过；展示裁剪不改模型上下文或缓存。
