@@ -17,9 +17,9 @@
 
 ## 实际依赖边界
 
-当前使用 Platform 固定本地候选 commit `e3e157696994a0d667cbd542a809484b93e40e71`，
-Velaros / Capabilities 均 `0.9.1`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
-全部为带哈希的本仓归档，不是兄弟仓链接；schema2 保存来源证明，候选不能进入正式 stage。
+当前使用 Platform 正式发布 `v0.7.3` / commit `ae20dcebf5d086d99ff7d8df1701d71a91574efe`，
+Velaros / Capabilities 均 `0.9.2`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
+全部为带哈希的本仓归档，不是兄弟仓链接；schema2 记录正式来源。0.9.1 候选及消费证明保留为历史证据。
 
 - Runtime 根入口：createRuntime、openSessionControl、createCapabilityModule、会话/笔记/trace；Node 入口为 `/node`。
 - 执行与上下文：execution、execution/local、script、act/agents、kernel、contracts、renderer。
@@ -30,9 +30,9 @@ Velaros / Capabilities 均 `0.9.1`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885
 Workbench 独占项目/浏览器 workspace、项目成员/资源/权限策略、IDE 与产品窗口、产品会话目录及投递。
 Platform 只持有通用 Agent/Session、执行、上下文、交互与授权。Cloud 是独立服务。
 
-## 固定候选接入
+## 固定归档接入
 
-1. ADR 0028 / 0029 与配套 0.9.1 已交付；执行与独立无执行控制口均使用公开合同。
+1. ADR 0028 / 0029 与配套双包已交付；最终消费 0.9.2 正式归档，执行与独立无执行控制口均使用公开合同。
 2. project/code/images、memory、widget、worker profile 已按实际构建后的公开声明显式装配。
 3. executionIdentity、authorizationScope 与模块绑定是通用恢复约束；Workbench 的项目与浏览器选择留在产品。
 4. manifest、Bun 锁与已安装双包均已切换；可核验来源及归档见迁移文档，不加旧接口适配或 node_modules 补丁。
@@ -70,6 +70,16 @@ ADR 0028 已读，产品装配方案：
 | 02aa856 | 控制台启动取消与常驻进程展示 |
 | 4f7cba8 | stash 并发与 Windows Git 进程取消 |
 | 7cda76a | 主进程项目身份、恢复保存闸门、renderer 旧状态清理 |
+| f0cd235 | 显式 0.9.1 底座与候选来源/消费证明 |
+| a5b313c | 保存与停止失败回执 |
+| d5e9c7f | 资源 owner 关闭、迟到启动与真实退出回执 |
+| a590459 | 偏好写盘成功后才更新内存 |
+| 2096ff3 | canonical checkpoint 准入、NUL unstage、退役 Git 字段 |
+| 3b872b3 | 调试设置确认与 renderer 迟到资源接纳 |
+| 28a3ea5 | 正式 Platform v0.7.3 / 双包 0.9.2 固定来源 |
+| 380a550 | 跨包 TS 删除/重建与项目配置缓存 |
+| 649bd9f | 死项目桥与旧 AI 索引合同 |
+| 2353c7a | 内联补全的文档、选区、配置与生命周期归属 |
 
 统一底座接入批：配套 0.9.1 基础/扩展显式装配、产品不可变执行凭据、foundation-v1 数据代际、
 无执行空闲控制、active-only tell 与错误回执、schema2 来源和正式候选拒绝门；来源 commit、
@@ -81,10 +91,10 @@ ADR 0028 已读，产品装配方案：
 执行凭据 5 项、peer 6 项、来源快照 2 项、正式发布来源门 5 项、类型属主 5 项、模型配置 1 项、
 行内补全 1 项通过；Node 24.22.0 四项真实项目/进程/SQLite/会话委派场景通过。
 peer 与属主测试初次各一项旧断言失败，按新合同修正后仅重跑失败项，其余绿项复用。
-未运行全量回归、跨平台矩阵、长 E2E、生产 build 或安装包发布；本地候选仍明确不可进入正式 stage。
+未运行全量回归、跨平台矩阵、长 E2E、生产 build 或安装包发布；此批当时的本地候选不能进入正式 stage。
 
-后续游标：先合并模块覆盖短表中的空白，继续文件/搜索/监听、语言/调试、renderer hooks/models
-模块排查；检查点最终采集与下一轮 capture 入队顺序也尚未收口。已确认的绿项不重复运行。
+后续按模块覆盖短表补空白，继续文件/搜索/监听、语言/调试、renderer hooks/models；检查点最终采集
+与下一轮 capture 入队顺序后来由 `2096ff3` 收口。已确认的绿项不重复运行。
 
 接入后的模块排查继续推进：`a5b313c` 修复退出同步保存和运行卡重启对失败信封的忽略；保存成功后才确认
 已刷盘，停止成功后才清旧输出并重启。其 web 类型及 2 个 hook 的 lint 已通过，未为这两个直接错误转发新增镜像测试。
@@ -100,7 +110,22 @@ LSP 关闭共用实际 Promise，真实退出未确认时保留进程引用并�
 规则仅定向修正。8 个最小故障场景通过（真实 Node 子孙清理、命令 owner、恢复越界、两类 watcher 关闭、
 Terminal 准备取消、Debug 晚交清理失败、真实 LSP 协议/共享 dispose）。沿用原分区预算与已有绿项，未跑全量或生产构建。
 
-仍未完成的明确项：Git checkpoint 准入顺序、批量 unstage argv 和退役字段；跨包 TypeScript 磁盘版本、
-ESLint/Prettier 配置缓存；renderer 调试断点确认与启动资源接纳；语言 worker 硬终止时跨线程子进程 owner。
-后者需要真实资源所有权方案，不能靠加大 8s 预算或 best-effort PID 通知宣称解决。
-Platform 下一组正式发布资产仍待 owner 交付 URL / SHA；当前 0.9.1 保持已核验本机候选身份。
+后续 Git 顺序、argv、退役字段，跨包 TS 磁盘版本与数据配置缓存，renderer 调试确认及启动接纳均已继续收口。
+仍未完成的明确项：语言 worker 硬终止时跨线程子进程 owner、丢弃后 LSP overlay 撤销、Markdown 计算取消，
+代码型配置及依赖模块完整热重载，搜索 owner 释放、signature help 迟到回执及其余覆盖表空白。
+worker 必须有真实资源所有权方案，不能靠加大 8s 预算或 best-effort PID 通知宣称解决。
+正式资产已交付：Platform v0.7.3 双包 0.9.2 已经 Release/tag→commit/asset digest/实际下载 SHA
+核验并安装，Bun 锁只变更双包 spec、integrity 与 required peer。0.9.2 的 idle trace/traceBranches 是新增只读口，
+Workbench 当前无新增消费；原四个真实 Node 场景复用，最终仅补归档/锁身份及受影响静态/类型。
+
+上述后续一致性批验证：偏好真实写盘失败/同值重试 1 项；Git 顺序/别名固定、长 argv unstage、分支 IPC
+3 项；跨包 TS 删除重建、真实 ESLint、Prettier 数据配置/EditorConfig 3 项；调试启动期间设置变化和两类拒收重试 3 项。
+10 项通过。TS 新用例首次揭示缺失模块解析缓存未清，修正结构失效并仅重跑失败项；仍为同一个热 service，未放宽断言。
+源码 11 个 node / 9 个 web、7 个测试文件 scoped lint 通过；后续 Host/fixture 修正及死端口/内联补全增量
+7 个 node / 2 个 web / 2 个测试文件 lint 通过，未变源码绿项复用。0.9.2 安装后的 node/web 类型与三包完整锁身份通过。
+所有分区沿用原 45s / 2GiB 预算；没有补跑四个真实 Node 场景、全量回归或生产构建。
+
+两类死项目端口及旧 AI 索引合同已沿唯一 preload/IPC/Manager 链删除；没有给零生产消费代码新增镜像测试。
+内联补全以对象 token 比较完整模型配置快照与项目/路径，另外核文档、完整选区和 plugin 代际；不序列化凭据，
+不把前端丢弃结果称为已取消后端请求。该处以实际唯一消费链与 web 类型/lint 检查，未引入新的 DOM 测试框架。
+全仓排查仍未完成，完整、接缝、未读和合理保留范围持续记录在 ignored 模块覆盖表。
