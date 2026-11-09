@@ -6,8 +6,8 @@
  * `saveFileSync` 走 `ipcMain.on` + `event.returnValue`（renderer sendSync 的 beforeunload
  * 兜底路径）；`runCommand` 的流式输出只回发给发起请求的 webContents。
  *
- * 带 searchId 的内容搜索边搜边把结果推回发起它的窗口（`searchContentProgress`），可以按 id 取消；窗口关了，
- * 它还没搜完的都取消。
+ * 带 searchId 的内容搜索边搜边把结果推回发起它的窗口（`searchContentProgress`），可以按 id 取消；所有内容
+ * 搜索都归窗口持有，窗口崩溃、释放项目或应用关闭时取消并等在途请求收束。
  *
  * 写族通道只由用户在界面上的动作触发（编辑器保存、文件树里新建 / 改名 / 移动 / 删除 / 恢复）；Agent 的
  * 写入走项目内核，不经这里。写成功后把路径报给改动归属账本：这些改动是用户亲手做的，正在跑的那一轮
@@ -72,7 +72,12 @@ export function registerWorkbenchFsIpc(
   parts: WorkbenchAppParts,
   windowManager: WorkbenchWindowManager,
   userWrites?: WorkbenchUserWriteSink
-): { cancelCommandsForSender(senderId: number): Promise<void>; cancelCommands(): Promise<void> } {
+): {
+  cancelCommandsForSender(senderId: number): Promise<void>
+  cancelCommands(): Promise<void>
+  cancelContentSearchesForSender(senderId: number): Promise<void>
+  cancelContentSearches(): Promise<void>
+} {
   const commands = new Map<number, Map<AbortController, Promise<unknown>>>()
   const closingCommandOwners = new Set<number>()
   let commandsClosed = false
@@ -294,20 +299,20 @@ export function registerWorkbenchFsIpc(
       if (!parsed) return invalidRequest()
 
       const searchId = parsed.searchId
-      if (!searchId) return parts.search.searchContent(parsed)
-
       const sender = event.sender
-      const { senderId, search } = contentSearches.begin(sender, searchId)
+      const { search, end } = contentSearches.begin(sender, searchId)
       try {
         return await parts.search.searchContent(parsed, {
           signal: search.signal,
-          onBatch: (batch) => {
-            if (!sender.isDestroyed())
-              sender.send(WorkbenchFsChannels.searchContentProgress, { searchId, ...batch })
-          },
+          onBatch: searchId
+            ? (batch) => {
+                if (!search.signal.aborted && !sender.isDestroyed())
+                  sender.send(WorkbenchFsChannels.searchContentProgress, { searchId, ...batch })
+              }
+            : undefined,
         })
       } finally {
-        contentSearches.end(senderId, searchId, search)
+        end()
       }
     })
   )
@@ -391,6 +396,8 @@ export function registerWorkbenchFsIpc(
       commandsClosed = true
       await Promise.all([...commands.keys()].map(cancelCommandsForSender))
     },
+    cancelContentSearchesForSender: contentSearches.cancelForSender,
+    cancelContentSearches: contentSearches.cancelAll,
   }
 }
 
@@ -675,43 +682,98 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 interface ContentSearchRegistry {
-  /** 开始一次搜索；同一窗口同一 id 还在搜的那次先取消。返回窗口的 id（窗口关了以后就读不到了）。 */
-  begin: (sender: WebContents, searchId: string) => { senderId: number; search: AbortController }
-  end: (senderId: number, searchId: string, search: AbortController) => void
+  /** 同 id 的旧请求先取消，但完成之前仍归 owner 持有；没有 id 的一次性搜索也登记。 */
+  begin: (sender: WebContents, searchId?: string) => { search: AbortController; end(): void }
   cancel: (senderId: number, searchId: string) => void
+  cancelForSender: (senderId: number) => Promise<void>
+  cancelAll: () => Promise<void>
+}
+
+interface PendingContentSearch {
+  searchId: string | undefined
+  controller: AbortController
+  /** 请求已执行 finally；业务错误仍由原 IPC 信封返回。 */
+  done: Promise<void>
+}
+
+interface ContentSearchOwner {
+  pending: Set<PendingContentSearch>
+  closing: boolean
+  unsubscribe: () => void
 }
 
 /**
- * 进行中的内容搜索，按窗口与 searchId 记下；窗口关了，它的搜索一并取消。窗口的 id 在开始时记下：
- * `destroyed` 触发时 WebContents 已经销毁，再读 `sender.id` 会抛错。
+ * 进行中的内容搜索按窗口持有：取消只发信号，直到请求的 finally 才释放完成票。窗口 id 提前记下，
+ * destroyed 时不再读已销毁的 WebContents；空闲后移除监听，项目释放时等全部旧请求收束。
  */
 function createContentSearchRegistry(): ContentSearchRegistry {
-  const searches = new Map<number, Map<string, AbortController>>()
+  const owners = new Map<number, ContentSearchOwner>()
+  let closed = false
+  const releaseIfIdle = (senderId: number, owner: ContentSearchOwner): void => {
+    if (owner.closing || owner.pending.size > 0 || owners.get(senderId) !== owner) return
+    owner.unsubscribe()
+    owners.delete(senderId)
+  }
+  const cancelForSender = async (senderId: number): Promise<void> => {
+    const owner = owners.get(senderId)
+    if (!owner) return
+    owner.closing = true
+    const pending = [...owner.pending]
+    for (const search of pending) search.controller.abort()
+    try {
+      await Promise.all(pending.map((search) => search.done))
+    } finally {
+      owner.closing = false
+      releaseIfIdle(senderId, owner)
+    }
+  }
 
   return {
     begin: (sender, searchId) => {
+      if (closed || sender.isDestroyed())
+        throw new AppError('CLOSED', 'Content search owner is closed.')
       const senderId = sender.id
-      let bySearchId = searches.get(senderId)
-      if (!bySearchId) {
-        const created = new Map<string, AbortController>()
-        bySearchId = created
-        searches.set(senderId, created)
-        sender.once('destroyed', () => {
-          for (const search of created.values()) search.abort()
-          searches.delete(senderId)
-        })
+      let owner = owners.get(senderId)
+      if (owner?.closing) throw new AppError('CLOSED', 'Content search owner is closing.')
+      if (!owner) {
+        const cancel = (): void => { void cancelForSender(senderId) }
+        owner = {
+          pending: new Set(),
+          closing: false,
+          unsubscribe: () => {
+            sender.removeListener('destroyed', cancel)
+            sender.removeListener('render-process-gone', cancel)
+          },
+        }
+        owners.set(senderId, owner)
+        sender.once('destroyed', cancel)
+        sender.once('render-process-gone', cancel)
       }
-      bySearchId.get(searchId)?.abort()
+      if (searchId)
+        for (const previous of owner.pending)
+          if (previous.searchId === searchId) previous.controller.abort()
       const search = new AbortController()
-      bySearchId.set(searchId, search)
-      return { senderId, search }
-    },
-    end: (senderId, searchId, search) => {
-      const bySearchId = searches.get(senderId)
-      if (bySearchId?.get(searchId) === search) bySearchId.delete(searchId)
+      const done = Promise.withResolvers<void>()
+      const pending = { searchId, controller: search, done: done.promise }
+      owner.pending.add(pending)
+      const activeOwner = owner
+      return {
+        search,
+        end: () => {
+          activeOwner.pending.delete(pending)
+          done.resolve()
+          releaseIfIdle(senderId, activeOwner)
+        },
+      }
     },
     cancel: (senderId, searchId) => {
-      searches.get(senderId)?.get(searchId)?.abort()
+      for (const search of owners.get(senderId)?.pending ?? [])
+        if (search.searchId === searchId) search.controller.abort()
+    },
+    cancelForSender,
+    cancelAll: async () => {
+      closed = true
+      await Promise.all([...owners.keys()].map(cancelForSender))
     },
   }
 }

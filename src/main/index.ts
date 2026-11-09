@@ -429,6 +429,7 @@ if (hasSingleInstanceLock)
           // 窗口关掉或切走项目：这个项目里还在跑的对话一并停下，浏览器页面一并离站。
           conversationRuntime.cancelProject(projectRoot),
           browserService.releaseProject(projectRoot),
+          fsIpc.cancelContentSearchesForSender(ownerId),
         ])
       },
     })
@@ -498,6 +499,7 @@ if (hasSingleInstanceLock)
         // 先停对话（运行时关闭时释放脚本子进程与存储），再停 Agent 起的后台任务。
         conversationRuntime.close().finally(() => shellHosts.dispose()),
         productAnalytics?.dispose(),
+        fsIpc.cancelContentSearches(),
       ])
         .then((results) => {
           const failures = results.flatMap((result, index) =>
@@ -507,6 +509,7 @@ if (hasSingleInstanceLock)
                     operation: [
                       'commands', 'debug', 'terminal', 'language',
                       'workspace', 'conversation', 'analytics',
+                      'searches',
                     ][index],
                     error: result.reason,
                   },

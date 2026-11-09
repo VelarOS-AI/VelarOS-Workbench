@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -461,6 +462,99 @@ void describe('project content search: streaming, cancelling and open files', ()
 })
 
 void describe('project content search IPC', () => {
+  void test('renderer loss drains replaced and anonymous searches, and shutdown rejects new work', async () => {
+    const result: WorkbenchSearchContentResult = {
+      projectRoot: '/project',
+      query: 'needle',
+      files: [],
+      openPathsInScope: [],
+      truncated: false,
+      skippedLargeFileCount: 0,
+      cancelled: true,
+    }
+    const work: Array<{
+      signal: AbortSignal
+      complete: () => void
+      onBatch: ((batch: WorkbenchSearchContentBatch) => void) | undefined
+    }> = []
+    const owner = registerWorkbenchFsIpc({} as never, {
+      search: {
+        searchContent: (
+          _request: WorkbenchSearchContentRequest,
+          options: { signal?: AbortSignal; onBatch?: (batch: WorkbenchSearchContentBatch) => void }
+        ) => {
+          assert.ok(options.signal)
+          const completion = Promise.withResolvers<WorkbenchSearchContentResult>()
+          work.push({
+            signal: options.signal,
+            complete: () => completion.resolve(result),
+            onBatch: options.onBatch,
+          })
+          return completion.promise
+        },
+      },
+    } as never, {} as never)
+    let sent = 0
+    const sender = Object.assign(new EventEmitter(), {
+      id: 41,
+      isDestroyed: () => false,
+      send: () => { sent += 1 },
+    })
+    const searchHandler = ipcHandlers.get(WorkbenchFsChannels.searchContent)!
+    const pending: Array<Promise<WorkbenchFsCallResult<WorkbenchSearchContentResult>>> = []
+    const invoke = (searchId?: string): Promise<WorkbenchFsCallResult<WorkbenchSearchContentResult>> => {
+      const request = Promise.resolve(searchHandler(
+        { sender }, { projectRoot: '/project', query: 'needle', searchId }
+      )) as Promise<WorkbenchFsCallResult<WorkbenchSearchContentResult>>
+      pending.push(request)
+      return request
+    }
+    try {
+      const replaced = invoke('same')
+      const current = invoke('same')
+      const anonymous = invoke()
+      assert.equal(work.length, 3)
+      assert.equal(work[0]!.signal.aborted, true)
+      assert.equal(work[1]!.signal.aborted, false)
+      assert.equal(work[2]!.onBatch, undefined)
+      work[0]!.onBatch?.({ files: [], openPathsInScope: [] })
+      assert.equal(sent, 0, 'a cancelled old request must not stream into its replacement')
+
+      sender.emit('render-process-gone')
+      assert.ok(work.every((search) => search.signal.aborted))
+      let drained = false
+      const releasing = owner.cancelContentSearchesForSender(sender.id).then(() => { drained = true })
+      const refused = await invoke('closing')
+      assert.equal(refused.ok ? undefined : refused.code, 'CLOSED')
+      assert.equal(work.length, 3)
+      work[1]!.complete()
+      work[2]!.complete()
+      await Promise.all([current, anonymous])
+      assert.equal(drained, false, 'the replaced request still owns its cleanup')
+      work[0]!.complete()
+      await Promise.all([replaced, releasing])
+      assert.equal(sender.listenerCount('destroyed'), 0)
+      assert.equal(sender.listenerCount('render-process-gone'), 0)
+
+      // 同一窗口可在项目释放后重新搜索；应用关闭则永久拒绝新的请求。
+      const afterRelease = invoke()
+      assert.equal(work[3]!.signal.aborted, false)
+      let shutdownFinished = false
+      const shutdown = owner.cancelContentSearches().then(() => { shutdownFinished = true })
+      assert.equal(work[3]!.signal.aborted, true)
+      const afterShutdown = await invoke()
+      assert.equal(afterShutdown.ok ? undefined : afterShutdown.code, 'CLOSED')
+      assert.equal(work.length, 4)
+      assert.equal(shutdownFinished, false)
+      work[3]!.complete()
+      await Promise.all([afterRelease, shutdown])
+    } finally {
+      for (const search of work) search.complete()
+      await Promise.allSettled(pending)
+      await owner.cancelContentSearches()
+    }
+  })
+
   void test('streams batches to the window that asked, can be cancelled, and validates requests', async () => {
     const files: ProjectFiles = {}
     for (let index = 0; index < 30; index += 1) files[`f-${String(index).padStart(2, '0')}.ts`] = 'needle\n'
@@ -475,18 +569,14 @@ void describe('project content search IPC', () => {
         const searchHandler = ipcHandlers.get(WorkbenchFsChannels.searchContent)!
         const cancelHandler = ipcHandlers.get(WorkbenchFsChannels.cancelSearchContent)!
         const sent: WorkbenchSearchContentProgressEvent[] = []
-        const destroyedListeners: Array<() => void> = []
-        const sender = {
+        const sender = Object.assign(new EventEmitter(), {
           id: 7,
           isDestroyed: () => false,
           send: (channel: string, event: WorkbenchSearchContentProgressEvent) => {
             assert.equal(channel, WorkbenchFsChannels.searchContentProgress)
             sent.push(event)
           },
-          once: (event: string, listener: () => void) => {
-            if (event === 'destroyed') destroyedListeners.push(listener)
-          },
-        }
+        })
 
         const envelope = (await searchHandler(
           { sender },
@@ -499,14 +589,11 @@ void describe('project content search IPC', () => {
 
         // 取消：搜索中途收到取消就停下，结果标成 cancelled。
         let cancelled: Promise<unknown> = Promise.resolve()
-        const slowSender = {
-          ...sender,
-          send: () => {
-            cancelled = cancelHandler({ sender: slowSender }, { searchId: 's2' }) as Promise<unknown>
-          },
+        sender.send = () => {
+          cancelled = cancelHandler({ sender }, { searchId: 's2' }) as Promise<unknown>
         }
         const second = (await searchHandler(
-          { sender: slowSender },
+          { sender },
           { projectRoot: root, query: 'needle', searchId: 's2' }
         )) as WorkbenchFsCallResult<WorkbenchSearchContentResult>
         await cancelled
@@ -516,7 +603,7 @@ void describe('project content search IPC', () => {
         const invalid = (await searchHandler({ sender }, { projectRoot: root, query: 'x', paths: 'a.ts' })) as WorkbenchFsCallResult<unknown>
         assert.equal(invalid.ok, false)
         assert.equal(invalid.ok ? undefined : invalid.code, 'VALIDATION')
-        assert.equal(destroyedListeners.length, 1)
+        assert.equal(sender.listenerCount('destroyed'), 0)
       } finally {
         await rm(data, { recursive: true, force: true })
       }
@@ -539,13 +626,7 @@ void describe('project content search IPC: closing the window', () => {
         const searchHandler = ipcHandlers.get(WorkbenchFsChannels.searchContent)!
         let destroyed = false
         let sentAfterDestroyed = 0
-        const destroyedListeners: Array<() => void> = []
-        const sender = {
-          // 与 Electron 一样：WebContents 销毁以后（`destroyed` 触发时已经是）再读 id 会抛错。
-          get id(): number {
-            if (destroyed) throw new TypeError('Object has been destroyed')
-            return 11
-          },
+        const sender = Object.assign(new EventEmitter(), {
           isDestroyed: () => destroyed,
           send: () => {
             if (destroyed) {
@@ -554,12 +635,16 @@ void describe('project content search IPC: closing the window', () => {
             }
             // 第一批送到时窗口关了。
             destroyed = true
-            for (const listener of destroyedListeners) listener()
+            sender.emit('destroyed')
           },
-          once: (event: string, listener: () => void) => {
-            if (event === 'destroyed') destroyedListeners.push(listener)
+        })
+        Object.defineProperty(sender, 'id', {
+          // 与 Electron 一样：WebContents 销毁以后再读 id 会抛错。
+          get: () => {
+            if (destroyed) throw new TypeError('Object has been destroyed')
+            return 11
           },
-        }
+        })
 
         const envelope = (await searchHandler(
           { sender },
