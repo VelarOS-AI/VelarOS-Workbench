@@ -1,142 +1,45 @@
-# 剩余阅读与实施清单
+# 剩余实施与验证清单
 
-2026-11-09，源码游标 `724ab61`。此表区分全文阅读证据、尚未修复的已读边界、源码验证及运行矩阵，
-不从文件数或提交数推导完成率。后续若有原始全文回执，可直接扣除对应项，无须重读已审模块找新题。
+2026-11-09。既有生产行为源码的完整阅读回执已经合并，剩余未证实全文路径为 **0**。
+这仅表示阅读覆盖收口；新增实现、行为验证和运行矩阵分别计账，不据文件数或提交数推导完成率。
 
-## 已具名范围与阅读缺口
+## 阅读证据
 
-main / preload / shared 当前生产源码已有具名或明确目录全文记录，剩余未证实全文路径为 **0**。
-renderer 当前有 **95** 个行为源码路径尚未合并到完整正文阅读回执：42 个已有具体接缝，53 个尚无精确全文回执。
-“未证实全文”不等于断言无人读过，也不等于存在缺陷；已修已验的文件仍可只欠其余正文的阅读证据。
-两份 i18n provider/locale 小模块和 CommentHandoff 已按父线全文记录扣除。
+- main / preload / shared 已有具名或明确目录全文记录。
+- `724ab61` 清单中的 renderer 95 路径，先补齐 31 个具名回执，再独立全文读取其余 64 路径、8209 行。
+  最后 64 路径在 `f694f64` 上初末 hash 相同，清单指纹为
+  `9a05bccfd04cf68377580a8191075db26323210ab02141393aed2370a56246d9`。不再重读旧清单寻找重复工作。
+- 工程入口 `scripts/test/conversationRuntime.test.mjs` 已全文读取 911 行、20 场景；
+  `scripts/release/mainExternalEsmPlatformPackages.json` 两项配置及两个真实消费者已核对。
+- 新增 owner、工具隔离算法及后续结构化执行合同按实施差量继续审阅，不冒称旧 hash 覆盖新实现。
 
-工程范围仅有 `scripts/test/conversationRuntime.test.mjs` 的完整阅读证据待补；它是默认测试活跃入口，
-不归为产品 runtime 未读。`scripts/release/mainExternalEsmPlatformPackages.json` 仅欠配置数据本身的明确核对，两个真实消费者已全文。
+## 当前交付与剩余工作
 
-## renderer 精确路径
-
-### A1. 已有实际接缝，未证实其余正文全文（42）
-
-| 当前精确路径 | 已知阅读边界 |
-| --- | --- |
-| `src/renderer/src/components/aiChanges/WorkbenchAiChangeDiffPanel.tsx` | 记录读取/回顾与真实cache hook消费接缝；组件其余主体未证实全文。 |
-| `src/renderer/src/components/aiChanges/WorkbenchAiChangesPanel.tsx` | 记录读取/回顾与真实cache hook消费接缝；组件其余主体未证实全文。 |
-| `src/renderer/src/components/embedded/workbenchEmbeddedKernelModel.ts` | 真实adapter/context形状接缝；不能由Kernel/Adapter全文外推model全文。 |
-| `src/renderer/src/hooks/useProjectHubState.ts` | 项目身份/窗口事件消费接缝；未见此hook全文回执。 |
-| `src/renderer/src/hooks/useWorkbenchCommandController.ts` | 启动/stop/restart、layout资源owner、pending接纳及bootstrap全链已读/修；旧库存明确只计这些段落，未证实大hook其余正文全文。 |
-| `src/renderer/src/hooks/useWorkbenchLanguageServiceInsights.ts` | 请求批次及语言worker真实consumer接缝；语言owner明确不重审renderer整模块。 |
-| `src/renderer/src/hooks/useWorkbenchProductAnalytics.ts` | 外部Settings故障实现diff与父线审阅/验证已完成；没有收到整个hook全文的明确回执。 |
-| `src/renderer/src/hooks/useWorkbenchProjectRunSettings.ts` | 配置/Preferences实际消费接缝；不可由runconfig三个model全文外推本hook全文。 |
-| `src/renderer/src/hooks/useWorkbenchProviderModelCatalog.ts` | Provider/model公开catalog消费/准入接缝；root-late全文四文件不包含此hook。 |
-| `src/renderer/src/hooks/useWorkbenchTopRunControl.ts` | 运行前保存准入修复及真实消费段已读/验证；未证实其它正文全文。 |
-| `src/renderer/src/main.tsx` | 入口/装配已核，当前完整末尾阅读记录未具名。 |
-| `src/renderer/src/models/chat/workbenchChatComposerPlaceholder.ts` | Adapter真实placeholder调用已核；helper主体全文未证实。 |
-| `src/renderer/src/models/chat/workbenchChatFileReferences.ts` | Adapter文件引用/草稿上下文消费已核；helper主体全文未证实。 |
-| `src/renderer/src/models/chat/workbenchChatWorkspacePath.ts` | block hooks真实路径解析消费已核；helper主体全文未证实。 |
-| `src/renderer/src/models/chat/workbenchGoalAutoContinue.ts` | 实际goal续跑决策入口/参数及既有测试接缝已核；model主体全文未明确登记。 |
-| `src/renderer/src/models/commands/workbenchTerminalFileLinks.ts` | TerminalFileLinks hook、终端组件真实消费已核；不由消费者全文推定model全文。 |
-| `src/renderer/src/models/commands/workbenchTerminalFind.ts` | 终端search实际调用已核；model全文未证实。 |
-| `src/renderer/src/models/commands/workbenchTestRunner.ts` | editor运行gutter/debug启动消费接缝；未证实整个model正文全文。 |
-| `src/renderer/src/models/debug/workbenchBreakpoints.ts` | 断点store更新/通知producer已核；旧记录仍仅该接缝。 |
-| `src/renderer/src/models/files/workbenchProjectFileList.ts` | ProjectFileList hook已全文；listing模型的全文证据未明确，不能只因同名推定。 |
-| `src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts` | 外部Space/P2修复diff、真实记录/派发case及父线审验已完成；整文件全文回执未明确。 |
-| `src/renderer/src/models/project/workbenchProjectPresentation.ts` | 项目UI消费/迁移接缝；明确全文的ProjectSession/ContextIndex/Projects集合不含此文件。 |
-| `src/renderer/src/models/workbenchVelarProjectGraph.ts` | 项目snapshot index/合并/筛根真实消费已核；3个codeGraph UI及shared图全文不自动覆盖本renderer model。 |
-| `src/renderer/src/runtime/conversation/WorkbenchAgentEngineBrandIcon.tsx` | 实际running marker/engine显示导入接缝；未具名全文。 |
-| `src/renderer/src/runtime/conversation/WorkbenchRunningRuntimeMark.tsx` | render slot的真实调用入口；未具名全文。 |
-| `src/renderer/src/runtime/conversation/workbenchConversationEngineContext.ts` | 实际engine provider/context消费接缝；未具名全文。 |
-| `src/renderer/src/runtime/standaloneChatScrollPositions.ts` | Adapter read/write接口与restore key消费已核；存储模块主体全文未明确。 |
-| `src/renderer/src/runtime/standaloneUsageTelemetry.ts` | restore/序列化/身份消费及summarizeStandaloneUsage方法已读；仍未记整个文件全文。 |
-| `src/renderer/src/runtime/standaloneWorkbenchCheckpoints.ts` | Adapter检查点/系统说明/append实际producer与类型接缝；不由Adapter全文推定helper全文。 |
-| `src/renderer/src/runtime/workbenchAgentBrowserSite.ts` | 浏览器选中快照/地址归属修复消费接缝；其余正文未证实全文。 |
-| `src/renderer/src/runtime/workbenchAgentEngines.ts` | 引擎状态/模型选择与启动准入消费接缝；未具名全文。 |
-| `src/renderer/src/runtime/workbenchAgentProjectWrites.ts` | publisher/subscriber与Git/editor刷新消费链已核；未明确记该helper全文。 |
-| `src/renderer/src/runtime/workbenchBrowserElementContext.ts` | 专项导入及prompt格式化/选择数据消费接缝；初始记录明确不算整模块。 |
-| `src/renderer/src/runtime/workbenchClipboardFile.ts` | 附件/剪贴板本机路径消费接缝；未明确记模块全文。 |
-| `src/renderer/src/runtime/workbenchMessageDedupe.ts` | 消息宿主/通知实际消费接缝；helper全文未证实。 |
-| `src/renderer/src/runtime/workbenchMessageHost.tsx` | 消息host实际接线与useStableWorkbenchMessaging消费已核；host主体全文未明确。 |
-| `src/renderer/src/support/genericHooks.ts` | latest/memoized/monotonic/TimerScope相关调用段；Git owner明确没有全文件阅读。 |
-| `src/renderer/src/support/lazyWithPreload.ts` | lazy实际装配/预热消费；helper主体全文未明确。 |
-| `src/renderer/src/support/useBlockWheelScroll.ts` | CM菜单wheel控制消费；hook主体全文未明确。 |
-| `src/renderer/src/support/useDismissOnWindowInteract.ts` | CM/菜单dismiss实际调用；hook主体全文未明确。 |
-| `src/renderer/src/welcome/NewProjectDialog.tsx` | 项目打开/新建/切换真实消费已核；ProjectPicker主体全文不外推本UI全文。 |
-| `src/renderer/src/welcome/WorkbenchWelcomePage.tsx` | 真实欢迎页项目入口接缝已读；未明确登记本UI全部正文。 |
-
-### A2. 尚无可合并的精确全文回执（53）
-
-以下仅标“全文未证实”；不能因这里未逐项记消费段，推断其无人读过或存在故障。按当前文件树展开旧模糊目录，无隐藏通配符。
-
-- `src/renderer/src/app/StandaloneWorkbenchApp.tsx`
-- `src/renderer/src/app/WorkbenchPageModelContext.tsx`
-- `src/renderer/src/components/WorkbenchAgentRail.tsx`
-- `src/renderer/src/components/WorkbenchUpdateProgress.tsx`
-- `src/renderer/src/components/editor/EditorBreadcrumbBar.tsx`
-- `src/renderer/src/components/editor/EditorFileDiagnosticSummary.tsx`
-- `src/renderer/src/components/editor/WorkbenchProblemSeverityIcon.tsx`
-- `src/renderer/src/components/files/ProjectSearchForm.tsx`
-- `src/renderer/src/components/files/WorkbenchFileTypeIcon.tsx`
-- `src/renderer/src/hooks/useWorkbenchAiChanges.ts`
-- `src/renderer/src/hooks/useWorkbenchCommandPalette.ts`
-- `src/renderer/src/hooks/useWorkbenchEditorTabOverflow.ts`
-- `src/renderer/src/hooks/useWorkbenchKeyboardShortcuts.ts`
-- `src/renderer/src/hooks/useWorkbenchKeymapController.ts`
-- `src/renderer/src/hooks/useWorkbenchLayoutController.ts`
-- `src/renderer/src/hooks/useWorkbenchPreferences.ts`
-- `src/renderer/src/hooks/useWorkbenchProjectSearchPanel.ts`
-- `src/renderer/src/hooks/useWorkbenchRecentFiles.ts`
-- `src/renderer/src/hooks/useWorkbenchSearchController.ts`
-- `src/renderer/src/hooks/useWorkbenchSurfaceState.ts`
-- `src/renderer/src/hooks/useWorkbenchWindowFullScreen.ts`
-- `src/renderer/src/hooks/workbenchCommand/useWorkbenchCommandPackageSuggestions.ts`
-- `src/renderer/src/models/chat/workbenchAiChangeRounds.ts`
-- `src/renderer/src/models/chat/workbenchChatSessionGroups.ts`
-- `src/renderer/src/models/chat/workbenchCrossProjectRoots.ts`
-- `src/renderer/src/models/commands/workbenchCommandHistory.ts`
-- `src/renderer/src/models/commands/workbenchCommandLines.ts`
-- `src/renderer/src/models/commands/workbenchCommandStatusModel.ts`
-- `src/renderer/src/models/commands/workbenchCommandSuggestions.ts`
-- `src/renderer/src/models/commands/workbenchConsoleOutputHighlight.ts`
-- `src/renderer/src/models/commands/workbenchPackageScriptCommand.ts`
-- `src/renderer/src/models/commands/workbenchShellQuote.ts`
-- `src/renderer/src/models/commands/workbenchTerminalPresentation.ts`
-- `src/renderer/src/models/commands/workbenchVelarFileCommand.ts`
-- `src/renderer/src/models/files/fileTree.model.ts`
-- `src/renderer/src/models/files/workbenchFilePresentation.ts`
-- `src/renderer/src/models/files/workbenchFileSearchNavigationModel.ts`
-- `src/renderer/src/models/files/workbenchPathModel.ts`
-- `src/renderer/src/models/files/workbenchRecentFiles.ts`
-- `src/renderer/src/models/files/workbenchTestFile.ts`
-- `src/renderer/src/models/files/workbenchTreeMutation.ts`
-- `src/renderer/src/models/files/workbenchTreeNavigationModel.ts`
-- `src/renderer/src/models/files/workbenchTreeRenameFocus.ts`
-- `src/renderer/src/models/layout/workbenchCommandPalette.ts`
-- `src/renderer/src/models/layout/workbenchKeymapPresets.ts`
-- `src/renderer/src/models/layout/workbenchLayoutModel.ts`
-- `src/renderer/src/models/layout/workbenchQuickOpenModel.ts`
-- `src/renderer/src/models/layout/workbenchQuickOpenSymbols.ts`
-- `src/renderer/src/models/layout/workbenchSurfaceModel.ts`
-- `src/renderer/src/models/layout/workbenchViewport.ts`
-- `src/renderer/src/models/shared/workbenchFuzzyScore.ts`
-- `src/renderer/src/models/shared/workbenchUtils.ts`
-- `src/renderer/src/welcome/lastOpenedLabel.ts`
-
-
-## 已读未修或待核边界
-
-| 状态 | 精确路径 | 边界 |
+| 边界 | 当前状态 | 最小剩余工作 |
 | --- | --- | --- |
-| 已读、待实施 | `src/main/workspace/language/JavaScriptLinting.ts`、`WorkbenchDocumentFormatter.ts`、`LanguageServices.ts` | JS/TS/CJS 配置及其依赖图完整热重载；数据配置已修，不能用清配置缓存代表整个模块图已清。 |
-| 已读、下一写批 | `src/main/updates/WindowsArchiveUpdater.ts`、`WorkbenchUpdateService.ts`、`WorkbenchUpdateRuntime.ts`、`resources/updates/windows-update.cjs` | 等旧 worker 真实退出后取消；后继应用按回执回收安装 helper。 |
-| 已读、下一写批 | `scripts/probe/runElectronRuntimeProbe.mjs`、`electronProbeEntrypoint.mjs`、`scripts/test/runIsolatedTests.mjs`、`src/main/workspace/terminal/terminalProbe.ts` | 宿主强杀与独立 PTY 后代 owner；isolated Windows taskkill 自身期限。保持原预算。 |
-| 候选，未证实运行故障 | `src/renderer/src/hooks/useWorkbenchTreeController.ts`、`src/renderer/src/hooks/useWorkbenchEditorConfig.ts` | 路径读取代际与 EditorConfig 错误/缺失缓存合同，未凭静态疑点升级为必修。 |
-| 候选，未证实运行故障 | `src/main/conversation/ConversationAgents.ts`、`ConversationScripts.ts`、`WorkbenchSessionPeersIpc.ts` | observe 预览预算及最终 destroyed 窗口引用回收；不重复修已交付 sequence/receipt。 |
+| JS/TS/CJS 配置传递依赖 | `ff0ea87` 已交付。真实同 Services 根外 CJS→ESM lint 与 CJS formatter 依赖变化在原 5 秒内通过；新增 Tools Worker 入口实际打包及 NativeNode RPC/退出通过。 | 无已知待修；TS 热服务身份保留，相关类型、源码/测试 lint 与脚本严格检查已绿。 |
+| Windows updater helper 回收 | `d5e6ec7` 已交付。真实 worker 句柄、匹配终态回执及取消停止 ACK 均由任务 owner 持有；实际原生安装收尾、恢复、错回执、相邻目录保留、替换和取消已验证。 | 无已知待修；五项必要用例、node 类型及相关 TS/JS lint 已绿，未扩充原预算。 |
+| probe / isolated 宿主收口 | `9c2b932` 已交付。实际 CP/终止命令 close、延迟 force 和清理 ACK 已接通；真实缺回执故障及原 entrypoint 用例通过，实际 Electron/PTY 原 17 项断言通过。 | 无已知待修；原 120 秒预算保留。 |
+| renderer 最后阅读发现 | `49e4399`、`564b14e`、`59bcbcb`、`48e94c9` 已交付请求归属、根路径、精确 fuzzy、死链及测试运行器识别修复。 | 无已知待修；必要路径用例、类型及相关 lint 已绿；DOM 乱序未实测。 |
+| 生成命令字面参数 | `aa15f43` 已贯通 shared、terminal/debug、生成器、菜单、保存、启动项与重启。10 项 renderer、10 项 backend、三次真实 PTY 启动及一次真实 npm-prefix 查询取消/关闭故障通过。 | 无已知待修；node/web 类型与全部改动源码/测试定向 lint 已绿。实际 Corepack 下载/版本矩阵未运行；用户手写 command/raw args 保留实际 shell 语义。 |
+| Tree 与 EditorConfig | `b9bb6c6` 已交付目录读取请求归属、失败 Promise 身份移除和错误分类；仅 NOT_FOUND 缓存缺失，其他失败不应用父规则，下一次自然请求可重试。 | 无已知待修；web 类型与两文件 lint 已绿，真实 DOM 乱序未实测。 |
+| observe 预览与 peer 引用 | `a5d3ffd` 已交付 observe/execute 有界摘要副本及 destroyed peer watcher 释放；实际 Board 八项断言、原 trace/共享身份及相关检查通过。 | 展示层已收口；新的模型动态上下文、历史和缓存合同等待下行的正式 Core 包。 |
+| Platform 固定归档 | `1850cf7` 已接入 0.9.3：正式身份、一次 Bun 安装、完整三包锁及新归档原生 Node 取消/关闭用例均通过。 | 旧 0.9.1/0.9.2 证据保留；待下一份固定正式包交接后，一次接入新 observe 合同并转发真实 `observationSupport()`。 |
 
-本轮已修源码必要验证无待项：LSP/Markdown、恢复、SourceMap、评论草稿、codeGraph、设置、安装助手和纯死链均已有相应最小检查；
-这句话不覆盖下方运行矩阵，也不把尚未实施的已读边界算作解决。逐批证据见 [refactoring-progress.md](./refactoring-progress.md)。
+Tools Worker 额外短命 isolate 使用原 H 堆上限；H 不是两个 isolate 的聚合上限，潜在总量有限增加。
+冷配置加载可能在原请求期限内明确失败，不能承诺所有大型项目仍按旧热缓存时延成功。
+任意项目配置自行创建、脱离已知 owner 的外部服务不属于线程退出的完整保证。
+
+已交付源码的必要验证见 [refactoring-progress.md](./refactoring-progress.md)。已合理保留的账号 CAS、编码往返、
+事务撤销、真实进程树、Git 影子 index/ref、TS 热池与有界缓存、编辑器同步 owner、跨组文件状态不重复改写。
+旧 Claude CLI unknown 授权状态缺少足够版本证据支持删除，保持既有合同。
 
 ## 数据、fixture 与运行矩阵
 
-- `src/renderer/src/i18n/messages/en-US.ts` 与 `src/renderer/src/i18n/messages/zh-CN.ts`：入口/合并/消费已审，未逐条核对翻译字面量。31 CSS、样式入口、声明与 HTML 仅按具体消费接缝核读，未做逐字样式或视觉审计。
-- 历史 `tests/fixtures/**` 只按实际故障消费核读，不声称每份历史 fixture 全文。
-- 真实 DOM、滚动/测量帧、HMR/native 连续时序、Windows/macOS/Linux PTY/磁盘/权限、第三方 CLI/LSP 版本、Cloud 续期、签名安装与负载矩阵未穷尽。
-- 已脱离父链/进程组且关闭继承 stdio 的任意 daemon 后代，不在 Node 公开 ChildProcess close 合同的完整保证内；不能用 PID 消失冒充真实 owner close。
+- renderer 两份大语言表只核入口/合并/消费，未逐条核对翻译字面量；31 CSS、声明、HTML 未做逐字或视觉审计。
+- 历史 `tests/fixtures/**` 按实际故障消费核读，不声称每份历史 fixture 全文。
+- 真实 DOM、滚动/字体帧、HMR/native 连续时序、跨 OS PTY/磁盘/权限、第三方工具版本、Cloud 续期、签名安装与负载矩阵未穷尽。
+- 已脱离父链/进程组且关闭继承 stdio 的任意 daemon 后代，不在 Node 公开 ChildProcess close 合同的完整保证内。
+- observe 已确认保留，按小状态、摘要、差量和引用提供反馈；独立动态上下文及历史读取由 Platform 核心实现。
+  Workbench 等待固定正式包，接入真实宿主支持声明，不在旧包上补造核心 API；UI 预览仍保持原始 trace、
+  增量事实、请求指纹和 provider 前缀缓存的既有合同。

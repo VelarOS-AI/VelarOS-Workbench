@@ -17,8 +17,8 @@
 
 ## 实际依赖边界
 
-当前使用 Platform 正式发布 `v0.7.3` / commit `ae20dcebf5d086d99ff7d8df1701d71a91574efe`，
-Velaros / Capabilities 均 `0.9.2`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
+当前使用 Platform 正式发布 `v0.7.4` / commit `308b3f306f103ba1942b6fd383ab558c441f82f0`，
+Velaros / Capabilities 均 `0.9.3`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
 全部为带哈希的本仓归档，不是兄弟仓链接；schema2 记录正式来源。0.9.1 候选及消费证明保留为历史证据。
 
 - Runtime 根入口：createRuntime、openSessionControl、createCapabilityModule、会话/笔记/trace；Node 入口为 `/node`。
@@ -32,7 +32,7 @@ Platform 只持有通用 Agent/Session、执行、上下文、交互与授权。
 
 ## 固定归档接入
 
-1. ADR 0028 / 0029 与配套双包已交付；最终消费 0.9.2 正式归档，执行与独立无执行控制口均使用公开合同。
+1. ADR 0028 / 0029 与配套双包已交付；当前消费 0.9.3 正式归档，执行与独立无执行控制口均使用公开合同。
 2. project/code/images、memory、widget、worker profile 已按实际构建后的公开声明显式装配。
 3. executionIdentity、authorizationScope 与模块绑定是通用恢复约束；Workbench 的项目与浏览器选择留在产品。
 4. manifest、Bun 锁与已安装双包均已切换；可核验来源及归档见迁移文档，不加旧接口适配或 node_modules 补丁。
@@ -303,5 +303,61 @@ worker 只持有有界字节传输，main 保留 ChildProcess、stdio、终止�
 改用实际 Node/Electron 脚本环境，未放宽严格规则；实际 stdin=null 类型与诊断 code 联合类型按真实合同修正，行为绿项复用。
 Windows 已脱离父链且关闭 stdio 的后代仍非完整保证；保留实际安装/Web/Core/Desktop 入口，未重跑整套安装验收。
 
-精确剩余清单现见 [refactoring-remaining.md](./refactoring-remaining.md)：main/preload/shared 当前生产源码全文证据缺口为零；
-renderer 95 个行为源码尚欠完整正文回执，不能据此断言无人读过；i18n 大数据、声明/样式、fixture 与运行矩阵分别列出。
+精确剩余清单见 [refactoring-remaining.md](./refactoring-remaining.md)。原 renderer 95 个行为源码已合并 31 份回执，
+最后 64 路径又全文读取 8209 行且初末 hash 相同；既有生产行为源码的全文证据缺口现为零。
+工程最后两项（conversationRuntime 测试入口及外置包清单数据）也已补齐；i18n 大数据、声明/样式、fixture 与运行矩阵另计。
+
+Platform 0.9.3 正式发布身份、tag/source、GitHub 资产 digest、实际归档 SHA/长度及 tar 身份核验通过；
+一次 Bun 1.4.3 安装后，三包完整锁身份和新归档上的真实 Node 24.22 取消/关闭/写窗口用例通过。
+0.9.1/0.9.2 原字节及回执保留；旧业务绿项没有改称新归档执行。UI 1.0.0 与产品项目/浏览器选择保持原合同。
+
+## 2026-11-09 最后实施与验收
+
+`a5d3ffd` 为 observe/execute 的 UI 预览统一制作有界摘要副本，并在 peer 销毁时移除 watcher 强引用。
+实际 Board 八项断言通过，包含冻结 summary、完整 trace 字节及 request/summary 身份保持；相关类型和 lint 通过。
+读取原始完整 trace 的既有授权路径保留，未修改模型编译、provider、缓存或执行增量事实。
+
+`49e4399` 交付 AIChanges、Insights、Suggestions、layout、BrowserSite、NewProject、UpdateProgress 的请求归属与事件修复。
+`564b14e` 修正 fuzzy 为精确 O(mn) 动态规划，原六项用例及 `axabc`/`abc` 反例通过；矩阵从每格 13 字节变为
+16 字节并加 O(n) hull，不能称内存不变；同时退役排序死链。`59bcbcb` 修复根 `/` 路径并退役零消费叶模块和选项。
+`48e94c9` 通过语法树识别测试运行器导入，新增三项行为通过。相关类型与定向 lint 已绿，DOM 乱序未实测。
+
+`9c2b932` 让 probe/isolated 宿主保留真实子进程、终止命令、延迟 force 与资源清理 ACK 的 owner。
+SIGTERM 前登记后续强杀对同一 PID 集合的责任，实际列举/信号任务、强杀和 onExit 完成后才接收清理回执。
+真实 Node 缺回执故障及三条原 entrypoint 夹具通过；实际 Electron/PTY terminal probe 原 17 项断言通过。
+构建、运行、关闭与强杀仍在原 120 秒绝对预算内，没有重写 TerminalSessions 原输出/背压算法。
+
+`ff0ea87` 为 lint/formatter 每次请求建立真实短命 Tools Worker，避免 CJS/ESM 传递依赖继续复用旧模块缓存。
+同一 Services 上根外 CJS→ESM lint 及 CJS Prettier 依赖变化在 4643ms 内通过，原 5 秒不变，TS 热服务身份保留。
+node 类型、18 node / 12 测试 lint、安装验收脚本严格检查与 Vite 配置 lint 通过；只打包新增真实入口，
+再以 NativeNode 24 执行真实 Worker lint/format RPC 并确认退出，行为约 7.8 秒，统一 45 秒预算内通过。
+每个 isolate 使用既有 H 堆上限；H 不限制两个 isolate 的聚合内存，潜在总量有限增加。
+冷配置加载可能在原请求期限内明确失败；任意配置自行脱离 owner 的外部 daemon 不属于线程退出完整保证。
+
+`b9bb6c6` 为树读取捕获原项目、目录与请求身份，在成功、NOT_FOUND 及队列提交处均核当前 owner。
+EditorConfig 仅缓存 NOT_FOUND；其他失败按原 Promise 身份移除，不套用父规则，下一次自然请求可以重试。
+失败按 AppError 分类并由当前 effect 报告一次。两个 hook lint 及最终 web 类型通过，没有新增镜像 hook/DOM harness。
+
+`d5e6ec7` 以持久任务身份、匹配终态回执和实际进程关闭收束 Windows updater helper。
+PowerShell 通过系统 conhost 启动，持有真实 worker Process 句柄；取消停止 ACK 只确认观察者停止，
+不能冒充 worker 已退出。主进程等待真实 worker close 并核回执后才回收本任务目录，未知状态保留诊断。
+五项必要用例通过：回滚双错与受保护目录两项，原生安装收尾/恢复/错回执/相邻目录一项，原生替换与取消两项。
+node 类型、三份 TS 和两份 JS lint 通过。未运行真实应用重启、签名或整套安装矩阵，原测试预算不变。
+
+`aa15f43` 统一生成命令的结构化 process/argv 合同，贯通 terminal/debug、gutter、菜单、配置保存、启动项与重启。
+展示文字不再解析后执行；raw command/Node raw args 保留所选实际 shell 语义。每次启动固定实际 cwd 与一次登录环境快照，
+叠加请求 env 后在同一快照上解析及启动 Node/Python/CLI；Node inspector 前缀和测试运行器参数位置分别保留。
+受支持的完整 npm/cmd-shim 模板按真实安装前缀和 shim 分支解析，Corepack 保留实际选中的 dispatcher，未知 wrapper、
+PnP 与非 Node bin 明确失败。launcher 内容单句柄读取上限 64KiB+1；CLI 查询登记真实子进程与终止命令，
+共享原 5 秒绝对期限和 64KiB 聚合输出上限，settled 超时不提前释放尚未实际关闭的 owner。
+
+本批 10 项 renderer、10 项 backend（含真实 Node/CDP 控制器集成）通过；三次实际 Electron/PTY 启动验证了含空白、
+空参数、`%PATH%`、`$()`、反引号、单双引号及尾反斜杠的字面 argv，raw Git Bash 展开，以及真实 npm 脚本/参数传递。
+raw shell 按自身规则改变 PATH，测试核对实际选中 Node 身份；不错误要求 shell 启动后 PATH 字节不变。
+最后一次 NativeNode 24 npm-prefix 查询故障在就绪时关闭终端 owner，789ms 内确认查询和终止命令实际 close，
+启动为 CANCELLED、零 PTY 输出且未到达 CLI；原 5 秒用例不变。node/web 类型与全部改动源码/测试定向 lint 通过。
+实际 Corepack 下载/版本、跨 OS 及 DOM 连续交互未运行；没有完整构建、全量回归或再次安装依赖。
+
+既有生产行为源码全文阅读剩余为零，以上新增实现另按差量审阅。当前无已知待修源码缺陷；剩余接入项是下一份
+固定正式 Core observe 包。用户已确认保留 observe 的小状态/摘要/差量/引用，动态上下文与历史由 Core 提供；
+收到正式身份后才转发真实 `ShellHostPort.observationSupport()`，不在旧 0.9.3 上补造支持声明或改写 provider 前缀缓存。
