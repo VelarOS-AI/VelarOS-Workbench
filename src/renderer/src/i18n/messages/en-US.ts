@@ -62,6 +62,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     pathMissing: 'Path not found',
     removeRecentProject: 'Remove from recent projects',
     justNow: 'Just now',
+    projectStateLoadFailed: 'Could not load project state',
+    retryProjectState: 'Retry',
     newProjectTitle: 'New Project',
     newProjectName: 'Project name',
     newProjectLocation: 'Location',

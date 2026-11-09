@@ -3,6 +3,8 @@ import { FolderOpenIcon } from '@phosphor-icons/react'
 import { WorkbenchProductRuntimeProvider } from '@renderer/composition/WorkbenchProductRuntimeProvider'
 import { WorkbenchLocalizationProvider } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
+import { Button, Stack, Text, Title } from '@velaros-ai/ui'
+
 import { WorkbenchProductAnalyticsNoticeDialog } from '../components/settings/WorkbenchProductAnalyticsNoticeDialog'
 import { useProjectHubState } from '../hooks/useProjectHubState'
 import { standaloneWorkbenchProductRuntimeValue } from '../host/standaloneWorkbenchProductRuntime'
@@ -26,7 +28,7 @@ const LazyWorkbenchWorkspaceShell = lazy(async () => {
  * 聊天装配随工作台一起按需加载（见 WorkbenchWorkspaceShell），起手页不带它。
  */
 export function StandaloneWorkbenchApp(): ReactElement {
-  const { state, ready } = useProjectHubState()
+  const projectHub = useProjectHubState()
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false)
   const [externalProjectDropActive, setExternalProjectDropActive] = useState(false)
   const externalDragDepthRef = useRef(0)
@@ -112,31 +114,53 @@ export function StandaloneWorkbenchApp(): ReactElement {
     }
   }, [])
 
-  if (!ready) return <></>
-
   return (
     <WorkbenchLocalizationProvider value={localization}>
       <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
         <div className="workbench-external-project-drop-root">
-          {state.currentProject ? (
-            <Suspense fallback={null}>
-              <LazyWorkbenchWorkspaceShell
-                project={state.currentProject}
-                projectHubState={state}
+          {projectHub.kind === 'ready' ? (
+            projectHub.state.currentProject ? (
+              <Suspense fallback={null}>
+                <LazyWorkbenchWorkspaceShell
+                  project={projectHub.state.currentProject}
+                  projectHubState={projectHub.state}
+                />
+              </Suspense>
+            ) : (
+              <WorkbenchWelcomePage
+                state={projectHub.state}
+                onNewProject={() => setNewProjectDialogOpen(true)}
               />
-            </Suspense>
+            )
           ) : (
-            <WorkbenchWelcomePage
-              state={state}
-              onNewProject={() => setNewProjectDialogOpen(true)}
+            <main
+              className="workbench-welcome"
+              role={projectHub.kind === 'error' ? 'alert' : 'status'}
+              aria-busy={projectHub.kind === 'loading'}
+            >
+              <Stack gap="sm">
+                {projectHub.kind === 'error' ? (
+                  <>
+                    <Title level={5}>{localization.t('welcome.projectStateLoadFailed')}</Title>
+                    <Text tone="secondary">{projectHub.message}</Text>
+                    <Button size="sm" variant="outline" onClick={projectHub.retry}>
+                      {localization.t('welcome.retryProjectState')}
+                    </Button>
+                  </>
+                ) : (
+                  <Text>{localization.t('common.loading')}</Text>
+                )}
+              </Stack>
+            </main>
+          )}
+          {projectHub.kind === 'ready' && (
+            <NewProjectDialog
+              open={newProjectDialogOpen}
+              onOpenChange={setNewProjectDialogOpen}
             />
           )}
-          <NewProjectDialog
-            open={newProjectDialogOpen}
-            onOpenChange={setNewProjectDialogOpen}
-          />
           <WorkbenchMessageHost />
-          <WorkbenchProductAnalyticsNoticeDialog />
+          {projectHub.kind === 'ready' && <WorkbenchProductAnalyticsNoticeDialog />}
           {externalProjectDropActive && (
             <div className="workbench-external-project-drop-overlay" role="status">
               <div className="workbench-external-project-drop-card">

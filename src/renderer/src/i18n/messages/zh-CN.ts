@@ -53,6 +53,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     pathMissing: '路径不存在',
     removeRecentProject: '从最近项目移除',
     justNow: '刚刚',
+    projectStateLoadFailed: '无法加载项目状态',
+    retryProjectState: '重试',
     newProjectTitle: '新建项目',
     newProjectName: '项目名称',
     newProjectLocation: '位置',
