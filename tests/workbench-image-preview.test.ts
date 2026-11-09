@@ -51,6 +51,9 @@ void describe('Workbench image preview editor state', () => {
     assert.equal(resolveWorkbenchImageMediaType('attachment', 'image/svg+xml; charset=utf-8'), 'image/svg+xml')
     assert.equal(resolveWorkbenchImageMediaType('photo.webp'), 'image/webp')
     assert.equal(isWorkbenchImagePreviewPath('photo.jpeg'), false)
+    assert.equal(isWorkbenchImagePreviewPath('notes.constructor'), false)
+    assert.equal(isWorkbenchImagePreviewPath('notes.__proto__'), false)
+    assert.equal(resolveWorkbenchImageMediaType('notes.constructor', 'image/png'), 'image/png')
   })
 
   void test('keeps image tabs read-only and out of opened-file context snapshots', () => {

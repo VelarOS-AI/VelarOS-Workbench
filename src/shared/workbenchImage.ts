@@ -6,11 +6,11 @@ export const WorkbenchImageMediaTypes = [
 
 export type WorkbenchImageMediaType = (typeof WorkbenchImageMediaTypes)[number]
 
-const ImageMediaTypeByExtension: Readonly<Record<string, WorkbenchImageMediaType>> = {
-  png: 'image/png',
-  svg: 'image/svg+xml',
-  webp: 'image/webp',
-}
+const ImageMediaTypeByExtension = new Map<string, WorkbenchImageMediaType>([
+  ['png', 'image/png'],
+  ['svg', 'image/svg+xml'],
+  ['webp', 'image/webp'],
+])
 
 function fileExtension(path: string): string {
   const name = path.split(/[/\\]/u).at(-1) ?? ''
@@ -22,7 +22,7 @@ export function resolveWorkbenchImageMediaType(
   path: string,
   mediaType = ''
 ): WorkbenchImageMediaType | null {
-  const extensionType = ImageMediaTypeByExtension[fileExtension(path)]
+  const extensionType = ImageMediaTypeByExtension.get(fileExtension(path))
   if (extensionType) return extensionType
 
   const normalizedMediaType = mediaType.split(';', 1)[0]?.trim().toLowerCase() ?? ''
