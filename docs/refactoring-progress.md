@@ -258,3 +258,25 @@ GoToLine 在未就绪时保留输入和意图，取消、改输入或转查找�
 本轮新增完整静态覆盖：PageModel、Controller、项目 session/context index、DebugPanel、浏览器两面板、
 EmbeddedKernel/Adapter、main i18n、shared 大合同，以及 Git 全 hooks/13 组件/16 模型和直接 editor/history/refresh 消费。
 未发现需要修改的跨组状态、调试暂停序号、变量按需读取、webview 事件解除等约束保留；剩余只接缝与未读路径见短表。
+
+`736f66d` 将行内评论草稿绑定原文件 owner 和真实文档，在外部改写的 ViewUpdate 中先映射范围再发布正文；
+删除范围即撤销，旧 popup 提交与测量回执不能操作后继草稿。非删除映射保留已输入评论。web 类型和单文件 lint 通过，
+没有新 DOM harness，popup/字体帧交互未实测。
+
+`e4a7ade` 在同一 32 MiB 上限下，先核内联编码字节再解码，外置映射持文件句柄 stat 后做有界读取，
+多一个字节判定读取期间增长。既有内联 Unicode 和真实 Node 外置映射断点场景通过，相关 lint、统一 node 类型通过。
+`dfc23c7` 删除零生产消费的列表/超时/类型别名和文件变更 identity wrappers；实际事务/编码逻辑保留。
+旧摘要 helper 专属断言随死链退役；两条真实编码用例、watch probe 原 16 项断言、相关 lint 与 node 类型通过。
+watch 的依赖目录断言现在必须先观察到真实事件，不能靠空数组 every 通过；未扩大原预算或断言数量。
+
+`bfdbfaf` 让慢恢复与发送准备共用真实项目/会话 owner。撤销后旧读取不能替换后继运行；实时与持久流先匹配
+inputId/streamId，再推进该运行的 sequence。旧 journal 仅从真实 header 补齐缺失身份，冲突拒绝。
+外层恢复生命周期保留；实际 ChatConversationPane 使用项目/会话 key，固定 UI 1.0.0 内部迟到 goal 状态随会话卸载。
+恢复撤销与旧日志身份两项必要故障、node/web 类型及 3 node / 3 web / 1 测试 lint 通过；新增 Pane key 后仅复查 web 类型和 Adapter lint。
+真实 DOM/native/HMR 连续交互未测，没有增加第二套后端 admission 锁或修改发布包。
+
+本轮额外全文覆盖 PagePresentation、terminal 组件与输出总线、十个聊天卡片/工具窗口、账号/模型 IPC 主体。
+外部只读补齐三个编辑器插件和三个 codeGraph UI，共 3338 行，初末 hash 相同；其引用的既有测试仅阅读，未冒称绿项。
+编辑器无高置信行为问题，零生产消费者的 hover helper 正在窄删；codeGraph Dialog 三项归属问题进入实施。
+LSP main owner 新故障及两个本地协议场景仍在原预算内超时，只有进程终止旧场景通过；node 类型已绿，尚未交付该批。
+Markdown 新 SDK 读取故障同样正在定位真实 gate，不能用静态实施冒充完成。
