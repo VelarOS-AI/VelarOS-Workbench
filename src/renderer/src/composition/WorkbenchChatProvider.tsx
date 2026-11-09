@@ -6,8 +6,8 @@ import {
   useContext,
 } from 'react'
 
+import { type BrowserElementSelection } from '@velaros-ai/capabilities/browser/contracts'
 import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
-import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
 
 import { type SystemFileChangePreviewResult } from '@shared/contracts/system'
 import type {

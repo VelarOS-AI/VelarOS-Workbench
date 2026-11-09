@@ -3,7 +3,7 @@ import { basename, join, resolve } from 'node:path'
 
 import { app, BrowserWindow, session, shell, webContents } from 'electron'
 
-import { createElectronBrowserRuntime } from '@velaros-ai/velaros/browser/electron'
+import { createElectronBrowserRuntime } from '@velaros-ai/capabilities/browser/electron'
 import { Log } from '@velaros-ai/velaros/core'
 import { createShellEnvironment } from '@velaros-ai/velaros/execution/local'
 import { createModelRuntimeComposition } from '@velaros-ai/velaros/model'

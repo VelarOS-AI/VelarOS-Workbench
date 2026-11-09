@@ -22,8 +22,9 @@ export interface WorkbenchPeerTask extends WorkbenchConversationSessionRequest {
 
 export type WorkbenchPeerEvent =
   | { type: 'prepare'; task: WorkbenchPeerTask }
+  | { type: 'prepare-guidance'; task: WorkbenchPeerTask }
+  | { type: 'guidance-accepted'; task: WorkbenchPeerTask }
   | { type: 'cancel'; task: WorkbenchPeerTask; message: string }
-  | { type: 'failed'; ref: WorkbenchConversationSessionRequest; message: string }
 
 export interface WorkbenchSessionPeersBridge {
   catalog(request: {

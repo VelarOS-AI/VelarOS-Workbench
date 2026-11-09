@@ -17,24 +17,25 @@
 
 ## 实际依赖边界
 
-当前快照 `v0.6.111` / `d0dadb56ab56dc5b832831617073ee754dd663f0`，Velaros `0.7.0`；
-UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。全部为带哈希的本仓归档，不是兄弟仓链接。
+当前使用 Platform 固定本地候选 commit `e3e157696994a0d667cbd542a809484b93e40e71`，
+Velaros / Capabilities 均 `0.9.1`；UI `1.0.0` / `c6be9c5a143a96913422f6a577885a870c6fc274`。
+全部为带哈希的本仓归档，不是兄弟仓链接；schema2 保存来源证明，候选不能进入正式 stage。
 
-- Runtime 根入口：createRuntime、createNodeExecutionEnvironment、createCapabilityModule、会话/笔记/trace。
+- Runtime 根入口：createRuntime、openSessionControl、createCapabilityModule、会话/笔记/trace；Node 入口为 `/node`。
 - 执行与上下文：execution、execution/local、script、act/agents、kernel、contracts、renderer。
-- 显式接入能力：browser（含 electron/contracts/renderer）、sessions、web；当前隐式能力为 project/code/images、memory、widgets、agents。
+- 显式接入能力：Capabilities 的 project/code/images、browser（含 electron/contracts/renderer）、sessions、web；基础的 memory、widgets、agents 由产品显式选择。
 - 产品宿主：project 内核供 IDE 读文件/规则；memory 存储按真实项目根分格；model 连接与目录；core 通用错误、计时、原子写和共享账号资源。
 - UI：公开 conversation、contracts、composer、markdown 与组件/样式入口。
 
 Workbench 独占项目/浏览器 workspace、项目成员/资源/权限策略、IDE 与产品窗口、产品会话目录及投递。
 Platform 只持有通用 Agent/Session、执行、上下文、交互与授权。Cloud 是独立服务。
 
-## 待 Platform owner 交付
+## 固定候选接入
 
-1. ADR 0028 已明确新 createRuntime、/node 与基础/扩展归属；仍待无执行控制会话的公开合同。
-2. project/code/images、memory、widget、worker profile 显式装配以实际构建后的公开声明为准。
+1. ADR 0028 / 0029 与配套 0.9.1 已交付；执行与独立无执行控制口均使用公开合同。
+2. project/code/images、memory、widget、worker profile 已按实际构建后的公开声明显式装配。
 3. executionIdentity、authorizationScope 与模块绑定是通用恢复约束；Workbench 的项目与浏览器选择留在产品。
-4. 可核验源码提交、版本、包闭包与固定归档哈希。收到后一次切换，不加旧接口适配或 node_modules 补丁。
+4. manifest、Bun 锁与已安装双包均已切换；可核验来源及归档见迁移文档，不加旧接口适配或 node_modules 补丁。
 
 ADR 0028 已读，产品装配方案：
 
@@ -43,7 +44,7 @@ ADR 0028 已读，产品装配方案：
 - 每项目/会话目录显式建立存储；执行身份派生自产品确认的真实项目根、会话，授权范围包含沙箱策略；产品恢复入口重新核验窗口项目。
 - 显式建立 project kernel/ports、project/code/images 三模块和稳定 instance/generation；console、browser/devtools/cdp、web、sessions 继续由 Workbench 注入；memory、widgets、worker profile 显式选择。
 - 旧 runtime:workspace 不兼容读取；切换到新存储代际，界面历史可保留，新执行从经核验的新会话开始。
-- 缺口：`WorkbenchConversationSession.openControl` 无模型读取笔记/目标时当前不挂业务模块；新 `SessionExecutionBinding` 要求模块绑定完全相同。需要公开无执行控制入口，或明确可恢复绑定合同；不创建伪实现绕过检查。
+- `WorkbenchConversationSession.openControl` 使用产品不可变执行凭据及公开 openSessionControl，不挂业务模块。实际公开调用库存已完整核对，当前无新增 Platform 合同缺口；Workbench 没有空闲 trace 调用。
 
 ## 阶段记录
 
@@ -55,7 +56,7 @@ ADR 0028 已读，产品装配方案：
 - 追加定向验证已通过：历史 2 项、引擎写盘重试 1 项、跨窗口登记 1 项、stash 3 项、远端/控制 3 项；Node 实际常驻进程 3 项。Windows 上另外 5 项非 Windows 远端场景如实跳过。
 - 项目身份现由主进程 ProjectRegistry 单队列持有；只在首次新存储建立时导入原 v1 完整快照，原 ID/编辑器会话键保留；renderer 不再整表回写项目列表。此为产品数据迁移，不是旧运行行为 fallback。
 - 更新过的项目/JSON 9 项通过，产品边界检查通过；脚本按仓库 lint 配置被忽略，其三个真实 Node 进程行为已验证。没有运行全量回归、性能/长 E2E 或生产 build。
-- 独立清理代码均已提交。接入的具体控制合同与 0.9.0 双归档身份见 `workbench-platform-migration.md`，等待 owner 明确空闲控制合同后一次切换。
+- 前八批独立清理代码均已提交；这不代表全仓已审完。模块级完整/局部/未覆盖及合理保留记录位于 ignored `.velaros/workspace/checks/module-coverage.md`，下一轮按缺口继续。
 
 已提交批次（各批保留上述通过证据，不重复回归）：
 
@@ -70,4 +71,17 @@ ADR 0028 已读，产品装配方案：
 | 4f7cba8 | stash 并发与 Windows Git 进程取消 |
 | 7cda76a | 主进程项目身份、恢复保存闸门、renderer 旧状态清理 |
 
-下一游标：检查点最终采集与下一轮 capture 的队列到达顺序；本批不继续扩大实现范围。
+统一底座接入批：配套 0.9.1 基础/扩展显式装配、产品不可变执行凭据、foundation-v1 数据代际、
+无执行空闲控制、active-only tell 与错误回执、schema2 来源和正式候选拒绝门；来源 commit、
+双归档 SHA256 与全部公开调用库存见 `workbench-platform-migration.md`。当前确认无新增 Platform 合同缺口。
+
+本批受影响验证：node / web 类型通过（单分区原 45s / 2GiB 预算）；20 个 node、8 个 web、9 个
+测试文件 lint 通过，失败导入区和后续两处测试改动仅定向复查。脚本沿用仓库 ESLint 忽略规则，
+由对应真实行为测试检查。产品边界及三包固定归档/完整锁身份通过。
+执行凭据 5 项、peer 6 项、来源快照 2 项、正式发布来源门 5 项、类型属主 5 项、模型配置 1 项、
+行内补全 1 项通过；Node 24.22.0 四项真实项目/进程/SQLite/会话委派场景通过。
+peer 与属主测试初次各一项旧断言失败，按新合同修正后仅重跑失败项，其余绿项复用。
+未运行全量回归、跨平台矩阵、长 E2E、生产 build 或安装包发布；本地候选仍明确不可进入正式 stage。
+
+后续游标：先合并模块覆盖短表中的空白，继续文件/搜索/监听、语言/调试、renderer hooks/models
+模块排查；检查点最终采集与下一轮 capture 入队顺序也尚未收口。已确认的绿项不重复运行。

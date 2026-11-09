@@ -63,7 +63,7 @@ import {
 } from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
-import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+import { type BrowserElementSelection } from '@velaros-ai/capabilities/browser/contracts'
 import { isEmpty, Log, toNullable } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'

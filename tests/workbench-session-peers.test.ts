@@ -5,7 +5,8 @@ import { join } from 'node:path'
 
 import { test } from 'bun:test'
 
-import type { SessionAnswer } from '@velaros-ai/velaros/sessions/contracts'
+import type { SessionAnswer } from '@velaros-ai/capabilities/sessions/contracts'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchConversationRef,
@@ -16,7 +17,12 @@ import { WorkbenchSessionPeers } from '../src/main/conversation/WorkbenchSession
 import type { WorkbenchConversationSendRequest } from '../src/shared/workbenchConversation'
 import type { WorkbenchPeerMember, WorkbenchPeerTask } from '../src/shared/workbenchSessionPeers'
 
-async function fixture() {
+async function fixture(
+  options: {
+    prepareGuidance?(task: WorkbenchPeerTask, signal: AbortSignal): Promise<void>
+    acceptGuidance?(task: WorkbenchPeerTask): void
+  } = {}
+) {
   const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'wb-peers-')))
   const members: WorkbenchPeerMember[] = ['a', 'b', 'c'].map((sessionId) => ({
     sessionId,
@@ -27,7 +33,10 @@ async function fixture() {
   const outcomes = new Set<(outcome: WorkbenchConversationRunOutcome) => void>()
   const prepared: WorkbenchPeerTask[] = []
   const sent: WorkbenchConversationSendRequest[] = []
-  const failed: string[] = []
+  const guidancePreparations: WorkbenchPeerTask[] = []
+  const acceptedGuidance: WorkbenchPeerTask[] = []
+  const cancelled: WorkbenchPeerTask[] = []
+  const guided: Array<WorkbenchConversationRef & { inputId: string; text: string }> = []
   const complete = (
     request: WorkbenchConversationSendRequest,
     status: SessionAnswer['status'] = 'completed'
@@ -42,7 +51,7 @@ async function fixture() {
   }
   const runtime: Pick<
     WorkbenchConversationRuntimeApi,
-    'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit'
+    'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit' | 'guidance'
   > = {
     isRunning: (ref) => running.has(ref.sessionId),
     subscribeRunSettled: (listener) => {
@@ -63,6 +72,12 @@ async function fixture() {
       running.add(request.sessionId)
       return { accepted: Promise.resolve(), completed: Promise.resolve() }
     },
+    guidance: (ref, input) => {
+      if (!running.has(ref.sessionId))
+        return Promise.reject(new AppError('CONFLICT', '目标运行已结束。'))
+      guided.push({ ...ref, ...input })
+      return Promise.resolve()
+    },
   }
   const peers = new WorkbenchSessionPeers({
     runtime,
@@ -72,8 +87,15 @@ async function fixture() {
       if (task.newSession) members.push({ sessionId: task.sessionId, title: null })
       return { notice: () => undefined, state: () => undefined }
     },
-    cancelPreparation: () => undefined,
-    failure: (_ref, message) => failed.push(message),
+    prepareGuidance: async (task, signal) => {
+      guidancePreparations.push(task)
+      await options.prepareGuidance?.(task, signal)
+    },
+    acceptGuidance: (task) => {
+      acceptedGuidance.push(task)
+      options.acceptGuidance?.(task)
+    },
+    cancelPreparation: (task) => cancelled.push(task),
   })
   const request = (sessionId: string): WorkbenchConversationSendRequest => ({
     projectRoot,
@@ -104,7 +126,11 @@ async function fixture() {
     outcomes,
     prepared,
     sent,
-    failed,
+    guidancePreparations,
+    acceptedGuidance,
+    cancelled,
+    guided,
+    runtime,
     complete,
     request,
     close: async () => {
@@ -151,7 +177,7 @@ test('peers use the project catalog, inherit execution settings and return only 
   }
 })
 
-test('queued messages are delivered in order and survive the sender finishing', async () => {
+test('tell appends guidance to the active run without starting another turn', async () => {
   const f = await fixture()
   try {
     f.running.add('b')
@@ -166,14 +192,93 @@ test('queued messages are delivered in order and survive the sender finishing', 
     )
     signal.abort()
     assert.equal(f.sent.length, 0)
+    assert.equal(f.prepared.length, 0)
+    assert.equal(f.guidancePreparations.length, 2)
+    assert.equal(f.acceptedGuidance.length, 2)
+    assert.match(f.guided[0]!.text, /first/u)
+    assert.match(f.guided[1]!.text, /second/u)
     f.complete(f.request('b'))
-    await until(() => f.sent.length === 1)
-    assert.match(f.sent[0]!.text, /first/u)
-    f.complete(f.sent[0]!)
-    await until(() => f.sent.length === 2)
-    assert.match(f.sent[1]!.text, /second/u)
+    await Promise.resolve()
+    assert.equal(f.sent.length, 0)
   } finally {
     await f.close()
+  }
+})
+
+test('tell rejects idle targets and withdraws preparation if the target ends before steering', async () => {
+  let settleDuringPreparation = (): void => undefined
+  const f = await fixture({
+    prepareGuidance: () => {
+      settleDuringPreparation()
+      return Promise.resolve()
+    },
+  })
+  try {
+    const signal = new AbortController().signal
+    await assert.rejects(f.ports.a.tell({ to: 'b', message: 'idle' }, signal), { code: 'UNAVAILABLE' })
+    await assert.rejects(f.ports.a.tell({ to: 'a', message: 'self' }, signal), { code: 'CONFLICT' })
+    await assert.rejects(f.ports.a.tell({ to: 'foreign', message: 'removed' }, signal), {
+      code: 'NOT_FOUND',
+    })
+    assert.equal(f.guidancePreparations.length, 0)
+    f.running.add('b')
+    settleDuringPreparation = () => {
+      f.complete(f.request('b'))
+      f.running.add('b')
+    }
+    await assert.rejects(f.ports.a.tell({ to: 'b', message: 'late' }, signal), { code: 'UNAVAILABLE' })
+    assert.equal(f.guidancePreparations.length, 1)
+    assert.equal(f.cancelled.length, 1)
+    assert.equal(f.acceptedGuidance.length, 0)
+    assert.equal(f.sent.length, 0)
+    assert.equal(f.guided.length, 0)
+    assert.equal(f.settled.size, 0)
+  } finally {
+    await f.close()
+  }
+})
+
+test('tell rejects a cancelled preparation and ignores cancellation or display failure after acceptance', async () => {
+  const beforeAcceptance = new AbortController()
+  const cancelled = await fixture({
+    prepareGuidance: () => {
+      beforeAcceptance.abort()
+      return Promise.resolve()
+    },
+  })
+  try {
+    cancelled.running.add('b')
+    await assert.rejects(
+      cancelled.ports.a.tell({ to: 'b', message: 'cancelled' }, beforeAcceptance.signal)
+    )
+    assert.equal(cancelled.guided.length, 0)
+    assert.equal(cancelled.cancelled.length, 1)
+  } finally {
+    await cancelled.close()
+  }
+  const accepted = await fixture({
+    acceptGuidance: () => {
+      throw new Error('window closed')
+    },
+  })
+  try {
+    accepted.running.add('b')
+    const afterAcceptance = new AbortController()
+    const steer = accepted.runtime.guidance
+    accepted.runtime.guidance = async (ref, input) => {
+      await steer(ref, input)
+      afterAcceptance.abort()
+    }
+    const result = await accepted.ports.a.tell(
+      { to: 'b', message: 'accepted' },
+      afterAcceptance.signal
+    )
+    assert.equal(result.status, 'queued')
+    assert.equal(accepted.guided.length, 1)
+    assert.equal(accepted.cancelled.length, 0)
+    assert.equal(accepted.sent.length, 0)
+  } finally {
+    await accepted.close()
   }
 })
 
@@ -217,19 +322,9 @@ test('rejects cross-project and self targets and detects indirect waiting cycles
   }
 })
 
-test('project closure cancels pending asks and queued delivery; removed targets report failure', async () => {
+test('project closure cancels pending asks and releases their subscriptions', async () => {
   const f = await fixture()
   try {
-    f.running.add('b')
-    await f.ports.a.tell({ to: 'b', message: 'review' }, new AbortController().signal)
-    f.members.splice(
-      f.members.findIndex((member) => member.sessionId === 'b'),
-      1
-    )
-    f.complete(f.request('b'))
-    await until(() => f.failed.length === 1)
-    assert.equal(f.sent.length, 0)
-    f.members.push({ sessionId: 'b', title: null })
     f.running.add('b')
     const answer = f.ports.a.ask({ to: 'b', task: 'wait' }, new AbortController().signal)
     void answer.catch(() => undefined)

@@ -132,7 +132,6 @@ export class ConversationScriptBoard {
         }))
       this.update(id, {
         status: settledStatus(execution, calls),
-        language: execution.language ?? card.projection.language,
         calls,
         error: describeFailure(execution.failure),
         durationMs: execution.durationMs,
@@ -251,6 +250,7 @@ export class ConversationScriptBoard {
         runId,
         turnId,
         status,
+        language: 'node',
         startedAt: optionalWhenLazy(status === 'running', Date.now),
         source: '',
         sourceTruncated: false,

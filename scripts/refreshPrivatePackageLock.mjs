@@ -31,7 +31,7 @@ const ignoredDirectories = new Set([
 ]);
 const localPackageSpecification = /^(?:file|link|portal|workspace):/u;
 const snapshotSpecification =
-  /^file:build\/runtime-packages\/[a-f0-9]{64}\/velaros-ai-[a-z0-9-]+-\d+\.\d+\.\d+\.tgz$/u;
+  /^file:build\/runtime-packages\/[a-f0-9]{64}\/[a-z0-9][a-z0-9._-]*\.tgz$/u;
 // 与 Desktop 一致，Platform 与 UI 在发版前经 `bun link` 从本机兄弟仓消费：只认 `link:<同名包>`。
 const siblingLinkSpecification = /^link:(@velaros-ai\/[\w.-]+)$/u;
 const cloudDownloadPrefix = "https://npm.pkg.github.com/download/";
@@ -87,7 +87,7 @@ await validateLockfile(requirements, linked);
 
 console.info(
   [
-    `Private package lock is valid for ${packageNames.length} published package(s)${packageNames.length > 0 ? `: ${packageNames.join(", ")}` : ""}`,
+    `Private package lock is valid for ${packageNames.length} pinned dependency package(s)${packageNames.length > 0 ? `: ${packageNames.join(", ")}` : ""}`,
     linkedPackageNames.length > 0
       ? `and ${linkedPackageNames.length} sibling link(s): ${linkedPackageNames.join(", ")}`
       : "",

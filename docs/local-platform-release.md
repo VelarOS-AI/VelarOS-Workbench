@@ -12,6 +12,13 @@ finalization runs in platform order so concurrent uploads cannot overwrite the s
 The Workbench repository's old CI and lock-refresh sentinels stay disabled. Pushing a version tag
 alone does not publish a release.
 
+Development may consume a frozen local Platform candidate recorded in the schema2 dependency
+snapshot. Import it explicitly with `bun scripts/release/platformSnapshot.mjs --import-candidate
+<candidate.json>`; the importer verifies pinned provenance and archive bytes without inventing a
+release tag. Formal release staging rejects candidate sources. Before publishing, both Platform
+packages must have matching published identities, and the release gate verifies their Release,
+tag-to-commit mapping and assets. UI keeps its separately pinned published source.
+
 ## Release from Windows or another development host
 
 Commit and push the verified Workbench source and its annotated `v<version>` tag, then dispatch the

@@ -2,15 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-import { AppError, createAbortError } from '@velaros-ai/velaros/core/error'
-import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
+import type { SessionsSpacePort } from '@velaros-ai/capabilities/sessions'
 import type {
   SessionAnswer,
   SessionAskInput,
   SessionPeer,
   SessionTellInput,
   SessionTold,
-} from '@velaros-ai/velaros/sessions/contracts'
+} from '@velaros-ai/capabilities/sessions/contracts'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError, createAbortError } from '@velaros-ai/velaros/core/error'
 
 import type { WorkbenchConversationSendRequest } from '../../shared/workbenchConversation'
 import type { WorkbenchPeerMember, WorkbenchPeerTask } from '../../shared/workbenchSessionPeers'
@@ -24,14 +25,19 @@ import type {
 interface WorkbenchSessionPeersOptions {
   runtime: Pick<
     WorkbenchConversationRuntimeApi,
-    'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit'
+    'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit' | 'guidance'
   >
   catalog(ref: WorkbenchConversationRef): readonly WorkbenchPeerMember[]
   /** 界面先建消息与运行卡，再由运行时发送；受理回执前不向调用方声称已送达。 */
   prepare(task: WorkbenchPeerTask, signal: AbortSignal): Promise<WorkbenchConversationSink>
+  /** 只准备目标活动运行里的可见引导，不创建运行或检查点。 */
+  prepareGuidance(task: WorkbenchPeerTask, signal: AbortSignal): Promise<void>
+  /** 运行时已接纳引导；通知失败不能撤销该次投递。 */
+  acceptGuidance(task: WorkbenchPeerTask): void
   cancelPreparation(task: WorkbenchPeerTask, message: string): void
-  failure(ref: WorkbenchConversationRef, message: string): void
 }
+
+const log = Log.tag('WorkbenchSessionPeers')
 
 /** 当前项目内的会话协作：串行投递、按输入身份收结果，等待依赖成环时拒绝。 */
 export class WorkbenchSessionPeers {
@@ -105,19 +111,36 @@ export class WorkbenchSessionPeers {
     input: SessionTellInput,
     signal: AbortSignal
   ): Promise<SessionTold> {
-    signal.throwIfAborted()
+    const scoped = this.signal(from, signal)
+    scoped.throwIfAborted()
     const task = await this.task(from, input.to, input.message)
-    signal.throwIfAborted()
-    if (this.options.runtime.isRunning(task) || this.deliveries.has(key(task))) {
-      // 回执以后投递归项目持有，调用方收尾不会把排队的消息取消。
-      const lifetime = this.signal(from)
-      void this.deliver(from, task, lifetime).catch((error: unknown) => {
-        if (!lifetime.aborted) this.options.failure(from, AppError.getMessage(error))
-      })
-      return { session: task.sessionId, status: 'queued' }
+    scoped.throwIfAborted()
+    if (!this.options.runtime.isRunning(task))
+      throw new AppError('UNAVAILABLE', '目标会话当前没有活动运行，不能追加引导。')
+    let settled = false
+    const stopWatching = this.options.runtime.subscribeRunSettled((ref) => {
+      if (key(ref) === key(task)) settled = true
+    })
+    try {
+      await this.options.prepareGuidance(task, scoped)
+      scoped.throwIfAborted()
+      if (!this.members(from).some((member) => member.sessionId === task.sessionId))
+        throw new AppError('NOT_FOUND', '目标会话已关闭。')
+      if (settled || !this.options.runtime.isRunning(task))
+        throw new AppError('UNAVAILABLE', '目标会话当前没有活动运行，不能追加引导。')
+      await this.options.runtime.guidance(task, { inputId: task.inputId, text: task.text })
+    } catch (error) {
+      this.options.cancelPreparation(task, AppError.getMessage(error))
+      throw error
+    } finally {
+      stopWatching()
     }
-    await this.deliver(from, task, this.signal(from, signal))
-    return { session: task.sessionId, status: 'delivered' }
+    try {
+      this.options.acceptGuidance(task)
+    } catch (error) {
+      log.warn('引导已接纳，目标窗口未收到接纳通知', { inputId: task.inputId, error })
+    }
+    return { session: task.sessionId, status: 'queued' }
   }
 
   private members(ref: WorkbenchConversationRef): readonly WorkbenchPeerMember[] {

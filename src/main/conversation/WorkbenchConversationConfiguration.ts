@@ -32,8 +32,8 @@ export function createWorkbenchConversationConfiguration(
           {
             provider: selection.provider,
             enabled: true,
-            apiKey: selection.apiKey,
-            baseURL: selection.baseURL,
+            apiKey: selection.apiKey ?? '',
+            baseURL: selection.baseURL ?? '',
             defaultModel: selection.model,
           },
         ],

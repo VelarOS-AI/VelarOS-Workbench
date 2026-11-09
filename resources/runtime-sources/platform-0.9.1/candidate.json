@@ -1,0 +1,72 @@
+{
+  "kind": "verified-local-candidate",
+  "frozen": true,
+  "version": "0.9.1",
+  "platformGeneration": "0.7",
+  "sourceCommit": "e3e157696994a0d667cbd542a809484b93e40e71",
+  "source": {
+    "baselineCommit": "697bcba2fdff5b7160116a7c936876df8bf4abb2",
+    "dirty": true,
+    "inputFiles": 658,
+    "fingerprint": "42f59a3c10b73453f328d27a59562597e41e8e5d5834d1c7d9cd128c930c69a5",
+    "inputManifest": "D:\\Projects\\VelarOS-Platform\\.velaros-workspace\\candidates\\platform-0.9.1-7845f1e6-9e29f4b0\\source-inputs.json",
+    "commitTree": "9b98f108e38df9658a1a051af29df28ca4d0a9f5",
+    "committedInputsMatch": true,
+    "committedInputFingerprint": "3aa00984e025c4884944ea6d8ed22299cc85de510f659dc4d0404b536fc40a00",
+    "commitProof": "D:\\Projects\\VelarOS-Platform\\.velaros-workspace\\candidates\\platform-0.9.1-7845f1e6-9e29f4b0\\source-proof-e3e15769.json"
+  },
+  "archives": [
+    {
+      "name": "velaros.tgz",
+      "package": "@velaros-ai/velaros",
+      "version": "0.9.1",
+      "path": "D:\\Projects\\VelarOS-Platform\\.velaros-workspace\\candidates\\platform-0.9.1-7845f1e6-9e29f4b0\\velaros.tgz",
+      "sha256": "7845f1e6c90fd93f90faf8d5c52203a7110580054365419acb1c38d72d0e93c2",
+      "integrity": "sha512-urJSo6cIEZQZcGSg0lCEA8V4w7y4MEjwtZM7brv9xevD0G1GpBth2hOtDR+imd8W+Fo2BYJmdbSzcLLx15KDWg==",
+      "bytes": 2217426
+    },
+    {
+      "name": "capabilities.tgz",
+      "package": "@velaros-ai/capabilities",
+      "version": "0.9.1",
+      "path": "D:\\Projects\\VelarOS-Platform\\.velaros-workspace\\candidates\\platform-0.9.1-7845f1e6-9e29f4b0\\capabilities.tgz",
+      "sha256": "9e29f4b00ee12aa51a2d086b32eaff8ce7c15672041048590cac0dc6ba911a5a",
+      "integrity": "sha512-lXRM07MiNvKQtx85aH48fZYFym/35fEaeVpRyk4wFBygodbLLtJQ0yXl9YbMVdRDFlPeHCIl7ltZU60FUg1ZOA==",
+      "bytes": 7148180
+    }
+  ],
+  "validation": {
+    "host": "win32",
+    "node": "v24.22.0",
+    "controlJs": true,
+    "strictDeclarations": true,
+    "coldControlProcessAttempts": 0,
+    "extensionCodeEquivalent": true,
+    "extensionComparedFiles": 4066,
+    "sourceControlCases": 2,
+    "hostNativeTerminal": "pending Server terminal-seam only",
+    "linuxInheritedExecutionProof": "D:\\Projects\\VelarOS-Platform\\.velaros-workspace\\candidates\\platform-0.9.0-ba4c31c4-7455cef2\\linux-validation.json",
+    "linuxNewPty": false,
+    "providerApi": false
+  },
+  "peers": {
+    "baseRequired": "0.9.1",
+    "hostOptional": {
+      "@types/react": "^19.0.0",
+      "electron": ">=41.0.0",
+      "react": "^19.0.0"
+    },
+    "hostOptionalMetadata": {
+      "@types/react": {
+        "optional": true
+      },
+      "electron": {
+        "optional": true
+      },
+      "react": {
+        "optional": true
+      }
+    }
+  },
+  "evidence": "D:\\Projects\\VelarOS-Platform\\.velaros-workspace\\candidates\\platform-0.9.1-7845f1e6-9e29f4b0\\receipt.json"
+}

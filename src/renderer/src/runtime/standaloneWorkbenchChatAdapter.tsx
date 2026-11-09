@@ -19,6 +19,7 @@ import {
 import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchProviderModelCatalog'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
+import { type BrowserElementSelection } from '@velaros-ai/capabilities/browser/contracts'
 import {
   ChatConversationPane,
   ChatThinkingVisibilityProvider,
@@ -35,7 +36,6 @@ import {
 } from '@velaros-ai/ui/conversation/composer'
 import type { InteractionAnswer, ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
 import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
-import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
 import {
   isPlainObject,
   isString,
@@ -739,33 +739,80 @@ async function prepareWorkbenchPeerTask(
   }
 }
 
+/** 引导只属于现有活动运行，不准备新消息轮次或改动检查点。 */
+function prepareWorkbenchPeerGuidance(task: WorkbenchPeerTask, signal: AbortSignal): void {
+  const target = readSession(task.projectRoot, task.sessionId)
+  const run = findActiveRun(task.projectRoot, task.sessionId)
+  if (!target || target.engine || !run || !isActiveChatRun(target.status))
+    throw new AppError('CONFLICT', '目标会话当前没有活动运行，不能追加引导。')
+  signal.throwIfAborted()
+  updateSession(task.projectRoot, task.sessionId, (state) => ({
+    ...state,
+    messages: [
+      ...state.messages,
+      {
+        ...createTextMessage('user', task.text),
+        id: task.inputId,
+        conversationKind: 'run-guidance',
+        guidanceStatus: 'pending',
+        runId: run.scope.runId,
+        turnId: run.scope.turnId,
+      },
+    ],
+    revision: state.revision + 1,
+  }))
+}
+
 const peerPreparations = hotStore?.peerPreparations ?? new Map<string, AbortController>()
 let peerEventSubscription: Nullable<() => void> = null
 
 function receiveWorkbenchPeerEvent(event: WorkbenchPeerEvent): void {
-  if (event.type === 'failed') {
-    updateSession(event.ref.projectRoot, event.ref.sessionId, (state) => ({
+  const { task } = event
+  const projectRoot = task.projectRoot
+  if (event.type === 'guidance-accepted') {
+    updateSession(projectRoot, task.sessionId, (state) => ({
       ...state,
-      messages: [...state.messages, createTextMessage('assistant', event.message)],
+      messages: state.messages.map((message) =>
+        message.id === task.inputId && message.guidanceStatus === 'pending'
+          ? { ...message, guidanceStatus: isActiveChatRun(state.status) ? 'accepted' : 'paused' }
+          : message
+      ),
+      revision: state.revision + 1,
     }))
     return
   }
-  const { task } = event
-  const projectRoot = task.projectRoot
-  const cancel = (message: string): void => {
+  const cancel = (message: string, withdrawPausedGuidance = false): void => {
     const preparation = peerPreparations.get(task.inputId)
     if (preparation) preparation.abort(new AppError('CANCELLED', message))
     const run = activeRuns.get(runKey(projectRoot, task.sessionId))
     if (run?.scope.runId === task.inputId) finishRun(run, { kind: 'error', message })
+    updateSession(projectRoot, task.sessionId, (state) => {
+      const messages = state.messages.filter(
+        (entry) =>
+          !(
+            entry.id === task.inputId &&
+            (entry.guidanceStatus === 'pending' ||
+              (withdrawPausedGuidance && entry.guidanceStatus === 'paused'))
+          )
+      )
+      return messages.length === state.messages.length
+        ? state
+        : { ...state, messages, revision: state.revision + 1 }
+    })
   }
   if (event.type === 'cancel') {
-    cancel(event.message)
+    // 主进程明确未接纳：即使目标已经收尾、把 pending 标为 paused，也撤掉这条准备。
+    cancel(event.message, true)
     return
   }
   if (peerPreparations.has(task.inputId)) return
   const controller = new AbortController()
   peerPreparations.set(task.inputId, controller)
-  void prepareWorkbenchPeerTask(task, controller.signal)
+  const preparation =
+    event.type === 'prepare-guidance'
+      ? Promise.resolve().then(() => prepareWorkbenchPeerGuidance(task, controller.signal))
+      : prepareWorkbenchPeerTask(task, controller.signal)
+  void preparation
     .then(
       () =>
         window.velarosWorkbenchSessionPeers.acknowledge({

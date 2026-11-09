@@ -42,7 +42,7 @@ function buildExternalLspProcessTreeTerminationPlan(
   const command = compatibility.getProcessTreeKillCommandSpec(pid, signal)
   if (command) return { kind: 'command', file: command.file, args: command.args }
 
-  const killPid = compatibility.getProcessKillPid(pid)
+  const killPid = compatibility.shouldUseDetachedProcessGroup() ? -pid : pid
   return {
     kind: 'signal',
     pid: killPid,

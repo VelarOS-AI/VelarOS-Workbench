@@ -7,12 +7,12 @@ import type {
   BrowserSpacePort,
   ElectronBrowserRuntimeApi,
   ElectronBrowserRuntimeOptions,
-} from '@velaros-ai/velaros/browser'
+} from '@velaros-ai/capabilities/browser'
 import type {
   BrowserPageNavigationOptions,
   BrowserSiteContext,
-} from '@velaros-ai/velaros/browser/contracts'
-import { browserAddress } from '@velaros-ai/velaros/browser/renderer'
+} from '@velaros-ai/capabilities/browser/contracts'
+import { browserAddress } from '@velaros-ai/capabilities/browser/renderer'
 import { isEmpty, Log, toNullable } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 

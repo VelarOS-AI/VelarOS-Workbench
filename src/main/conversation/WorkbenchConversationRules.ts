@@ -198,18 +198,10 @@ const VerificationCopyKeys: Readonly<Record<string, keyof (typeof TerminalStatus
 export function terminalStatusMessage(
   status: 'failed' | 'context_blocked',
   locale: AppLocale = 'zh-CN',
-  verificationReason?: string
+  completionReason?: string
 ): string {
-  const code = verificationReason?.split(':')[0]?.trim() ?? ''
+  const code = completionReason?.split(':')[0]?.trim() ?? ''
   return TerminalStatusCopy[locale][VerificationCopyKeys[code] ?? status]
-}
-
-/** 模型用量到了每小时上限、运行会自己等着接着跑时的提示。 */
-export function throttledMessage(retryAfterMs: number, locale: AppLocale = 'zh-CN'): string {
-  const minutes = Math.max(1, Math.ceil(retryAfterMs / 60_000))
-  return locale === 'en-US'
-    ? `The hourly model usage limit is reached; this run continues automatically in about ${minutes} min.`
-    : `已到每小时的模型用量上限，约 ${minutes} 分钟后自动继续。`
 }
 
 /** 连续几步没有进展、运行暂停等下一条消息时的提示；任务保留，回一句话就换个办法接着做。 */

@@ -39,8 +39,9 @@ notes and refreshes as the run progresses. The console button opens a separate w
 development servers and background commands, with live output, interactive input and stop controls. Process ownership
 uses the launch project and chat, even if a command changes its working directory.
 
-Agents can use `velaros:sessions` to delegate work or queue messages to other chats in the current
-project. New chats appear in the project list and retain their own transcript and change checkpoints.
+Agents can use `velaros:sessions` to delegate work or append guidance to an active chat in the current
+project. `tell` returns `queued` after actual guidance acceptance, refuses idle chats and never starts
+another turn. Delegated tasks can create chats with their own transcript and change checkpoints.
 Delegation carries the selected model, permissions and sandbox; waiting cycles
 are rejected. Switching chats during login or attachment preparation preserves the original message
 destination and the new chat's draft.
@@ -92,36 +93,25 @@ apply to engine sessions.
 
 ## Development
 
-当前固定依赖快照为 Platform v0.6.111（Velaros 0.7.0），UI 版本为 1.0.0。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+当前使用配套的 Velaros / capabilities 0.9.1 固定本机候选，UI 版本为 1.0.0。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
 
-Workbench 使用固定的 Platform 本机依赖快照与 UI 发布版本，锁文件记录完整依赖。先登录具备 Platform 仓库读取权限的 `gh`，并配置 `NODE_AUTH_TOKEN` 后运行：
+`resources/runtime-snapshot.json` 分别记录 Platform 候选和 UI 正式发布的来源、版本与哈希，锁文件固定完整依赖。
+首次使用由 Platform owner 交付的候选目录显式导入；已有缓存时可用 `--verify-only` 离线核验：
 
 ```bash
-node scripts/release/platformSnapshot.mjs
+bun scripts/release/platformSnapshot.mjs --import-candidate "<Platform candidate.json>"
 bun install --frozen-lockfile
-bunx --no-install playwright install chromium
-bun run check
 bun run dev
 ```
 
-需要联调 `../VelarOS-Platform` 或 `../VelarOS-UI` 时，在对应仓构建并登记链接，再从 Workbench 连接：
+普通准备命令只从声明的 GitHub Release 恢复正式包；候选缺失会要求显式导入，不猜 release tag。
+UI 缺少缓存时需要具备其仓库读取权限的 `gh`。Platform 与 UI 改动由对应 owner 构建为固定归档，Workbench
+只消费公开入口，不引用兄弟仓源码或共享 node_modules。基础和扩展必须同版切换。
 
-```bash
-# VelarOS-UI 根目录（仓根就是 @velaros-ai/ui 包）
-bun run build && bun link
-
-# VelarOS-Platform 根目录：构建 velaros 及其依赖，再逐个登记
-node scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros
-(cd packages/velaros && bun link)
-
-# Workbench 根目录
-bun link @velaros-ai/velaros @velaros-ai/ui
-```
-
-Workbench 只消费这些包的公开 dist：改了 Platform 或 UI 要先在对应仓重新构建。
-`check:platform-packages` 只接受同名的兄弟仓链接（`link:@velaros-ai/<name>`）或 GitHub Packages 的正式解析，
-本机快照由 `resources/runtime-snapshot.json` 固定源码提交、版本和哈希；准备命令恢复私有 Platform Release 中的归档，发布检查逐包验证字节与锁文件。升级依赖时，更新清单和快照记录并在受控本机运行
-`bun scripts/refreshPrivatePackageLock.mjs` 刷新锁文件，审查 `bun.lock` 后再提交。源码仓库中的旧 CI 与锁文件刷新
+开发验证按影响范围选择类型/lint 分区和必要行为测试，复用已通过结果；完整 `bun run check` 留给需要全量检查的交付。
+`check:platform-packages` 核对快照、归档、锁元组及 overrides。更新受控清单和快照后用 Bun 刷新锁文件，审查再提交。
+本机候选保留原来源证明；正式发布门只接受已发布来源，当前候选不能被当作正式依赖发布。
+源码仓库中的旧 CI 与锁文件刷新
 Actions 仍是静态停用哨兵；正式发布由 Desktop 仓库的 `release-workbench.yml` 承载，使用固定 Workbench 提交在各平台原生 runner 上检查与打包。
 
 Platform 的本地存储用 `node:sqlite`，bun 里没有：会话运行时的集成测试

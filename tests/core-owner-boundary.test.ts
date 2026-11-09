@@ -16,11 +16,12 @@ const removedCoreModules = new Set([
 ])
 
 /**
- * 已退役的 Platform 属主。它们的零件各有新家：项目与命令在 `@velaros-ai/velaros/project`、
- * `@velaros-ai/velaros/execution`，浏览器在 `@velaros-ai/velaros/browser/...`，跨平台行为在
+ * 已退役的 Platform 属主。项目与浏览器分别在 `@velaros-ai/capabilities/project`、
+ * `@velaros-ai/capabilities/browser/...`，命令在 `@velaros-ai/velaros/execution`，跨平台行为在
  * `@velaros-ai/velaros/core/platform`，对话数据在 `@velaros-ai/ui/conversation/contracts`。
  */
 const retiredOwnerModules = [
+  /^@velaros-ai\/velaros\/(?:browser|web|sessions|project|images|office|computer|skills|sandbox|features|act\/bridge)(?:\/|$)/u,
   /^@velaros-ai\/(?:browser|development|project|system|system-tools)(?:\/|$)/u,
   /^@velaros-ai\/agent\/(?:protocol|tool-contract)(?:\/|$)/u,
 ]
@@ -31,8 +32,9 @@ const contractOwners: Readonly<Record<string, readonly string[]>> = {
   ChatMessage: ['@velaros-ai/ui/conversation/contracts'],
   ContentBlock: ['@velaros-ai/ui/conversation/contracts'],
   ToolCallBlock: ['@velaros-ai/ui/conversation/contracts'],
-  BrowserElementSelection: ['@velaros-ai/velaros/browser/contracts'],
+  BrowserElementSelection: ['@velaros-ai/capabilities/browser/contracts'],
   AgentProviderRuntimeConfig: ['@velaros-ai/velaros/model', '@velaros-ai/velaros/model/contracts'],
+  ModelSelection: ['@velaros-ai/velaros/model', '@velaros-ai/velaros/model/contracts'],
   ListProviderModelsRequest: ['@velaros-ai/velaros/model', '@velaros-ai/velaros/model/contracts'],
   ProviderModelCatalog: ['@velaros-ai/velaros/model', '@velaros-ai/velaros/model/contracts'],
 }
@@ -157,7 +159,7 @@ void describe('Core 0.4 owner boundary', () => {
     }
     assert.ok(observed.has('ChatMessage'))
     assert.ok(observed.has('BrowserElementSelection'))
-    assert.ok(observed.has('AgentProviderRuntimeConfig'))
+    assert.ok(observed.has('ModelSelection'))
   })
 
   void test('owns the Git contracts in one Workbench file', async () => {

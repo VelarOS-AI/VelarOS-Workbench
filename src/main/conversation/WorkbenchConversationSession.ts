@@ -1,30 +1,38 @@
+import { createHash } from 'node:crypto'
+import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { relative, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 
-import type { RuntimeMetric, VelarosRuntime, VelarosSession } from '@velaros-ai/velaros'
-import {
-  createCapabilityModule,
-  createNodeExecutionEnvironment,
-  createRuntime,
-} from '@velaros-ai/velaros'
 import {
   type BrowserOperationContext,
   browserOperations,
   cdpOperations,
   createBrowserLoginGate,
   devtoolsOperations,
-} from '@velaros-ai/velaros/browser'
+} from '@velaros-ai/capabilities/browser'
 import {
   VelarBrowserModule,
   VelarCdpModule,
   VelarDevtoolsModule,
-} from '@velaros-ai/velaros/browser/contracts'
+} from '@velaros-ai/capabilities/browser/contracts'
+import { sessionsOperations } from '@velaros-ai/capabilities/sessions'
+import { VelarSessionsModule } from '@velaros-ai/capabilities/sessions/contracts'
+import { webOperations } from '@velaros-ai/capabilities/web'
+import { VelarWebModule } from '@velaros-ai/capabilities/web/contracts'
+import type { RuntimeMetric, VelarosRuntime, VelarosSession } from '@velaros-ai/velaros'
+import {
+  createCapabilityModule,
+  createRuntime,
+  openSessionControl,
+} from '@velaros-ai/velaros'
+import { localContextStorage } from '@velaros-ai/velaros/context/node'
 import {
   isArray,
   isBoolean,
   isNonBlankString,
   isPlainObject,
   isTrue,
+  Log,
 } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import type {
@@ -33,10 +41,7 @@ import type {
   PreparedInvocation,
   ToolConfirmationDecisionOptions,
 } from '@velaros-ai/velaros/kernel'
-import { sessionsOperations } from '@velaros-ai/velaros/sessions'
-import { VelarSessionsModule } from '@velaros-ai/velaros/sessions/contracts'
-import { webOperations } from '@velaros-ai/velaros/web'
-import { VelarWebModule } from '@velaros-ai/velaros/web/contracts'
+import { createNodeExecutionEnvironment, resolveNodeRuntimeBinding } from '@velaros-ai/velaros/node'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
@@ -44,12 +49,22 @@ import { isRelativePathInsideRoot } from '../workspace/PathContainmentHelper'
 
 import { LoginConfirmation } from './ConversationInteractions'
 import { createWorkbenchConsoleModule } from './WorkbenchConsoleModule'
+import {
+  bindWorkbenchConversationExecution,
+  readWorkbenchConversationExecution,
+  WorkbenchConversationContextFileName,
+} from './WorkbenchConversationBinding'
+import { createWorkbenchConversationProject } from './WorkbenchConversationProject'
 import type {
+  ConversationControlHandle,
   ConversationControlOptions,
   ConversationWorkspaceHandle,
   ConversationWorkspaceOptions,
 } from './WorkbenchConversationTypes'
-import { resolveWorkbenchNodeEnvironment } from './WorkbenchNodeRuntime'
+import {
+  resolveWorkbenchNodeEnvironment,
+  resolveWorkbenchNodeExecutable,
+} from './WorkbenchNodeRuntime'
 import type { WorkbenchShellHostRegistryApi } from './WorkbenchShellHostRegistry'
 
 /** 项目能力的写入由 Kernel 效果闸记录；标准 Node 进程由宿主单独记录。 */
@@ -65,7 +80,7 @@ const WorkerRunTimeoutMs = 4 * 60 * 60 * 1000
 
 export interface WorkbenchConversationSessionApi {
   open(options: ConversationWorkspaceOptions): Promise<ConversationWorkspaceHandle>
-  openControl(options: ConversationControlOptions): Promise<ConversationWorkspaceHandle>
+  openControl(options: ConversationControlOptions): Promise<ConversationControlHandle>
 }
 
 /** 项目会话按需发现与调用代码能力；标准 Node 进程和后台任务由应用宿主持有。 */
@@ -82,6 +97,8 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
     const sandbox = options.sandbox ?? false
     let session: VelarosSession | undefined
     let runtime: VelarosRuntime | undefined
+    let storage: ReturnType<typeof localContextStorage> | undefined
+    let project: Awaited<ReturnType<typeof createWorkbenchConversationProject>> | undefined
     const windows = new ProjectActivityWindows(root, options.activity, options.projectFilesEdited)
     const decide = async (
       message: string,
@@ -105,11 +122,31 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         )
     }
     try {
+      const executable = this.nodeExecutable ?? resolveWorkbenchNodeExecutable()
+      const identity = createHash('sha256')
+        .update(`workbench\0${root}\0${options.sessionId}`)
+        .digest('hex')
+      const binding = await resolveNodeRuntimeBinding({
+        cwd: root,
+        executable,
+        binding: { executionIdentity: identity, authorizationScope: identity },
+        processConfinement: {
+          mode: sandbox ? 'workspace-write' : 'danger-full-access',
+          workspaceRoot: root,
+        },
+      })
+      await bindWorkbenchConversationExecution({
+        dataDir: options.dataDir,
+        projectRoot: root,
+        sessionId: options.sessionId,
+        sandbox,
+        binding,
+      })
       const shell = this.shells.host(root, sandbox ? 'workspace-write' : 'danger-full-access')
       const node = createNodeExecutionEnvironment({
         cwd: root,
         directory: resolve(options.dataDir, 'node'),
-        executable: this.nodeExecutable,
+        executable,
         packageDirectory: this.nodePackagesDirectory,
         runtime: resolveWorkbenchNodeEnvironment(this.nodePackagesDirectory),
         host: {
@@ -129,7 +166,9 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         },
         output: options.showCommandOutput,
       })
+      project = await createWorkbenchConversationProject(root, options.dataDir)
       const modules: Array<NonNullable<Parameters<typeof createRuntime>[0]['modules']>[number]> = [
+        ...project.modules,
         createWorkbenchConsoleModule(
           this.shells,
           options.sessionId,
@@ -191,11 +230,16 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
           })
         )
       }
+      await mkdir(options.dataDir, { recursive: true })
+      storage = localContextStorage({
+        path: join(options.dataDir, WorkbenchConversationContextFileName),
+      })
       runtime = await createRuntime({
+        binding,
+        storage,
+        resources: [project.resource],
         node,
         residentModules: [],
-        workspace: root,
-        project: { code: true, images: true },
         instructions: options.instructions,
         environment: () => ({
           ...options.environment?.(),
@@ -204,14 +248,15 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
           workspace: `project; ${sandbox ? 'workspace-write sandbox' : 'full local access'}`,
           home: homedir(),
         }),
-        dataDir: options.dataDir,
         model: options.model,
         // 上下文维护与模型驱动用同一输入预算；恢复时驱动上限仍会进一步约束请求。
         context: {
+          sources: [project.source],
+          snapshots: [project.snapshot],
           policy: {
-            windowTokens: 'limits' in options.model ? options.model.limits?.inputTokens : undefined,
+            windowTokens: options.model.limits.inputTokens,
           },
-          limits: { ...ModelUsageBudget, modelTokensPerHour: Number.MAX_SAFE_INTEGER },
+          limits: ModelUsageBudget,
           maintenance: { profile: ModelUsageBudget },
         },
         modules,
@@ -227,14 +272,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
               instructions: options.instructions,
               model: options.model,
               node: true,
-              modules: [
-                ...new Set([
-                  ...modules.map((module) => module.binding.moduleId),
-                  'velaros:project',
-                  'velaros:code',
-                  'velaros:images',
-                ]),
-              ],
+              modules: modules.map((module) => module.binding.moduleId),
               budget: ModelUsageBudget,
               limits: { turns: Number.MAX_SAFE_INTEGER, timeoutMs: WorkerRunTimeoutMs },
             },
@@ -243,8 +281,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
           maxChildren: Number.MAX_SAFE_INTEGER,
         },
         widgets: { show: options.showWidget },
-        search: false,
-        memory: memory ? () => memory : false,
+        memory: memory ? () => memory : undefined,
         authorize: async (invocation, descriptor, signal) => {
           options.signal.throwIfAborted()
           if (descriptor.effects !== 'write') return
@@ -268,38 +305,71 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         trace: (input) => owner.trace(options.sessionId, input),
         close: async () => {
           try {
-            await owner.close()
+            await closeConversationRuntime(owner)
           } finally {
             windows.closeAll()
           }
         },
       }
     } catch (error) {
-      try {
-        await runtime?.close()
-      } finally {
-        windows.closeAll()
-      }
+      const cleanup = await Promise.allSettled(
+        runtime
+          ? [closeConversationRuntime(runtime)]
+          : [storage?.close(), Promise.resolve().then(() => project?.resource.close())]
+      )
+      windows.closeAll()
+      const failures = cleanup.flatMap((outcome) =>
+        outcome.status === 'rejected' ? [outcome.reason] : []
+      )
+      if (failures.length)
+        throw new AggregateError(
+          [error, ...failures],
+          'Conversation initialization and cleanup failed'
+        )
       throw error
     }
   }
 
   public async openControl(
     options: ConversationControlOptions
-  ): Promise<ConversationWorkspaceHandle> {
-    const runtime = await createRuntime({
-      ...options,
-      project: false,
-      agents: false,
-      search: false,
-      memory: false,
-      context: { maintenance: false },
+  ): Promise<ConversationControlHandle> {
+    const receipt = await readWorkbenchConversationExecution({
+      dataDir: options.dataDir,
+      projectRoot: options.workspace,
+      sessionId: options.sessionId,
+    })
+    const storage = localContextStorage({
+      path: join(options.dataDir, WorkbenchConversationContextFileName),
     })
     try {
-      return { session: await runtime.openSession(options.sessionId), close: () => runtime.close() }
+      const lease = await openSessionControl({
+        sessionId: options.sessionId,
+        storage,
+        binding: receipt.binding,
+      })
+      return { session: lease, close: () => lease.close() }
     } catch (error) {
-      await runtime.close()
+      await storage.close()
       throw error
+    }
+  }
+}
+
+/** close 的 TIMEOUT 仅表示仍在收束；继续等待同一个关闭操作，不重放执行或提前释放共享 Host。 */
+async function closeConversationRuntime(runtime: VelarosRuntime): Promise<void> {
+  let reported = false
+  for (;;) {
+    try {
+      await runtime.close()
+      return
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'TIMEOUT') throw error
+      if (!reported) {
+        Log.tag('WorkbenchConversationSession').warn('会话仍在关闭，继续持有执行宿主与存储', {
+          error,
+        })
+        reported = true
+      }
     }
   }
 }

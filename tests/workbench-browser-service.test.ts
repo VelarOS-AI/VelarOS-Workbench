@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 import type { WebContents } from 'electron'
 
-import type { ElectronBrowserRuntimeApi } from '@velaros-ai/velaros/browser'
+import type { ElectronBrowserRuntimeApi } from '@velaros-ai/capabilities/browser'
 
 import {
   type WorkbenchBrowserRuntimeCallbacks,

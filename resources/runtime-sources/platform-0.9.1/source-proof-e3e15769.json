@@ -1,0 +1,3300 @@
+{
+  "sourceCommit": "e3e157696994a0d667cbd542a809484b93e40e71",
+  "tree": "9b98f108e38df9658a1a051af29df28ca4d0a9f5",
+  "inputFiles": 658,
+  "rawCandidateFingerprint": "42f59a3c10b73453f328d27a59562597e41e8e5d5834d1c7d9cd128c930c69a5",
+  "committedInputFingerprint": "3aa00984e025c4884944ea6d8ed22299cc85de510f659dc4d0404b536fc40a00",
+  "statement": "All saved candidate bytes match their SHA256 and every Git-filtered source blob matches the named commit tree. Archives were built before commit; original dirty provenance is retained.",
+  "inputs": [
+    {
+      "file": "bun.lock",
+      "sha256": "d7886ae9e685b6a855741dd137aa53731a5eb04105cc998e6618f05bfbeaf4f7",
+      "committedBlob": "fbbc7a5d63ec3f7396ff3d79459f4843939ef159"
+    },
+    {
+      "file": "docs/decisions/0029-session-control-lease.md",
+      "sha256": "c597db9fca931e09912002959070da1202cb17dbb29ad64051c77bb1ab160d48",
+      "committedBlob": "6e0db80aa6fb4ff11b9888390050256e1f3d1afb"
+    },
+    {
+      "file": "docs/engineering/session-control-host-followup-20261109.md",
+      "sha256": "4d4aa2bf879d5ca79b75cb7b7e6a916cad09ccdada1669ba7dfc4fe8f5be33b9",
+      "committedBlob": "61abda05a0adeed87168ad40797646b7e2a77255"
+    },
+    {
+      "file": "docs/generated/package-catalog.json",
+      "sha256": "39932f989d891d460ff9e49e8bf52afb7aa96e37e148055904d093b1787299ea",
+      "committedBlob": "00df2a023bcea1d3bd7cb45b10ec3e49b423cb00"
+    },
+    {
+      "file": "package.json",
+      "sha256": "3f44976576492070ea0839cdac182be38027c4b34ef5771107192b0476980fe7",
+      "committedBlob": "41af29768f110bfcd18156cc2a853c7df224b51b"
+    },
+    {
+      "file": "packages/agent/package.json",
+      "sha256": "391c8a9eb02b4e684accdaa37f2ae848fa17b6cd69e50e3bd5b2cfe50e5066b1",
+      "committedBlob": "8a67ab792b67f0e4fb3b8ff96c49f671d9e13dbc"
+    },
+    {
+      "file": "packages/agent/src/contract/constants.ts",
+      "sha256": "cbcb859ec799098aa67ca3a1effe9812185b2d7523fcf017996794dc62e71656",
+      "committedBlob": "085db5150ee7e7cbc394dde69e5c7e09e9a1d0d3"
+    },
+    {
+      "file": "packages/agent/src/contract/provides.ts",
+      "sha256": "382646e31ad424a16f607a44173bb984e365cf06b5e06020083dae9b892c64de",
+      "committedBlob": "64aacfddc862ecc91e21912c15681bdcbfb5907b"
+    },
+    {
+      "file": "packages/agent/src/contract/requires.ts",
+      "sha256": "2cef12aea93eafac09c8ac632a3db381e6b15873f4179bb6b3ccea4c810e3a9e",
+      "committedBlob": "9b9cd761294da0531c880b5de3bb15b4421fce80"
+    },
+    {
+      "file": "packages/agent/src/contracts.ts",
+      "sha256": "d894a9947cafc7b55b4d3f285cbeab38417d332767aad086a097554e982b0ce7",
+      "committedBlob": "dedf2d3cd58c2979d9a7b14b2d00f1015624ca2d"
+    },
+    {
+      "file": "packages/agent/src/impl/ActLoop.ts",
+      "sha256": "c6a7fdba8ff701324e9f047e597e04d60e4f4fca973fc6ba49786bece242d234",
+      "committedBlob": "37e3e272489d0865bdcc680eb7d58b3b37867572"
+    },
+    {
+      "file": "packages/agent/src/impl/ActRunService.ts",
+      "sha256": "c4fd523fff052a667951712e2f851d69e50625c449a89b460db02e0feae424fb",
+      "committedBlob": "2de143bc12d376c80bf5a892c2797f58b3beeba0"
+    },
+    {
+      "file": "packages/agent/src/impl/AgentSupervisor.ts",
+      "sha256": "20ebe0e54f8c5c3df4f7a3139052efea8de1c4158ea4e26047563c39e4724214",
+      "committedBlob": "94001ff755e638ad27611dd613d66415d64e9375"
+    },
+    {
+      "file": "packages/agent/src/impl/ContextPlanner.ts",
+      "sha256": "49249feb50846f0ee56a81e8d7d9e4437bd991e4763b11f17beb9b044d74b30f",
+      "committedBlob": "5660ee142af29b68eb4e0616aeb96637698a9252"
+    },
+    {
+      "file": "packages/agent/src/index.ts",
+      "sha256": "401d0d2ededf46475f7614d187488636bee5a0c101a5ed3e07197096276a0e88",
+      "committedBlob": "25d7b80b58d42c3919aefcdcd70e507524a16563"
+    },
+    {
+      "file": "packages/agent/src/types/act.ts",
+      "sha256": "c0611da8366b95171f90cdaf129d7cc0fc018f8d935c3e9f8e0e4ab94a9c0d99",
+      "committedBlob": "fdca82320f0a3817febafc1cc6739b746fdc263e"
+    },
+    {
+      "file": "packages/agent/src/types/delegation.ts",
+      "sha256": "5040af00b6b86c9032939523b33bebb9f2272be532250c64ab0f24204e9b1e10",
+      "committedBlob": "939f21ba445e5ee6017f76692ad20f5ba2a400f8"
+    },
+    {
+      "file": "packages/agent/src/types/runtime.ts",
+      "sha256": "72fb125793766b4c32201091b18358c420cfc356da5171a49fa9321111a7ab53",
+      "committedBlob": "3c00bcd6373939f2a99d1e896c315fe1e91b0e05"
+    },
+    {
+      "file": "packages/agent/src/utils/cache-key.ts",
+      "sha256": "bcaea43cf697082beb3ab99c8f651cc7c319dbb50a3c412b5e8dba657b3eecc4",
+      "committedBlob": "51951a82624575b9f4a8b20084b9aab83913e61d"
+    },
+    {
+      "file": "packages/agent/src/utils/delegation.ts",
+      "sha256": "d14b9c06e19f28d53746a1549167c83ba5918c2458be1b81aee78d9fbb80af06",
+      "committedBlob": "18d5ac4ac55b07dd1e415516dd688882bba8f07b"
+    },
+    {
+      "file": "packages/agent/src/utils/frame-prompt.ts",
+      "sha256": "a32aade6fb673d3de72eef1d30dc679a695704f6424e17db7288b4efc4cbb59e",
+      "committedBlob": "a53300e2d776dea4b54d986f1228a3fbfcaec403"
+    },
+    {
+      "file": "packages/agent/src/utils/model-stream.ts",
+      "sha256": "aec9568d43e90c444f13c0b021781aab7130c76a53ec7a6b9c11fb2c6dd5325c",
+      "committedBlob": "d3a3121b2dd766058df9acf41d6c53be683a4288"
+    },
+    {
+      "file": "packages/agent/src/utils/tuning.ts",
+      "sha256": "e31f236297c7d7a055e22d19e578add0abd4948f6669be86a805cd6a8d4b4528",
+      "committedBlob": "374b081e46f388f4ddfa6ea1a3d0ebe86dddc4e3"
+    },
+    {
+      "file": "packages/agent/src/velaros-globals.d.ts",
+      "sha256": "6543275f6830f8a2655db9a52451a2f8ab839f0e023f48a758d6dc2d12cd8060",
+      "committedBlob": "048f64053ef4355f5e705dd7d6b7f2e8772ffac9"
+    },
+    {
+      "file": "packages/agent/tsconfig.build.json",
+      "sha256": "faeb433887b7456ca4b7e3be1a7587d3b02264b5e75d3bc7edb96caeed4258cf",
+      "committedBlob": "fa29581d71103f4d29cd2f07e5ff7e1eafd164ec"
+    },
+    {
+      "file": "packages/agent/tsconfig.json",
+      "sha256": "3362b894c8ade38ed3e325763e5f1ae05ddf075d29c3eb66f41b4dadf1389030",
+      "committedBlob": "3bfc3227e326bc20df3e813f4ea0c93f85dba2c2"
+    },
+    {
+      "file": "packages/context/package.json",
+      "sha256": "015bd58283ff0a54e234fef34ff44a13ac8227681a793391dbb0f989a5a41d1a",
+      "committedBlob": "960a64f61303ddf0f4cc670f0b55f2f5a550f7da"
+    },
+    {
+      "file": "packages/context/src/contract/constants.ts",
+      "sha256": "c46d598ec1773a1cc08f59ecf5cb44afe1eff2bd9422c14c995edb7721df2044",
+      "committedBlob": "fc5b6adbf2681210289d3e18ac2b78b233927882"
+    },
+    {
+      "file": "packages/context/src/contract/provides.ts",
+      "sha256": "e93153c0549bb1bdbf5d306fe41f40f005e0ec56f69b035382ba74955a46e7a7",
+      "committedBlob": "d40607bbf408cd8945ea2d18d0812aedb1841b93"
+    },
+    {
+      "file": "packages/context/src/contract/requires.ts",
+      "sha256": "d47c93c7def8a506ba92308246e75d68ef33cbc01f2abc77a72e6231845105eb",
+      "committedBlob": "b6cc90cbeda1c0fd9d80c089f14ad84b4bc5bbbc"
+    },
+    {
+      "file": "packages/context/src/contracts.ts",
+      "sha256": "62cafa5dd381c21df3b0b9192d85a4a0824ea92d76ab6807aeb04f541997168d",
+      "committedBlob": "8d2a86afd96d3a4b2c2207c1f0d1cb7f446c97c4"
+    },
+    {
+      "file": "packages/context/src/impl/ContextEvidenceBuilder.ts",
+      "sha256": "2ea7734c7b6e62453408d091acac41682266f376f6e604863c52cb89b2d70a3f",
+      "committedBlob": "fefdf1d6f25e356b3f68181cfa97640f871e7bc6"
+    },
+    {
+      "file": "packages/context/src/impl/ContextInvocationJournal.ts",
+      "sha256": "ee601620aedc0941fa9be6de1108edb4b73fa8023e0d62f4740f21d3d0289082",
+      "committedBlob": "90ef56bcb1ed2b155ed262d3b3224b575540b80a"
+    },
+    {
+      "file": "packages/context/src/impl/ContextViewSession.ts",
+      "sha256": "1e558d016912e173d9e776db8de98e2f479cc5d02d08e1db2b4217e6f59f35fb",
+      "committedBlob": "cdd80bfb79da0777c6e3b51b82aeb9b519b2b874"
+    },
+    {
+      "file": "packages/context/src/impl/EvidenceAccess.ts",
+      "sha256": "d126871c7302a74808acba4f0917307f150a77a7e7ca561dbd89fad7aee81223",
+      "committedBlob": "db090e109dd7c2b4f51c91b152ab347bd5118ac4"
+    },
+    {
+      "file": "packages/context/src/impl/LocalContextObjects.ts",
+      "sha256": "5b954104149709ef2a4e5aa45a1a10100ae5b6715d34f353ad3f603699acdc7f",
+      "committedBlob": "5c598ce6df84dcd38ac23fe2f3d9ce8ff6373cbe"
+    },
+    {
+      "file": "packages/context/src/impl/LocalContextStorage.ts",
+      "sha256": "af8854a576bdb324dc8a5448c339b391a8ed44daf61a10d4c932595c53c3fe8b",
+      "committedBlob": "f1b962e41b1a25f3362abb8e7cc984036dc8d246"
+    },
+    {
+      "file": "packages/context/src/impl/LocalStoreStorage.ts",
+      "sha256": "9ec4f27101054745a786fbea7a79d158f327dcbcd1bedbca9bf3c772c76c3087",
+      "committedBlob": "ce333c2b525fec71f6e5a4ef792a797c7bef122a"
+    },
+    {
+      "file": "packages/context/src/impl/SessionContext.ts",
+      "sha256": "a14d189a1c1f5c77b862ada0d04dbce5667fffe106f0b206d748b6e3c0512fd3",
+      "committedBlob": "1b48e1c66b2ec4806f8826a46b0f9f5e9d07e703"
+    },
+    {
+      "file": "packages/context/src/impl/TurnContextAppendHub.ts",
+      "sha256": "a43972f3589870ca95dad289c4ff2593ca5c5e7ada3897a96508ad12202c76f3",
+      "committedBlob": "bf6a567c53101b1f6a9c4dadfa34765fa8e198ee"
+    },
+    {
+      "file": "packages/context/src/impl/TurnContextLedger.ts",
+      "sha256": "e259bd8263dd644e6c2131dbc19fa58fc4deec42b2dbab452a6fa87a5641451c",
+      "committedBlob": "b896280bbfc84d8fa01fafcc975f07219aeae021"
+    },
+    {
+      "file": "packages/context/src/impl/TurnContextSessionLedgers.ts",
+      "sha256": "d8ceff9d3bdabe30d9ef64e445125387a6a5b060c1e1aabf34317a644393e0a4",
+      "committedBlob": "43458df8feb001d07e91dc7f0bbb64b810c9d0a0"
+    },
+    {
+      "file": "packages/context/src/index.ts",
+      "sha256": "46ff812b495c1fb40483023a0d9d0b2970179beef75f9313ccf6be892dc4d1ec",
+      "committedBlob": "848021a05e0cb623a77e104f7265d9d2f9a8a4f4"
+    },
+    {
+      "file": "packages/context/src/node.ts",
+      "sha256": "f711ceab60ebfd065cdcca9526267a72fccba45a31e0b52526132c8798c73940",
+      "committedBlob": "012d7034cbacde11cfe31a979d13a85b07d4caed"
+    },
+    {
+      "file": "packages/context/src/types/activity.ts",
+      "sha256": "3b9debeca5b94d42f31edbf5bfb049b0a9dc5fa93c5bdbedeb7b5f9d8b66d08e",
+      "committedBlob": "0c0ad90fe3059078b6ecfcbe3cf697198f2d88fd"
+    },
+    {
+      "file": "packages/context/src/types/context.ts",
+      "sha256": "8b4f7105ba0705e41ba2fd677118b2ae5ab7400ef47f456ac24c43e4d9647f66",
+      "committedBlob": "49fbed2cc478c24f4ec0e9521c0f13458c172272"
+    },
+    {
+      "file": "packages/context/src/types/model-budget.ts",
+      "sha256": "9dd2c73b8f609f5e46e8caa69e525dfd47eb348c9103396891b3458ca1f77c59",
+      "committedBlob": "cb489d295b40c783dca7f8b1c1d20f3d1bdb2e36"
+    },
+    {
+      "file": "packages/context/src/types/runtime.ts",
+      "sha256": "e56285f139c58bc3b3e61101c8f9c2a8b2f9fde3705ad65742a74d61dba744b8",
+      "committedBlob": "721495baaed5101e645fe39beb6ff989641c052e"
+    },
+    {
+      "file": "packages/context/src/types/store.ts",
+      "sha256": "00c27a6c54e3decf5d405ce2468b4287d79aec5dc99a4576631d0b7b7fb0561e",
+      "committedBlob": "20a729f40e103ebd13b2790ec3dda3710ef81560"
+    },
+    {
+      "file": "packages/context/src/utils/body-chunks.ts",
+      "sha256": "0243999dca6f93c88806a54f33134378d4cdb77e95829fab81ef9ff2390d05cc",
+      "committedBlob": "be581355181029d31cbc4a4929c96d7792886a4d"
+    },
+    {
+      "file": "packages/context/src/utils/journal.ts",
+      "sha256": "d47ef7ee8c761237ee99ba61011b78214d1fb4606e655aa60687f9941942905a",
+      "committedBlob": "c11f2d0c745be8463c4fb638fb66baa3985e7db4"
+    },
+    {
+      "file": "packages/context/src/utils/model-budget.ts",
+      "sha256": "1d54af9430825ecbb34cf72acb484076d1c6772036fa7386dcc8b2dbbc9e8a04",
+      "committedBlob": "fbd76baf4bd86406117e596acbbd806071ff51e2"
+    },
+    {
+      "file": "packages/context/src/utils/progress.ts",
+      "sha256": "21285bf007c29e1031b14c3b00eb984706bbba757e66a354bf70c6a9133271a4",
+      "committedBlob": "4e8b5008a07e34904aa94193948272e5f5229fad"
+    },
+    {
+      "file": "packages/context/src/utils/state.ts",
+      "sha256": "89a7a709af41133c9f0ea6aabb4198607fea46e26b48646dd6237c43dfbf9662",
+      "committedBlob": "6cf60171fd759631e27ba0b73191836752e8ccaa"
+    },
+    {
+      "file": "packages/context/src/utils/store.ts",
+      "sha256": "355df3417a948f3fe9f8d01b52b66b0c82cc522a003f8137820bef2a21a6bc34",
+      "committedBlob": "224ee58e1aa53af48718b4fede59524970750a74"
+    },
+    {
+      "file": "packages/context/src/utils/tuning.ts",
+      "sha256": "c0e2572110a5088d4afe217e14aee4a788479122b98c562941aeacc9cff57e5b",
+      "committedBlob": "13317aa9ea106435172cc7e842dde6a636d2d462"
+    },
+    {
+      "file": "packages/context/src/utils/view-input.ts",
+      "sha256": "8d555a8c50a29dfeaba83ac3423dcd7a18bdddeb2c68e35c289176f985f47faf",
+      "committedBlob": "1efcacbfdc4690c21206a191e77b3e806391549e"
+    },
+    {
+      "file": "packages/context/src/utils/view.ts",
+      "sha256": "e88474691764dcc07eaf6997db0854a907c86631386eeafff8eb4151c5300675",
+      "committedBlob": "3b171bf283c688d067e751fe61dcc9648cafdbe7"
+    },
+    {
+      "file": "packages/context/src/velaros-globals.d.ts",
+      "sha256": "6543275f6830f8a2655db9a52451a2f8ab839f0e023f48a758d6dc2d12cd8060",
+      "committedBlob": "048f64053ef4355f5e705dd7d6b7f2e8772ffac9"
+    },
+    {
+      "file": "packages/context/tsconfig.build.json",
+      "sha256": "1841ece3113bdbec794074f78c1a5ffc191e83f6dc2981f09dd9a08d26ee5eff",
+      "committedBlob": "2e734943c0c9dd0a69eb0550ccf7cba01b668b2a"
+    },
+    {
+      "file": "packages/context/tsconfig.json",
+      "sha256": "2ed55bb3f74ea4b418bfb61806205329383613af284c8c7d683ea79c79b790ef",
+      "committedBlob": "95787621ec8e2eff9a4e0320ead63580a63d01fd"
+    },
+    {
+      "file": "packages/core/package.json",
+      "sha256": "db93754d46cdfd3d055d53166abf8c6ebd300aeec3bdd97516868d6a8116a32a",
+      "committedBlob": "733f22d1374e9abf217c67ae9902f7e8085250d1"
+    },
+    {
+      "file": "packages/core/src/assert.ts",
+      "sha256": "a484e626e06db825169e8a5300c8962ef30f5f2eaf6284844e9e52fb013afb21",
+      "committedBlob": "1e46b4d6f2f21870a90118320879be0dc4c9ba4a"
+    },
+    {
+      "file": "packages/core/src/error.ts",
+      "sha256": "4b3b27b890453e7ada272dee0c8c32411381143ba545f81853c9fb870b872ed5",
+      "committedBlob": "02b75cb7cd49490d20e8cf7d033079dfa8ef85b4"
+    },
+    {
+      "file": "packages/core/src/index.ts",
+      "sha256": "31d7106bcea2ec886e3346838e4df296c8ca78b4fc44153363832c416f25ea04",
+      "committedBlob": "87dbfee9e145fb67029d3ca448a21af61a56b7cd"
+    },
+    {
+      "file": "packages/core/src/logger/FileLogTransport.ts",
+      "sha256": "2c8605d81e77dd2d698e28726df257a04f45172ec92bec23ed41cf4355a100b7",
+      "committedBlob": "bd3cc6255cf06a6f9eb73d83d805ab86265a7fe9"
+    },
+    {
+      "file": "packages/core/src/logger/Logger.ts",
+      "sha256": "353edbb5884c5b327d3b07a54813c015d8c6f96efc1e28ca7eb179491744cdd4",
+      "committedBlob": "f880f440c7a33940966c1b6d6910da25059189e6"
+    },
+    {
+      "file": "packages/core/src/logger/errors.ts",
+      "sha256": "56052dba765f8997dc8924f89379d495a11e351891d534a0b80e8a56ed965dc2",
+      "committedBlob": "abeeea19534388f035a13c6dfd44d76b5ef468c4"
+    },
+    {
+      "file": "packages/core/src/logger/helpers.ts",
+      "sha256": "0c4225acc83faa7b4cb0a5dd88e82541de01e411f80fd2eb3a193a9e0f68d67e",
+      "committedBlob": "4888b04a36a8d311d136d922e65d70275556d38d"
+    },
+    {
+      "file": "packages/core/src/logger/index.ts",
+      "sha256": "5e5edeb7408ed3e639d5705fa2ab5f7658b718a423cf118e3bac9f4b6a20efb7",
+      "committedBlob": "3471d6398b273fa1a4acf1210625294750f8eb9b"
+    },
+    {
+      "file": "packages/core/src/logger/manager.ts",
+      "sha256": "ff118ccf16e9265fe9494128d215da2e70f8f410112a7effb68f7dd7081c4ce9",
+      "committedBlob": "080888ac23490ab9d8d21fdd839cbad75b1a519d"
+    },
+    {
+      "file": "packages/core/src/logger/node.ts",
+      "sha256": "e2a967c098af303452a4c2b90b00da255536f9c351910d6ab155c7495d7e3bda",
+      "committedBlob": "6860c89dba9e93066ed167d78eab697c1087e4d7"
+    },
+    {
+      "file": "packages/core/src/logger/runtime.ts",
+      "sha256": "d4f22ef578333dcd485d8faae018a25828a2fb7b35fcec94547f8597067fb4ab",
+      "committedBlob": "cb14ae22c55ac3aebc96dd4f2e0a96c209696e7d"
+    },
+    {
+      "file": "packages/core/src/logger/transports.ts",
+      "sha256": "371e3f65f46b4555925d70fdd95e1773580bf6a59341367c1cb13fa101dc13f4",
+      "committedBlob": "45295efbd66015cffa1370c5012b9c12a012f88f"
+    },
+    {
+      "file": "packages/core/src/logger/types.ts",
+      "sha256": "ac38c2dc973fbce6c20c29953cba8e5c05176758580254079409f109f9be5046",
+      "committedBlob": "c87a0c73570d93dc36f66c91344b78ff2db99674"
+    },
+    {
+      "file": "packages/core/src/path-rules/README.md",
+      "sha256": "3fa61ec07a739476595c3ce33575c388ddb370b3e56010826037df25ec1c002d",
+      "committedBlob": "567b39379e5fa63fc930554ebf85bcdd0e36b1d3"
+    },
+    {
+      "file": "packages/core/src/path-rules/contract/constants.ts",
+      "sha256": "1131095071a1679ff830b45a647d7da7715f4c2a06cc9bac98f81ff1deeb085e",
+      "committedBlob": "5fcd2c407848d716c1acb57ed615e244e4899f91"
+    },
+    {
+      "file": "packages/core/src/path-rules/contract/provides.ts",
+      "sha256": "45977ba4a3612560c200b96e7c62986bb03370cb7b50435ba0a26cc4e89aee1f",
+      "committedBlob": "2d12e9e2cb9a8111397e4a0e62afaa22e060abf1"
+    },
+    {
+      "file": "packages/core/src/path-rules/contract/requires.ts",
+      "sha256": "5bb9ded56aa8fa1500c905be37e971d38c71fe47c78be151b2c85b6edeb85e11",
+      "committedBlob": "39660edc4dfc118bc9892fb56b2897f10be62718"
+    },
+    {
+      "file": "packages/core/src/path-rules/contracts.ts",
+      "sha256": "060131ef839df81e5ba500c547857e4cd123a3d5cbb0b3826be8dc0494c44280",
+      "committedBlob": "0b6be714ce2658a99098f56b11693be15ccbb520"
+    },
+    {
+      "file": "packages/core/src/path-rules/impl/GitignoreRules.ts",
+      "sha256": "4570d59dc72e75c208306793f9c1bfff017989e5b641e8ade8cdf54362b986b3",
+      "committedBlob": "76637c610904710ac88ef550a188bdf10abdd33a"
+    },
+    {
+      "file": "packages/core/src/path-rules/impl/IgnorePolicy.ts",
+      "sha256": "72e9b66cdc57bcd9fb9fdb84c3b0e5a0bee4d8b695625c7ecb501c14f71ae7bd",
+      "committedBlob": "ef6619427e5a1c49c1b4fcea916af61b30e52f70"
+    },
+    {
+      "file": "packages/core/src/path-rules/impl/PathMatcher.ts",
+      "sha256": "6d8e719c44992a470e7f6de12ed0dea323a4823d5861581e9defc6d8771e1457",
+      "committedBlob": "08becfd2469c4345a4fea82e28690392264af648"
+    },
+    {
+      "file": "packages/core/src/path-rules/index.ts",
+      "sha256": "0ea342c40b830f97ad78edae4d2d460a9b8d50f76d32812e53a497d2781b5ff5",
+      "committedBlob": "e7dda9726b895b0ac392e11db11f8a28ae50773e"
+    },
+    {
+      "file": "packages/core/src/path-rules/types/options.ts",
+      "sha256": "378b9a41d4ca74b054bf91542d46204654571a9ffdc21e1b7d9a2716fb008dbc",
+      "committedBlob": "ba14f71673205de5495d0cc30ba9810da8f274df"
+    },
+    {
+      "file": "packages/core/src/path-rules/types/path-rules.ts",
+      "sha256": "3a3bafe2f657745fcd749ff2cd7c6f440cd5cd5941d1294bda1b898a4bcff21d",
+      "committedBlob": "740a3635bcd4b9e6f5b048da967097f0b4b88d5d"
+    },
+    {
+      "file": "packages/core/src/path-rules/utils/discovery.ts",
+      "sha256": "08d3ddf1d38f559b3df409b1a91c85e2001ce6eaa2f390e7610aa0bdd90a10fa",
+      "committedBlob": "ed9582acd72d89bc1046234a21b4d76ec4f30caa"
+    },
+    {
+      "file": "packages/core/src/path-rules/utils/gitignore.ts",
+      "sha256": "9bde6293259d86c2aab3aa84483b2dd5ba6aa87c62a51b2c5a96b82aacbb4c93",
+      "committedBlob": "a9c82b95dc9e3b740a6f31e809a75913b6b762f4"
+    },
+    {
+      "file": "packages/core/src/path-rules/utils/glob.ts",
+      "sha256": "045836701989e0e67b40b6f577d2352bfb4603fc1f1b26f694f65c5c7f9c3a77",
+      "committedBlob": "b97c8145b261e32d5743ebaae0c5b055a327ffa8"
+    },
+    {
+      "file": "packages/core/src/path-rules/utils/path.ts",
+      "sha256": "7c668c599f9d733076b297f7a8a51e3c10644711178276cfe788b8a1257b541a",
+      "committedBlob": "1cc2886205e2e5b819448f45a1c4ca4803a519a7"
+    },
+    {
+      "file": "packages/core/src/path-rules/utils/tuning.ts",
+      "sha256": "7f3fa81516f55b544f5ea3cecc4a4e4c6a366875e84bfb5b70c94677c18ff810",
+      "committedBlob": "ca9dacee339d04ce1c2232b0adf3d1628703ab4f"
+    },
+    {
+      "file": "packages/core/src/platform/README.md",
+      "sha256": "2f809367fb3adc45cae76424a23ddee8c28fe1789dae459ea1596e665a34d651",
+      "committedBlob": "3b3f9dff624b5b42e9b7bb5d2eeaaed69d46e102"
+    },
+    {
+      "file": "packages/core/src/platform/contract/constants.ts",
+      "sha256": "f7e986901ba9e3a5506add4bcb6e7a5c257cfd4f0f6841ce78bb94811a5b410e",
+      "committedBlob": "aa73613324c9cf40022a969c817e2361ea3a5060"
+    },
+    {
+      "file": "packages/core/src/platform/contract/provides.ts",
+      "sha256": "563a3cc818ea27677b41d64f5d2ce35b5b2464e5214c667df40cb89e6f305b89",
+      "committedBlob": "976ded4011b314fe7642dfb965fc8389d39bc654"
+    },
+    {
+      "file": "packages/core/src/platform/contracts.ts",
+      "sha256": "1756a9bec33e58f5ec1847ac4fd470b491f86d5b4467178884ea781f50fd41b8",
+      "committedBlob": "1baaa26681a0cea7e08542e679690bd319bc4c20"
+    },
+    {
+      "file": "packages/core/src/platform/impl/PlatformCompatibility.ts",
+      "sha256": "7e10de316eb1a8eee861ac8b4a118bced9320e2dde4caf0cb1fe450dcad024d6",
+      "committedBlob": "e5575d07e2df077bc2b1626375b02a66e1a24730"
+    },
+    {
+      "file": "packages/core/src/platform/impl/VelarOSSharedResources.ts",
+      "sha256": "b132bc06d8e4240483e13078eae8920b2812a125c2cd7c3e896bff3e6fa1836e",
+      "committedBlob": "6bda09d5f2197103593c7b73a05b76744302e369"
+    },
+    {
+      "file": "packages/core/src/platform/index.ts",
+      "sha256": "36b678a8ee7471e1582c1487ad9e7d469cb8be51e2f372df631431915732c0ee",
+      "committedBlob": "bfea9f7c1058a6c74377cc0715d4891b1f3a6321"
+    },
+    {
+      "file": "packages/core/src/platform/shared-resources.ts",
+      "sha256": "08e6cc08f1bf6398da4b18fc9324ec6b8540c195e1c6d7d665f5166856a8771b",
+      "committedBlob": "ec8169814ef89e666ef676239f374d91b3e1b074"
+    },
+    {
+      "file": "packages/core/src/platform/types/options.ts",
+      "sha256": "e9189da69fbaf75ec6c30fb405860221907e84a99204063545fe8fae80b96a13",
+      "committedBlob": "243636c8fb4e2b583d7f510a43272da27d94bc31"
+    },
+    {
+      "file": "packages/core/src/platform/types/platform.ts",
+      "sha256": "1b7c7c241d668b462f7f08c7f620d0533d7023133715b3a749756c751c097d59",
+      "committedBlob": "98d789b555fd0c4963369cdccb6cf20d0a240b3f"
+    },
+    {
+      "file": "packages/core/src/platform/utils/platform.ts",
+      "sha256": "bf61f7d905fe6ef36410ac8125b2fdd2df6163451043414bb1dccb0d0f729dd2",
+      "committedBlob": "acc1088d58203ef6f47cf35c9f8e957406c61999"
+    },
+    {
+      "file": "packages/core/src/result.ts",
+      "sha256": "46331ed94275bac5ff607fe5487144090a7da44fc6b310b811777440cd17ae56",
+      "committedBlob": "0589451b5b8d28584ceb4cbfd042e7a7f8605e29"
+    },
+    {
+      "file": "packages/core/src/text-files/README.md",
+      "sha256": "66325266a83cc4d166ef8a3626ab572a32f041dab081b94ea9928b9fe271e8d7",
+      "committedBlob": "ecb0221b6a9627013bec7c4820c9aebf3f00d58f"
+    },
+    {
+      "file": "packages/core/src/text-files/contract/constants.ts",
+      "sha256": "db3fa858b9912f6244cb9e894ccca86557913e3f429f4954da8fbb05ad6498cd",
+      "committedBlob": "b5cb844e1ea545d01efc8e88b7230b223820c875"
+    },
+    {
+      "file": "packages/core/src/text-files/contract/provides.ts",
+      "sha256": "9c84d1706d14740a60d7580657ae2f6f8a59068b6a0ac77042de6e098e46f9d9",
+      "committedBlob": "b420b063f44c76b2dde62f992889b8b73c6490dd"
+    },
+    {
+      "file": "packages/core/src/text-files/contracts.ts",
+      "sha256": "01cf6d6ccc6b0164046cc7f6c8e18a4a474dabfbe1b1ca853b30adbdc7c41480",
+      "committedBlob": "b8d72977e4a20ac3229fb11f020776c7c8229191"
+    },
+    {
+      "file": "packages/core/src/text-files/impl/TextCodec.ts",
+      "sha256": "91a52478566d9f8bf55efc70aeaed636ae7f3a85e67cff803a219355e4f94df3",
+      "committedBlob": "80540b5b87466feb829aface738bb68bbb3be24f"
+    },
+    {
+      "file": "packages/core/src/text-files/impl/TextEncodingProbe.ts",
+      "sha256": "96d2a950a7855d5a5c66c0eb31a5629a3c6c7fb01678b890b54da728502af189",
+      "committedBlob": "9a3d2e6463b1af448b439bc025bb2c750d26137e"
+    },
+    {
+      "file": "packages/core/src/text-files/impl/TextFileIo.ts",
+      "sha256": "3845d2a4a34fc6592cce32d837b8e5a6596d6637fa3397705fd9ebdc35386e24",
+      "committedBlob": "f932faf1592ddc87a043b072e7ee07f0ba5b42c3"
+    },
+    {
+      "file": "packages/core/src/text-files/impl/TextStreamDecoder.ts",
+      "sha256": "f4aa27369da5441af71108d9ab7734535965c69c1d013bfa801ed7a47766dd52",
+      "committedBlob": "37b2929a24dc3eec293bdf5e55bc2bda7c8a93ee"
+    },
+    {
+      "file": "packages/core/src/text-files/index.ts",
+      "sha256": "fefef308f8b59d4bca2f5ff1df0723060a6413a07fd3a38722a66130dcf05675",
+      "committedBlob": "d72d8bb0b9bedb592467fe0481b374e4be60052f"
+    },
+    {
+      "file": "packages/core/src/text-files/types/text-files.ts",
+      "sha256": "c7c11f32cb4fab804a5c486f442ba857af6a35615c2a6bdf86cb2060f82564f2",
+      "committedBlob": "c5728ef9f4ce11bc2ba9106f9466ea782b0940a4"
+    },
+    {
+      "file": "packages/core/src/text-files/utils/encoding.ts",
+      "sha256": "fc1795eaf2e699aa795db7559898b4d2e00e493b7d16eb37009e61c3e67e8772",
+      "committedBlob": "9a74e193a3ec97aa0ef86c8732d584565d4c1649"
+    },
+    {
+      "file": "packages/core/src/text-files/utils/file-io.ts",
+      "sha256": "5d381d846a2b7bd9113cb966d23bd1c3d973bf125e49e010d2f8fb117f651d9c",
+      "committedBlob": "fd876f6171f54b1d63b353cabf07eef005456af8"
+    },
+    {
+      "file": "packages/core/src/text-files/utils/preserving.ts",
+      "sha256": "b5e514e8a18e6e5c34971810593cb876399bbacd67131cf979bc5f357b8270b9",
+      "committedBlob": "ae26cf9301c47cfbebcd0aa85625b3c6c1745b6e"
+    },
+    {
+      "file": "packages/core/src/text-files/utils/tuning.ts",
+      "sha256": "5cef3f7cf6ba766156d759f6b826e779c62a95eff9428a0e82eb7580ea142007",
+      "committedBlob": "3a0046c7cdafa09570e628cad1baab33deafa080"
+    },
+    {
+      "file": "packages/core/src/typeGuards.ts",
+      "sha256": "1a726c64668e99a9deaf0eb698bf715ed12d8b747c83061d3336af7a433b3b55",
+      "committedBlob": "4fef8ef2c86e604d3df5387210972a13570d51d5"
+    },
+    {
+      "file": "packages/core/src/utils/ExclusiveSqliteLock.ts",
+      "sha256": "4926a7ec314e7021a6c8e4dd455b73b9a15c9ba825de16ea6d53f8d88c8b99f1",
+      "committedBlob": "ebef13af14285d3a708ebe49d48e3ca6e064affe"
+    },
+    {
+      "file": "packages/core/src/utils/FilePersistence.ts",
+      "sha256": "0664b3253e9ab4ea72df7316fa787b9b1d4feff754e8d41d15302f40893928e2",
+      "committedBlob": "fa8051726bf426ebd2e3a577905dfad043de27e9"
+    },
+    {
+      "file": "packages/core/src/utils/FileSecretBox.ts",
+      "sha256": "b41308355ac3afb32ca134aab032dbcf528670b79b425fcc6c4146c2908778d4",
+      "committedBlob": "f7a328533fb0c65414528cffea7d083e3de0701d"
+    },
+    {
+      "file": "packages/core/src/utils/KeyedSerialQueue.ts",
+      "sha256": "c44f1e5abb3ace1cf5cc4d115f33d241cd5c65d50ab2e3b0e77b629fd1014129",
+      "committedBlob": "2c21019ae3899c1d0731983e40a69b2f9242b83c"
+    },
+    {
+      "file": "packages/core/src/utils/RealPath.ts",
+      "sha256": "19f0762c89c3a90dee3e07c8106e309c3a731fe8cb41fe2ca4e58c82c8405290",
+      "committedBlob": "2a8f4b5a6b0bf0d34c8e25033002b67483f80a4f"
+    },
+    {
+      "file": "packages/core/src/utils/TimerScope.ts",
+      "sha256": "230ceabfa0570515f14f7988c265f06810c5554368f20b0881ec7529bba920c0",
+      "committedBlob": "7f37ca136005476286d86c2a2b86d120688ac8e0"
+    },
+    {
+      "file": "packages/core/src/utils/array.ts",
+      "sha256": "f285b8ac42d00dfa2db9c668bdc09d5bbc042bbe57b5812c58a689f7338218ec",
+      "committedBlob": "db1cf3ef35718a3fd2980c18363de24db3a34a88"
+    },
+    {
+      "file": "packages/core/src/utils/errors.ts",
+      "sha256": "96ada9d8f3ebaa59178f77dda345a2ae2f459a90b14fbea23a1997f2d536e575",
+      "committedBlob": "64a601686f1b20ef70637b57e41b1d2b158e8087"
+    },
+    {
+      "file": "packages/core/src/utils/fetchWithTimeout.ts",
+      "sha256": "c0a216668c5c94d0447f9262e42efef91ab8e2129ee68bcb876689e06a3cb75a",
+      "committedBlob": "9692ed1e4482ffa2b99b49b906622e1ff7e0bb3f"
+    },
+    {
+      "file": "packages/core/src/utils/json.ts",
+      "sha256": "30d3c55c2213e727dae4b456b9cee32b1c76b5c29015c31849dbc0bfdab6290c",
+      "committedBlob": "fcdb40e8d14a818cbad22210b91e290eb920e84a"
+    },
+    {
+      "file": "packages/core/src/utils/mapDefined.ts",
+      "sha256": "b179df2ee77a5b8e16ba4d32c94db5865f8a0eee16c9130dec0848ecb3ddf8d1",
+      "committedBlob": "366b98ae6d6c7f03759758aa5dc97c120fb21096"
+    },
+    {
+      "file": "packages/core/src/utils/nullish.ts",
+      "sha256": "ad9917ba29e7c10438ceb950d293786c7832d107a09107f86a01aa3dccf209dd",
+      "committedBlob": "b97ef643e226b2211ee63177dfb7e9e333df03b5"
+    },
+    {
+      "file": "packages/core/src/utils/number.ts",
+      "sha256": "b9e3748a3b107a429972275dbd521fdd13600f27e68e332cdcb1150e99a50462",
+      "committedBlob": "b8bc8dd065c328c6a2baafee6be1e399ec1cd329"
+    },
+    {
+      "file": "packages/core/src/utils/optionalWhen.ts",
+      "sha256": "0c1a4d9786abb6c4adc3e5435fef2bf4f744e4729ce3de0d97b22fdaf2629aef",
+      "committedBlob": "58434da23dbd9e139923dddee151bc286287a6f6"
+    },
+    {
+      "file": "packages/core/src/utils/shortReferenceId.ts",
+      "sha256": "f8fd983032f59ce00dd65203fb830711087be21928595d7ffc7a39692f90ab93",
+      "committedBlob": "6ff6cdf4f4544255581f7028f0753716c057ef47"
+    },
+    {
+      "file": "packages/core/src/utils/string.ts",
+      "sha256": "ec5d7a3c682d72adaf693e950e419de7a7402bffa0457c26054bc1307d5f378b",
+      "committedBlob": "6bf885a6f5f1b7c3bfb2b2d4da6a4b1567832b30"
+    },
+    {
+      "file": "packages/core/src/utils/textDiff.ts",
+      "sha256": "1c7eb6e1f278f31008ab9916d57b2f5663cf067b292c0bba97915139407820f4",
+      "committedBlob": "e6fef19efae28b83e35733f22aa8825d66854986"
+    },
+    {
+      "file": "packages/core/src/utils/unknownJsonRecord.ts",
+      "sha256": "d9d445eab6e563a1505dd4fbea851472038d1a8093e0913a91adc9e8164058af",
+      "committedBlob": "6e6280524ad35b18cedee2e8bf996f86100c9c50"
+    },
+    {
+      "file": "packages/core/src/velaros-globals.d.ts",
+      "sha256": "6543275f6830f8a2655db9a52451a2f8ab839f0e023f48a758d6dc2d12cd8060",
+      "committedBlob": "048f64053ef4355f5e705dd7d6b7f2e8772ffac9"
+    },
+    {
+      "file": "packages/core/tsconfig.build.json",
+      "sha256": "88056e089634a189a7a193f5e54e4891ff7aca5d0dcff9342f70483392033a70",
+      "committedBlob": "3c1056b5da9f803f8a2446271a2da415600460a9"
+    },
+    {
+      "file": "packages/core/tsconfig.json",
+      "sha256": "e69049d5444794ec68644a1beb79fc994df0c30f952b36e025abe18343f09a54",
+      "committedBlob": "d597ce81df38d5f215bd2a12e810760d649187e7"
+    },
+    {
+      "file": "packages/kernel/package.json",
+      "sha256": "f4c0bf2b1aebf4fc2708f509d84eaa045169671014882624e8ecb885e8019f8f",
+      "committedBlob": "a2c209e7155ce20788a51c40af46b75d6dd940cc"
+    },
+    {
+      "file": "packages/kernel/src/client.ts",
+      "sha256": "abef380afe669897197d4ad6f9780603100d04ea76f48c904cc7020f2eff62b8",
+      "committedBlob": "dabd8ad4a4d58907b9061d13b0b59bf9fd10d6e1"
+    },
+    {
+      "file": "packages/kernel/src/contract/constants.ts",
+      "sha256": "b6999235fac9d8a3fbdb459954c66eb962b5eb3b796231e610c6e1dc380c414b",
+      "committedBlob": "ab8b76b909de01cc1da9bada21f73a3859a6c8a6"
+    },
+    {
+      "file": "packages/kernel/src/contract/provides.ts",
+      "sha256": "49096b9fb1df64d7bb16c64b4182037eba1553b05f5ea83f9b67887d58559a3a",
+      "committedBlob": "02bea71cb2235e9b5e5e44d9f9f5b82fb8bd2948"
+    },
+    {
+      "file": "packages/kernel/src/contract/requires.ts",
+      "sha256": "f8ff78ea552d222a71348d7acfea926c0de3f0fc85ca2a5b790016160427b5ae",
+      "committedBlob": "67fbdfa7ebcabec30e53e944107338c6641c69f9"
+    },
+    {
+      "file": "packages/kernel/src/contracts.ts",
+      "sha256": "47ff128b3f94b123221647f33bebc2a3d4c282133952f974f1a7fcf7eab3cc3f",
+      "committedBlob": "54b226d57448c9dfb0389b154d625c4bf195f002"
+    },
+    {
+      "file": "packages/kernel/src/impl/client/CapabilitySession.ts",
+      "sha256": "02d4fb2e14039f313b908490dd54e6ade241b63dd1e5a53bd90708979469cb73",
+      "committedBlob": "61f20b97a96d085b3cf3fb6c9aeac86bbf486213"
+    },
+    {
+      "file": "packages/kernel/src/impl/client/KernelClient.ts",
+      "sha256": "8ce7c4c4a1cfd033629cbfd731b043c677143e6996d7d9f25c5ccc8b9246c97c",
+      "committedBlob": "ab7fa123b035abe150cf42baac613b2d735e64dd"
+    },
+    {
+      "file": "packages/kernel/src/impl/client/KernelDaemonDirectory.ts",
+      "sha256": "893262996e9e4916e17a5072500c826b38dd3a7c58544ab8a6e512a28a850177",
+      "committedBlob": "f2747c9221aba984c864221130f33a7b5e0367af"
+    },
+    {
+      "file": "packages/kernel/src/impl/client/SocketKernelTransport.ts",
+      "sha256": "cc5d444e9bfa65dd8bb75ac9a878fba48ab89f676236b1e4457e7bcca4ad3ca3",
+      "committedBlob": "6be36ed46e4b94697386d6511dd7e5b9faab4721"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-client/FileRemoteNodeCredentialStore.ts",
+      "sha256": "658d54ed0c1618f16e3016142aef52a58227ddd4a71519c660cffa911d919374",
+      "committedBlob": "d6657c1f68c2b42a286c37cb7e093f01b69d1066"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-client/RemoteNodeClient.ts",
+      "sha256": "db935ca8084b1360ed653d03677c10bf20e555c5639b76fbba564be171267b95",
+      "committedBlob": "c1ca03c868badad850f49b9f5cc92a217388cf95"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-client/RemoteNodeIsolationAdapter.ts",
+      "sha256": "d15904a610314520c7fef18c564cead0d018b22ac0e630bef0b47a4b1d30bdd6",
+      "committedBlob": "40e0c51ee82f3acb2e919ff4ebc91f75067f9636"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-client/RemoteNodePendingCalls.ts",
+      "sha256": "cc3cabf588c3110e8a9938f59560be2641f3591d178be58c9b56530ca7f30d84",
+      "committedBlob": "fe8ff26af37a002ee875bfc4717bd9a19ff88922"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-client/RemoteNodeProjection.ts",
+      "sha256": "984dbd14cdf06403b0d6a174048c2febed80c05acb7f69d68ce321795b8d0e0c",
+      "committedBlob": "142c7a056061f73084a8fcc974ed2745ada3f666"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-node/FileRemoteNodeAuditLog.ts",
+      "sha256": "4930668b292a1455e546fbd9f917d976dd4cb9e6425edfcc3eb2c2cd610cf78e",
+      "committedBlob": "4792ed90299b29e084b42ac5cca5aca06f689df6"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-node/FileRemoteNodeServerCredentialStore.ts",
+      "sha256": "14081989767011c5caeef32a4ce80d97453fbd1b93d1ad2f46c9fa2959087006",
+      "committedBlob": "f758649e45d6a0feddb1c3fe589a7f1a736759d3"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-node/RemoteNodeCallRunner.ts",
+      "sha256": "1522c430063d385cc0a54368f5df7f03058c25912b8a5b5332e043a73ba488bd",
+      "committedBlob": "949c0b9eee2d567f9bd57bd81c4e93a0c90acfd3"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-node/RemoteNodeInvocationPool.ts",
+      "sha256": "7806296b0767eb15f285a4f12de837153e96af19dd5fd4c712ff57709e497b56",
+      "committedBlob": "0d7f0d0cde8a7519e59fbbc80db1288520e02aa8"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-node/RemoteNodePairingGate.ts",
+      "sha256": "c2c9d2a8216f4f4d0e6a1238ddcaca4f4266e1b2b7c16e5a762ea1885fe2dedc",
+      "committedBlob": "6ffa3aa70b7e6abd8501a613be52e27e13d6694b"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-node/RemoteNodeResultCache.ts",
+      "sha256": "d43f3ebaf523c448c685b847e30a974345908a8cdd646e6b5f4b728447d9b4c0",
+      "committedBlob": "c09076f2c2e7d23c4abb28073da09dc7076b0bc1"
+    },
+    {
+      "file": "packages/kernel/src/impl/remote-node/RemoteNodeServer.ts",
+      "sha256": "ad22ce2eb4e9204b7784b7fa4745bdc1649b38fa0f1ce874879f052f04508132",
+      "committedBlob": "538471b36f2c84f44e7a710112c66c5ca6e4dc85"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/ApprovalContracts.ts",
+      "sha256": "751ba2fde25644ebf2fbe2d269f31189559c47c07100f8ccd560f32c03974699",
+      "committedBlob": "379a61923de8818bafd143387323358e88d198d5"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/DefaultDenyApprovalPort.ts",
+      "sha256": "7c779002f2c1347e9bd51f5a550b04e8583cc2dc980669fe9e8066d396cb58a8",
+      "committedBlob": "dcd8f8878a371fc7fe840049330ce3afa35ea507"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/DenyAllKernelPermissionBroker.ts",
+      "sha256": "3f39bcd044e6ae473c65ec6ef2af6978cf73e319f81c9aa8fb6ca5fc5bb04eee",
+      "committedBlob": "4e838ebd05275cb089d6a9800d0fae17c6a0bf6b"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/InMemoryKernelStateBackend.ts",
+      "sha256": "eb3d23bd34c627a312b25354f30fa0052ef821b2c9b1e6617ad1a328870521fa",
+      "committedBlob": "3a0d445e4a98dafe54502f8ca0efd80efa3ec56a"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/Kernel.ts",
+      "sha256": "e045837c66df759a2162f38d124abf10cdd7288aff3f4e05a72a49bd43e028f0",
+      "committedBlob": "118730b23820c9388f2ec46b02e4cfdd9ea33e3c"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/KernelCallableCapability.ts",
+      "sha256": "14e7ab2a070f74171e150eaa6cbb603cd7766b74baee9fe12f3448bf5b1bc907",
+      "committedBlob": "19f06b1b50915a967123dbc748b937416e89f289"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/KernelCapabilityInvoker.ts",
+      "sha256": "b47b94e953f73a5097e41da9aac7884e5d221fd6592109ec02a7d98c5e1b0b3b",
+      "committedBlob": "be3a113a6068c3346c1b27c1c03e2476df50b843"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/KernelEventHub.ts",
+      "sha256": "b1bd8a8f74cb99307967c7fd657c5e36af373134e6b5010b7ec9ea27f071bc07",
+      "committedBlob": "c61844163fdfe300f0953afbb027cb07445a55c4"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/KernelModuleHost.ts",
+      "sha256": "43a73bcb0a64b4f58856c4c5e78ebe5e322384f7871c2d6859467159b2adee85",
+      "committedBlob": "5c857b93146528a23521fd11d4a0cfd73a000faf"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/KernelModuleKit.ts",
+      "sha256": "2fd1fae637919c93a7d93c140d2d9353e1ed084128c0bfc0c71df47b38a068c7",
+      "committedBlob": "2818c2cc20408235100d8292be0c77995e7fe1ba"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/KernelServiceStore.ts",
+      "sha256": "6bf1ec9a9a9ea2b4336c3dd2fc293f47404b8163ceca7a0e033bd119717cb851",
+      "committedBlob": "673316f2f15e7648b4aab357562c70e9b492b13d"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/ModelRequestEncoder.ts",
+      "sha256": "65d0dfdff2ff21feeb8fb0347363134f0d63e8ff9dd3e28000cdabb87bcef492",
+      "committedBlob": "538e2ee26fa063a6e117b3bddcb8a5aacd5be2bb"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/NamespacedKernelStateStore.ts",
+      "sha256": "6a398bd49a7c9692c934970b2ac4cb4f79199354efd5afffc8dc1527314996a9",
+      "committedBlob": "5306c1d5f8b62ae96f7c9e44c27d3c48d2f9eef0"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/OperationRuntime.ts",
+      "sha256": "efb8f3a9f44d724989f9d55a123bf7e79288a54f5f61114c183b354d7df7a06b",
+      "committedBlob": "194558c8b3f477530ca0c1a9dae3bfb2e8d6c236"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/ScopedKernelEventBus.ts",
+      "sha256": "9d4348e78c2524199a8eb9ed03f6e6957e28bcf6c2052545fc6ad3a5f8664b91",
+      "committedBlob": "0658fc93e7c11b26fe047b200bf105fa77e9f654"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/ScopedKernelPermissionBroker.ts",
+      "sha256": "4ea39f579376aa61da6e906411be2572e62b04850a2e49ec04f4ab9c6c276410",
+      "committedBlob": "10855e4f4fe063b102fe4d523211d4e48697ee1e"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/ScopedKernelServiceResolver.ts",
+      "sha256": "d5ca2916fe45298d226824102ccd0178d4922a68ba6591de086502398c8c63a8",
+      "committedBlob": "03a743d2ac8642fa0105312f0b9e6a111b4bb02b"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/TaskApprovalState.ts",
+      "sha256": "1d06d37de30ccbed1e48f2d5fa95e3e2bdce1e1dfd1fc4d3165da6484cdb15ab",
+      "committedBlob": "43d392880cd682f336b25d7b09318515490ccfba"
+    },
+    {
+      "file": "packages/kernel/src/impl/runtime/VelarosModEnvelopeParser.ts",
+      "sha256": "1684e05ca59351bb551780bcc3d64c9524c133ae3c922ae967696b6b2ce1e7d4",
+      "committedBlob": "a77491392b0a07990badfd027fdac7de063009c7"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/AllowLoadedKernelClientAccessBroker.ts",
+      "sha256": "65f8f9cf1550306d9cef652204186267d90fbb1fc212bc03551282a895facb60",
+      "committedBlob": "b2ae8f14bb916dfc9a8d2acc4d22e316e4bb55a5"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/CapabilitySessionLedger.ts",
+      "sha256": "c00163951a86a7d1b89488ee76f3c7ca343760e647dc0d86d29e8557a7f79cd0",
+      "committedBlob": "59d833750261ac48e66ca30e0b5c741dd5d50aa4"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/DenyAllKernelClientAccessBroker.ts",
+      "sha256": "504d9284268d98a5dc29a66d3cda74d8eaa12370f0daaa575ace8dbe90e63826",
+      "committedBlob": "730fac90c019f29ac50f3d7c92d09ebfa9c11171"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/InProcessKernelTransport.ts",
+      "sha256": "877534472a7cdc62aed5319ba0c32baa4afc56f32c5433b102966d4b72738025",
+      "committedBlob": "f460d4ad9572328277292f10c1da88504bee8605"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelDaemonAssembly.ts",
+      "sha256": "7c7dcaee7cc5ed5ed6ff52e290b226fde1527d18ea52a9ff335454e56f5b7f96",
+      "committedBlob": "cbfbbec13e03f6264ef655fa7288fda3f1114310"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelDaemonProcess.ts",
+      "sha256": "77a76a5b2dbf3796389633b260d5c2d457cf0cf5b67a1b36e48e83a54fdf76df",
+      "committedBlob": "4633897a6cb60f8511db66b42dfcc6c8c4e2f7ba"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelLauncher.ts",
+      "sha256": "67896f98977bdb0c1a565e32aea6dd0e95b884f50a9999bdff4bdccf0e8abb36",
+      "committedBlob": "872290da63c7d6decde3488f8a35fff5da4fd271"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelLocalDaemon.ts",
+      "sha256": "f2be037935a21c568e510a6869af5c2bebb3b37b6a9caf081e388695cee1ddf5",
+      "committedBlob": "b76219f0dec875e9548eba6eaff60d9d743fbb32"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelLocalRpcServer.ts",
+      "sha256": "2817972238df45d3b4fe3a257e040de1cc5559feb9b560fb302aa93a813a3f56",
+      "committedBlob": "8ce0f799f69bead06464dfdef5d8847952d7c30c"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelModLoader.ts",
+      "sha256": "22d96d6595ac7e402e0c50c1bcd53f2f3f77bec90f25373917cbf59f4a872acc",
+      "committedBlob": "04b05ba733f8e7748f68d45244c3c51dcb32ac28"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelModStore.ts",
+      "sha256": "8155cfdef9dc9e5aee5744421589f741bb3ebbfdcb091fcd5bcd47c6738f912c",
+      "committedBlob": "015021f696a8a3f41b4854c600758393558b708e"
+    },
+    {
+      "file": "packages/kernel/src/impl/serve/KernelService.ts",
+      "sha256": "687e9af95b0c627f3bc2303cfeb5ff9332b2055113cfaa9e1e3f48daf80e0462",
+      "committedBlob": "86ac5298e4fd504631eaa7baffe338887fb36139"
+    },
+    {
+      "file": "packages/kernel/src/impl/updater/KernelUpdateLock.ts",
+      "sha256": "c26f9fa78ce6c25d386f9603c79304f6dd898afccbb39b40d650326d474e6951",
+      "committedBlob": "1b262c2fa196465afd61b4d50468ff6f34a8a480"
+    },
+    {
+      "file": "packages/kernel/src/impl/updater/KernelUpdater.ts",
+      "sha256": "648f08d54cf2cea6abfa862a884ff88329fcfbe6153f16df2fa7ff5ccfecc2cc",
+      "committedBlob": "4ccac54652a86525dce798f8dfaee7626fc4edfe"
+    },
+    {
+      "file": "packages/kernel/src/impl/updater/PassthroughKernelArtifactExtractor.ts",
+      "sha256": "9ec96a8c196655310509f7fe19a4e13ff89b2399840baaa962c1a5a26903b8bf",
+      "committedBlob": "f4a7cbd486cd45dea2ff843dbaef69bdbe13aaf4"
+    },
+    {
+      "file": "packages/kernel/src/impl/updater/UnverifiedKernelArtifactSignatureVerifier.ts",
+      "sha256": "fc53b6e305a20afa5c2c7849b16148cb236ab4552b4d61a093350144daa56205",
+      "committedBlob": "fe3e4798b06d6229f2ca522be7a2ce1b0016bc4c"
+    },
+    {
+      "file": "packages/kernel/src/index.ts",
+      "sha256": "dfbdefba8a7ae49ead37fecb1036accfec0a5d49d25ff9b8eb9ea3d4034afe7d",
+      "committedBlob": "9d363b0c4369c4f8096529d107d3984acc4f8bfe"
+    },
+    {
+      "file": "packages/kernel/src/remote.ts",
+      "sha256": "ac106be2ac5465d8bb03ae50de4b459af82dec892574108b657a5784a09d533c",
+      "committedBlob": "13b63ffb46b0ec14701708be43d4b7fdcb7b2bf3"
+    },
+    {
+      "file": "packages/kernel/src/serve.ts",
+      "sha256": "e682633aa6e19430707f090983f0a64bb24c968d44d77e9cbfda1a217029e897",
+      "committedBlob": "2c52ae022b5e13984c18fbdef65ba6f6fe27d477"
+    },
+    {
+      "file": "packages/kernel/src/types/approval.ts",
+      "sha256": "24cda2552f798ffec5448933df9eae1d8f83a9220e2f79a20b824ff99fcec78d",
+      "committedBlob": "aa4f47b64a484500b6ec78c49f00a41bb437133b"
+    },
+    {
+      "file": "packages/kernel/src/types/client.ts",
+      "sha256": "51ea12491dae37d25debc665cdd46df380524d566400e0f32e8005f2446e9079",
+      "committedBlob": "5306ef387c76216b7b718be10c5d1e553cd8f132"
+    },
+    {
+      "file": "packages/kernel/src/types/kernel.ts",
+      "sha256": "31e0dc35c051ff9c62a23144369c968c35648415fa1ad874fbad3009a0bc4e7b",
+      "committedBlob": "f75f49ee66887920f6103fd91f8f7936554eb156"
+    },
+    {
+      "file": "packages/kernel/src/types/model.ts",
+      "sha256": "1e51d5266fb2c65cd7d29eab9c8c7d7455e64cdbe63267c918ea4234e68faa63",
+      "committedBlob": "5b29d85736610782b831bd84bbf0945f1f1fe854"
+    },
+    {
+      "file": "packages/kernel/src/types/operations.ts",
+      "sha256": "43ecaffdcd29f2b376464c81610f7874f61290f091c3bbc54c0e4a9307d6b401",
+      "committedBlob": "a8056ac0c7ba12ae8312362ea243fec80a3ea01b"
+    },
+    {
+      "file": "packages/kernel/src/types/remote-client.ts",
+      "sha256": "51ad73e04757145a9ec11057901be208658e740629e3cd8b9275fb527866fd88",
+      "committedBlob": "b4d6a0901eb463df7e780fa31062d3cb6bf0b10e"
+    },
+    {
+      "file": "packages/kernel/src/types/remote-node.ts",
+      "sha256": "3c7f71607c2ca790d823487c993faf1afbfc215a98bdf6aee656367346fb1635",
+      "committedBlob": "a545ed62d65b9ce50364df152d89de725c8df47b"
+    },
+    {
+      "file": "packages/kernel/src/types/remote.ts",
+      "sha256": "76e2f336de65d5132a05fc3b4a92cb2fa1907002fe5bfb2116e1e59ab10e9a11",
+      "committedBlob": "5507849cb89f6bcfcdad827625162c573d636b08"
+    },
+    {
+      "file": "packages/kernel/src/types/runtime.ts",
+      "sha256": "6fe104cfd93c5755cd2134c213371bbf49ee5d27a539618ab3009892456d997f",
+      "committedBlob": "386a026c4d2362e09cec7075f21961ca4a544914"
+    },
+    {
+      "file": "packages/kernel/src/types/serve.ts",
+      "sha256": "30875e2902f588709da95f0b9fa9e76e0442e89c70d3d5af68fbfbcea23757d9",
+      "committedBlob": "6b562559fab46f917bcc23072374e5e874232c8e"
+    },
+    {
+      "file": "packages/kernel/src/types/updater.ts",
+      "sha256": "a5bd6199b50e54326f55173a57a7d345931e982d6fe6549ded326fbec387207e",
+      "committedBlob": "879c42340eb49ada2a869fd8e0a9de063a785154"
+    },
+    {
+      "file": "packages/kernel/src/types/wire.ts",
+      "sha256": "d9400fc230837c1a0aa3809c9eacd354d980200d26ef0e76906c1612a836284b",
+      "committedBlob": "e245c6e70103f58dad8d34039c578e80abbce214"
+    },
+    {
+      "file": "packages/kernel/src/utils/approval.ts",
+      "sha256": "a214563966db8917dfc82c9f30af85bdea2d4e34d643d66d61d01c2ed8632ca0",
+      "committedBlob": "82ef6bec36282d89c5df7bd3c3d810a94fb56667"
+    },
+    {
+      "file": "packages/kernel/src/utils/errors.ts",
+      "sha256": "36d22bc73f7424ea166a9b883a778cc3c80a872e9e6c00a7bd7101a93643bd82",
+      "committedBlob": "17ad7992f0514561f289ace1b378cdd35296b1a3"
+    },
+    {
+      "file": "packages/kernel/src/utils/fs.ts",
+      "sha256": "abec3646d6e35c46f30c31e9bd647c681d5cab43f9bfe7dd6dd9a49c116d9d07",
+      "committedBlob": "e71c3c254dbb26da032656f85c5f9c7dd2a12d16"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/calls.ts",
+      "sha256": "571463a47f7fb64fd729b3ffb67697867390f812992d4ef038472d640cbacd68",
+      "committedBlob": "28f098b70645dcfa3961b426964703cb9ff8a4f1"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/close-policy.ts",
+      "sha256": "6a6576be8e76e21ac98da6ad7b3f0572ce28fb6934b6772345069fd2b0203709",
+      "committedBlob": "5311f566e98089624d6c25c958d0f4c763947e52"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/credentials.ts",
+      "sha256": "3fc359aaa0cb27db4d0048cb6833f68b49627b3d9cbe5e13307e20371b773098",
+      "committedBlob": "406d3646e67c440bb4700eef40196ffe923f5317"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/crypto.ts",
+      "sha256": "df64fd0c89e1bfe36fc939a82915c3abf2f121af538aee5b70046bb7ef794bb3",
+      "committedBlob": "a32c2127ca4c5b082b23eaf6c4b5ee25b13f90d0"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/frames.ts",
+      "sha256": "1fea85f36a7388fc081e7ede9128c65e288fda5df1e830246374fe4fc6679582",
+      "committedBlob": "2f4e33e17e642a75b7b1cba86f5a6b730db3ffe2"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/handshake.ts",
+      "sha256": "e976979afc47965478b3b1e24693b3216a2c17c931ce0afaae458df6f313f3b0",
+      "committedBlob": "6c4faa3d94536d01572171ea8d4eb1d143f2dd3f"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/listener.ts",
+      "sha256": "7d454ee8fce5d8d787016998556ee15d2feb8889c41a919803300d7dbed9fc66",
+      "committedBlob": "3d86c0a36c1e1cabdf6f7afdc320e30a0ce0b6dd"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/manifest.ts",
+      "sha256": "78581b786b69b3ff6f70c60ebd7928d65a725ddaed1c36974afcb0b3e4943816",
+      "committedBlob": "8ac706d3544e97f90bf1a0e2a69eb7358e1e74ee"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/projection.ts",
+      "sha256": "71124f383139b47aa4b4c199c5a2b4291a95e8e60f60c30686aaaa0affb6b0e5",
+      "committedBlob": "07b76e016233f1a1ef5fc5acce16ca90db36fbaf"
+    },
+    {
+      "file": "packages/kernel/src/utils/remote/ws-socket.ts",
+      "sha256": "b67338ae8b60b72b24a55ae6be49052d6841536566bcdd2656a394e37775a852",
+      "committedBlob": "836ee66c65c3abdad5fe03892a3bd052a7f78571"
+    },
+    {
+      "file": "packages/kernel/src/utils/rpc/descriptor.ts",
+      "sha256": "4f2de746ba8001702f561cce8bd1d2023586cd79a48f5a9ec8010649f8953fde",
+      "committedBlob": "0b43fa52eb59ded06394501ce2434dc349b7da07"
+    },
+    {
+      "file": "packages/kernel/src/utils/rpc/endpoint.ts",
+      "sha256": "0feace35b3e574d322336fb89887ed1247d7f70225c82ab9baafeb9b6d29808c",
+      "committedBlob": "180113615ba979d369d69368742324f3db7d5a5f"
+    },
+    {
+      "file": "packages/kernel/src/utils/rpc/frames.ts",
+      "sha256": "7ec18cfccdb003b23f157d611d9d5a6a5751c657b4db99a3417fe7f87a1bea1b",
+      "committedBlob": "60ab241d2985976ce6286457952ba471f0683a8a"
+    },
+    {
+      "file": "packages/kernel/src/utils/runtime/callable.ts",
+      "sha256": "f3b3accb1ab69ab32438533941d49ea8bd5dd50ad13f45ba30232be2ba2f4b50",
+      "committedBlob": "5cb521d60b03ebee8967ca78e9d568f61dbdac9f"
+    },
+    {
+      "file": "packages/kernel/src/utils/runtime/manifest.ts",
+      "sha256": "6c5a9accbd9a64757a7aee03eae190772bba998a03c5e4eec68da18f41b31576",
+      "committedBlob": "065345dd6435cf91618bf4439590a631fc1d7ba0"
+    },
+    {
+      "file": "packages/kernel/src/utils/runtime/model-request.ts",
+      "sha256": "d7babd0725c10eeb7de64e810b9a4d3baea6eb2e2be878e6487b77c483e2ef74",
+      "committedBlob": "94265fcfc327d0ba0a2d3732c51e194f0e476200"
+    },
+    {
+      "file": "packages/kernel/src/utils/runtime/module-plan.ts",
+      "sha256": "6e742c3ea30bfbea19e7a7136f9c2ad1d217a3641b8f76af814f64747c85140e",
+      "committedBlob": "171390d1422a30e631bfdaaef6bc3a38aedd879b"
+    },
+    {
+      "file": "packages/kernel/src/utils/runtime/module-record.ts",
+      "sha256": "a0215cc8a1afb9c399507edec7f09463883b23a254afe75304672e4a3feda7d4",
+      "committedBlob": "39e39bbb8e062b73fd0df1d73e35fa299447ba2a"
+    },
+    {
+      "file": "packages/kernel/src/utils/runtime/operation-schema.ts",
+      "sha256": "d64f0366ba73d965a3b2a46c9e12a9053cd9b8c5740fdd175420dafe7400a25c",
+      "committedBlob": "31d129d7bc183da32338d6b2ebf1888778776e70"
+    },
+    {
+      "file": "packages/kernel/src/utils/semver.ts",
+      "sha256": "9fb68845fabf748df48e46a42aac3eb32be705500aaff44f4a37c7e038a2820f",
+      "committedBlob": "85fa434d412a4f2795510c3abe93410db680cc19"
+    },
+    {
+      "file": "packages/kernel/src/utils/serve/daemon-process.ts",
+      "sha256": "ac304e6227bfe82b0885fba4339876da8dca722f57d62f26c735c1b03378da87",
+      "committedBlob": "540f6090cc8c339028ac63ce49e913960bb6f455"
+    },
+    {
+      "file": "packages/kernel/src/utils/serve/mod-index.ts",
+      "sha256": "08f38d0d91e77132f909dd7825abce71eb61c1715b507e4853aa6ac6de6e779f",
+      "committedBlob": "29e761fa5b452f4f8e317840a7bc95d187421ffa"
+    },
+    {
+      "file": "packages/kernel/src/utils/serve/mod-packs.ts",
+      "sha256": "741140bbf3aad584aa88a3d1c44717836cd5b79f4705e6e983599786f310dec4",
+      "committedBlob": "2053a6c6769f1c6ed51d075196260d1f654fc421"
+    },
+    {
+      "file": "packages/kernel/src/utils/serve/service.ts",
+      "sha256": "565ea6fdc8cb10d5fa54a2274395f9efbc7f6a1d8f83042ed3028e3fb29ca068",
+      "committedBlob": "70335ee7943a17d2321b558b560d25ffd289beb6"
+    },
+    {
+      "file": "packages/kernel/src/utils/tuning.ts",
+      "sha256": "aba10ccc7e1cc183233dc959520372513306650185dc2a002c3a8ddf10dc087b",
+      "committedBlob": "56fcf96eb49ff96eeda5e2e8ade440df201ee0eb"
+    },
+    {
+      "file": "packages/kernel/src/utils/updater/download.ts",
+      "sha256": "c90df51769d57031f99eba03857bb8d1bb3959e10fec70cfade62413eb6545ae",
+      "committedBlob": "44bd3d4099aa6c9f123609299ce917d283cb55c2"
+    },
+    {
+      "file": "packages/kernel/src/utils/updater/installation.ts",
+      "sha256": "71399f094101245779ca8078cbb3a447449e427e4e0b3577aaf0f12525ef31cb",
+      "committedBlob": "4dd6753d450d0ee4a691bb14a57a124cd5010835"
+    },
+    {
+      "file": "packages/kernel/src/utils/updater/layout.ts",
+      "sha256": "b536ec2ead195a70262a7685b25fa0c41366c04ec255974f4d7155c766e07f56",
+      "committedBlob": "9a3a76ab00a4aefd06c216de6419a0a05f4a249b"
+    },
+    {
+      "file": "packages/kernel/src/utils/updater/manifest.ts",
+      "sha256": "3f71eb374315d462de473865057d3df7ba422bfc4d573596c703f0cbce673115",
+      "committedBlob": "d0ff7c7ce8b861310f2b81693abfae59452f5198"
+    },
+    {
+      "file": "packages/kernel/src/utils/updater/pointer.ts",
+      "sha256": "9d23dbf24689e3e36ee8f0ba90c9a084ba698e945125bda83c726b0fbed77b34",
+      "committedBlob": "98a53e0191f43376b646164c47c22a9b29e0273c"
+    },
+    {
+      "file": "packages/kernel/src/utils/updater/transport.ts",
+      "sha256": "eb29a2745a21f1c1ffd4a158b4a91da4a603f9634bac997f66ce5a8f9f128f2c",
+      "committedBlob": "31895f0ec818b8ccf934f508fe1f2b5d805e871c"
+    },
+    {
+      "file": "packages/kernel/src/utils/updater/version.ts",
+      "sha256": "1f4ceeb9e04a0c4af7cf4083f553456916789a0b693a5945ce5aec0efabaf916",
+      "committedBlob": "3f0bd0a1cd73fbf35d8e970a8e729ee9163c5b12"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/capability.ts",
+      "sha256": "eec44630e3fd346b5a1c8d4ed0b6676609ab5ad56dba4ba6cbedd7257c159aa3",
+      "committedBlob": "e1d57ab169f10c5fe9577fcd8d57bd135c4a0fe6"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/handshake.ts",
+      "sha256": "4df6a5fe2b470bb588dc62895de96a1d9c4ca7cc97470769a4a7706522635f73",
+      "committedBlob": "15010baf9472f17978294796f304d96e38c5db80"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/mod-envelope.ts",
+      "sha256": "397ce91134a8255daa37b9c31b8bf8b9765552c7b3e356d5593358ae20e96319",
+      "committedBlob": "b8d817ca1afe4b5b38ed617140f244f718bb455f"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/mods.ts",
+      "sha256": "114db74fcb30bb9864ca7bd23fef6958e8e162104d9bbdb475cfa1acb759b322",
+      "committedBlob": "a3a10956074e37ca4cd5970aa74b1e609bb0fd74"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/negotiation.ts",
+      "sha256": "d07f18c7769aacd618e0c8e3d55e7a5fcf2fcc1478e523b5a01259b8e3f3ab79",
+      "committedBlob": "a8c737d39552f83545855d6c40652c0572f9683e"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/remote-node.ts",
+      "sha256": "c2a08d2ae152801e14bc783bf9eb235e2779aa59693973f05e11f4fa2a1297b6",
+      "committedBlob": "a2a8c0f8da506c9ba6014b4e08e94bae4637a54f"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/snapshot.ts",
+      "sha256": "0aff8214bc35544fa8c860b1560fa1ef4c139501d0d0c114930f458089352fe7",
+      "committedBlob": "580c3cfb7c684dbe8e425b8b6e70e32b2157ca3c"
+    },
+    {
+      "file": "packages/kernel/src/utils/wire/version.ts",
+      "sha256": "ca9f6cccabdd9038776b535d7d1bb230f81ce6ca607c09a3e459d561409cb182",
+      "committedBlob": "23cbc2e9902ef77ea89abc4215eed4cc7dabf3f2"
+    },
+    {
+      "file": "packages/kernel/src/velaros-globals.d.ts",
+      "sha256": "6543275f6830f8a2655db9a52451a2f8ab839f0e023f48a758d6dc2d12cd8060",
+      "committedBlob": "048f64053ef4355f5e705dd7d6b7f2e8772ffac9"
+    },
+    {
+      "file": "packages/kernel/tsconfig.build.json",
+      "sha256": "773619a91fdce0021e819b6d01f54046d374e2061317bbc89fa6bb0f25d1581b",
+      "committedBlob": "f252204f78d968eeb29b7f7440a114ff29398cc6"
+    },
+    {
+      "file": "packages/kernel/tsconfig.json",
+      "sha256": "645ae8833bfd0dbd5a4dd35e71f7bd0b0afb79aae8bac04664270c98d8591647",
+      "committedBlob": "5e9e27ccc8a5154368359dc8004d66b0c661d48e"
+    },
+    {
+      "file": "packages/model/package.json",
+      "sha256": "f217e81269e2df6362d0b31df2c3c57541d8691a9ad0c51230aadef22cb79169",
+      "committedBlob": "1bef9598f2a4d2dc63b529a44ace1572950ce722"
+    },
+    {
+      "file": "packages/model/src/catalog.ts",
+      "sha256": "32b5281a9d97f6a18c690343cf99da910eb53e839d0e7a4114c442fe27a39716",
+      "committedBlob": "e02db300125ad990b983bd9322c119e6312ff71c"
+    },
+    {
+      "file": "packages/model/src/contract/constants.ts",
+      "sha256": "7dc627eb30cabba3df080b636614f7330556fee36a2f022a308462509d0458e4",
+      "committedBlob": "5f08b46375eb08152ecd67f18a51424e8d4c7b84"
+    },
+    {
+      "file": "packages/model/src/contract/provides.ts",
+      "sha256": "00fec26ed482dfc6f66647daff283f24c3555480f467a934c512d056b4c36607",
+      "committedBlob": "c18be7a7f49558edc1e2084c29b95569457b464b"
+    },
+    {
+      "file": "packages/model/src/contract/requires.ts",
+      "sha256": "3e96efb7fb372e20ec408b0a84140b9348f371cebabad84b2a2a8ffbc6ac9380",
+      "committedBlob": "cbf2b0731bfcec5e70a556fdcf76ecf6a856c7c3"
+    },
+    {
+      "file": "packages/model/src/contracts.ts",
+      "sha256": "a10680693d321664e1ee5fcac9e64b89b6062c31126f8437602d570c007d56be",
+      "committedBlob": "861e407b4a6c2349592398755bcd33ca1e1bc8cc"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/AnthropicModelAdapter.ts",
+      "sha256": "61bc4c52739db67ba7eab7ee93f20ea5da701c5d7818f83a2c792966bb0fde70",
+      "committedBlob": "5b5f6f59d814f546cdb6a17b556394c9c2ff785f"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/DeepSeekModelAdapter.ts",
+      "sha256": "d1d72de677f734d4e649cd70b9331c83409764d5a759636825860d628686365d",
+      "committedBlob": "b2b9208da066c20130dc8a4504f3c204a32703a0"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/GoogleModelAdapter.ts",
+      "sha256": "31479b92c5beeb7bd7a179c727b8b66f05c3243b056448a4b397993aa67b2ce6",
+      "committedBlob": "f8dbb1c67122b03dfc6f088a731a3fb1aa80b3ab"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/LanguageModelWrappers.ts",
+      "sha256": "b6b00f0c90075886ffc2c65f6d33f495dfaae01c5e7c34ca89dd417f6f0ec15d",
+      "committedBlob": "aef76687647391df92d0fbf5bfdab2ab1dae0ad1"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/ModelAdapter.ts",
+      "sha256": "356e495b79c50717abb4925a7e1b93fcd692d2d244858bb3fa0d51a09139a7bf",
+      "committedBlob": "0c04cd6b30c364271911a9daae677d58ada04d79"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/OpenAICompatibleModelAdapter.ts",
+      "sha256": "e52d858b08b3ab58031299c8a2e0462339e4fa48a55d6094a02614d7d7693714",
+      "committedBlob": "4780b33930f8331979e2208397bd9c576d22c371"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/OpenAIModelAdapter.ts",
+      "sha256": "e37d421cb660c050a9060408d49f6e1617092c07bc2ba269e3ab5daf6480360e",
+      "committedBlob": "a8b6fba52d7d37ebe477999f1d992f9d9a4c5441"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/PromptCacheLanguageModel.ts",
+      "sha256": "4b2c91cb4cbc54973c0e05837965154c4343c7f8649c0ab61b216a01b4da6a0a",
+      "committedBlob": "68af57e3e869fcc4499a0c1d7346771a077f5adc"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/ProviderScriptModelAdapter.ts",
+      "sha256": "63898afb3a030e03aced17144520ca3103c7c1603fdeccb014a87e3ee66706e9",
+      "committedBlob": "ccafb55da0fd6ea898a9815af9280b703b32d0f0"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/ReasoningFallback.ts",
+      "sha256": "0a52007de34c868bff953702857005bd5b33e3d8c49bc1589fb8e7cbb90d3322",
+      "committedBlob": "f145f66911cdf1b16e30647b0585d1e2a49398ab"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/ReasoningLanguageModel.ts",
+      "sha256": "866781199ad4ee8db2acb9aaa7d587c8fa4887c6c1841c5df3e658c6569bf7b4",
+      "committedBlob": "8c3dfd0e8e964ab52591f7c5c656d4066516189e"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/UserJsModelAdapter.ts",
+      "sha256": "d921dd0af5dadf5ff31848ef5c20fcc20e87ef7b0e7cbec550efc6049f648486",
+      "committedBlob": "d7861fd61ef933a681a45857db3f1fc9ffec94bf"
+    },
+    {
+      "file": "packages/model/src/impl/adapters/VelarModelAdapter.ts",
+      "sha256": "e368d2011bb0894e312401af120e6c508bea0be1169c8efdf8db45ee71906357",
+      "committedBlob": "20a80dd562641d7ff1e36019a58786104c5daaa0"
+    },
+    {
+      "file": "packages/model/src/impl/composition/AgentModelResolver.ts",
+      "sha256": "6f00a39a8383c13e5513d838489b4e946fa5d3e4b41f5af8163885815880c016",
+      "committedBlob": "e734ba2ca10a1cbc61576c72b85e92972accd14e"
+    },
+    {
+      "file": "packages/model/src/impl/composition/AgentModelRuntime.ts",
+      "sha256": "b701c2b5b455f84c93fbb2e576b1834e4bb91929a0571ca9ee953a0cfd741b3b",
+      "committedBlob": "0549d1410c1d3db5927a50d9b4d78557c39af3b5"
+    },
+    {
+      "file": "packages/model/src/impl/composition/DefaultModelRuntimeComposition.ts",
+      "sha256": "7ee2cb9958981f0b50b519426573a067b10c22908519891100770b737ca62343",
+      "committedBlob": "825f7c915357b92e1ca92cc87e9c3c6b3eea4e2e"
+    },
+    {
+      "file": "packages/model/src/impl/composition/ModelAdapterRegistry.ts",
+      "sha256": "5802dd4c2598cde093054da683246ab4f637d2a55478867f75f7caf84023c6da",
+      "committedBlob": "ad52951b46cd9d26180f8958d7e94ab14fc7784c"
+    },
+    {
+      "file": "packages/model/src/impl/composition/ModelKernelCapability.ts",
+      "sha256": "93dadabaa459c742edbecd38f7bd00876bd66aa97e078cef2abece644ba40eff",
+      "committedBlob": "471f71e03236c1f3b7d3339ff8ae0b0adef7329d"
+    },
+    {
+      "file": "packages/model/src/impl/providers/LocalModelEnvironment.ts",
+      "sha256": "43f0d9f8716f69518c6d51cdc4bf147f9e1abb718ab30903312090beb8cfdf4d",
+      "committedBlob": "b64c8e706a3a8115802bd4eac2cdd68238c9d6fd"
+    },
+    {
+      "file": "packages/model/src/impl/providers/ModelCatalog.ts",
+      "sha256": "c74526c098276ffa2a2f81b4d791dd525c58cf5f20788cc616b574ca06ac4a0e",
+      "committedBlob": "5a9e918733dc51f118f646784d50901700c7a999"
+    },
+    {
+      "file": "packages/model/src/impl/providers/ModelProviderCollection.ts",
+      "sha256": "79476bc7fe99653cd2cc7ef3fc16b6af635817e5cc00bd9605325df30f8a1f51",
+      "committedBlob": "9cf038d4d21ad97a12ef7d98c6f8af5126cbc330"
+    },
+    {
+      "file": "packages/model/src/impl/providers/NodeLocalModelEnvironment.ts",
+      "sha256": "d157da1dc17cb8f060886e380eaeecff94883b21c98f2fc47d97dbb82c802a59",
+      "committedBlob": "f970b8ee0e38137340dfff161f1dd7bd25e259e7"
+    },
+    {
+      "file": "packages/model/src/impl/providers/ProviderModelCatalogCache.ts",
+      "sha256": "395c161f7b4e179cb4924dc53e9e525c4a49424359c13827f7338fabcb62c411",
+      "committedBlob": "c2ac46db74b2542c9e02428baddbfe1af003866b"
+    },
+    {
+      "file": "packages/model/src/impl/providers/ProviderModelCatalogService.ts",
+      "sha256": "1d31e5f0dfdf320b6b6d35962cf7ecf30426c184c34ac65e0a322dc25b1ae097",
+      "committedBlob": "1e7d35d42d0bd60d0afef0064de422f5c5c6fb78"
+    },
+    {
+      "file": "packages/model/src/impl/providers/ProviderScriptRegistry.ts",
+      "sha256": "ec5d1fcaae8c2b98f357d8034c57b4f098161f081ee35c09030dadadff7614cc",
+      "committedBlob": "ac89d8fea22230a09815d7b04075a892be1c385f"
+    },
+    {
+      "file": "packages/model/src/impl/providers/VelarCloudModelRuntime.ts",
+      "sha256": "2c5d67ee15016e8af6d98c3ddf95393c24470d216964666c0d2be442ed67fa4e",
+      "committedBlob": "3428156591d9e7fc09059f85e65c829562b20a86"
+    },
+    {
+      "file": "packages/model/src/impl/requests/AiSdkModelDriver.ts",
+      "sha256": "cec5b62df8316bba3604cf2b85d3c9da7a7d714d74d36bac1e297095c19ea2da",
+      "committedBlob": "236a5dc6d302616aa00ebb90c2f1198cee353180"
+    },
+    {
+      "file": "packages/model/src/impl/requests/AiSdkModelRequestTransport.ts",
+      "sha256": "0dfcf28071a157ac306d5f458cd7258723afdd83ad8fe2393269ee79456859e7",
+      "committedBlob": "afb7e7d1fb2d150e1a343d647926d7733677450f"
+    },
+    {
+      "file": "packages/model/src/impl/requests/ModelInputEstimator.ts",
+      "sha256": "9d35f3f1ff986f71113d3590000dc1db5e400bfcd480a635641329b2f3a94a51",
+      "committedBlob": "cf12d44ef348af47b75a37aea1d19c353f713492"
+    },
+    {
+      "file": "packages/model/src/impl/requests/ModelProfiles.ts",
+      "sha256": "347f8ae2f73fc572cc13c54c23c86dc19e7ae1583c948d46633f865e48365676",
+      "committedBlob": "d64ca1c3bc9169a14c431345d7d1ec03f576e2ab"
+    },
+    {
+      "file": "packages/model/src/impl/requests/ModelProviderRetry.ts",
+      "sha256": "6fbab29213725a63dbb0a7d6adece841cced4a9636ec2bb23875d683f435f83e",
+      "committedBlob": "17e30362bd03ec5ae5bdffb5e95563c116c21960"
+    },
+    {
+      "file": "packages/model/src/impl/requests/ModelRequestClient.ts",
+      "sha256": "2c5fb8bc3534ca383b85a1e488d5fa748bb577e0765e5bbde0c58176b7ecb73b",
+      "committedBlob": "903a1b4dccd414d93b4e22fe4530dae5b26ba895"
+    },
+    {
+      "file": "packages/model/src/impl/requests/ModelRequestDispatcher.ts",
+      "sha256": "2997a52999dac738f721c15fddfd782da6a709f5056db71a0065eb2dd22e38ca",
+      "committedBlob": "bf20549b979ae47e9a0fbfdc6304ba041eb418df"
+    },
+    {
+      "file": "packages/model/src/impl/requests/ModelUsage.ts",
+      "sha256": "260c97e2f5f38bad77318e66560363693d21ffe73081563cd89e248e05ff183f",
+      "committedBlob": "23ec072e6197ad9e9e258f1cf3a2cd427a5e956a"
+    },
+    {
+      "file": "packages/model/src/impl/requests/ProviderRequestCompiler.ts",
+      "sha256": "07576ca89d6e453afe79482bdbf44d7bdc6f87c10a7213e2ffea3dca38d94b0d",
+      "committedBlob": "f9d54c7134c93252eebb29a31ee88cdc2796537d"
+    },
+    {
+      "file": "packages/model/src/index.ts",
+      "sha256": "cde895a3205fb9c4e45f4b6bcf00ffcd1a15f82e827708b5e9b2ff59c15893b1",
+      "committedBlob": "067012fa308963a4aa6ab753b3924dd4d9be0df7"
+    },
+    {
+      "file": "packages/model/src/types/adapters.ts",
+      "sha256": "51e392ee21390144bad59514a6d97a194835390fbba745647664b0849593a93e",
+      "committedBlob": "ce2e10a9e8c173bbff466a214cb8fc73886044b0"
+    },
+    {
+      "file": "packages/model/src/types/compiler.ts",
+      "sha256": "e643086f99465daea3c94326c14513225cf6984ad5a4734aad77477020f5e815",
+      "committedBlob": "6f2f013a6c0e0fc53747fa4e592273400cfa9148"
+    },
+    {
+      "file": "packages/model/src/types/driver.ts",
+      "sha256": "31fca25abfea28762dafefd7bff31c0911d7ea1efc8428f294de12357b4923e2",
+      "committedBlob": "519a40181d88afb630477d693d64b76913c18700"
+    },
+    {
+      "file": "packages/model/src/types/model.ts",
+      "sha256": "eefaf2f6775a8e6f872c9d3a9b60c091c5d232af98666485fddfb01d7ca08f20",
+      "committedBlob": "f498b6ceb1a8ddd4c4bc98465ed2138cf35e69d1"
+    },
+    {
+      "file": "packages/model/src/types/providers.ts",
+      "sha256": "bf43a512ff94147405af800e44a16c2c2ac976bf064f7a2aa2ba4feaf0152f1a",
+      "committedBlob": "8365c55b5ce32acb2e7429e26582a3902bc72553"
+    },
+    {
+      "file": "packages/model/src/types/requests.ts",
+      "sha256": "3879e657a70a689de3fd893d83ef6c58968190da092d1fea34d1468c76693618",
+      "committedBlob": "9278860ff41b5953194e73af844a3771f29ab49f"
+    },
+    {
+      "file": "packages/model/src/types/script-authoring.ts",
+      "sha256": "b8c7d06819b7205e18a2edb52b05008b02fbae4258012da333e5438f721eea18",
+      "committedBlob": "c567b464100932756dd25b3255795406f5adf76b"
+    },
+    {
+      "file": "packages/model/src/types/scripts.ts",
+      "sha256": "29521fef208ba16831710664a674ede159a763f26802c445c70dc50809fbb229",
+      "committedBlob": "ef0f5fe781ffcea1935f953f3899654321ac57b8"
+    },
+    {
+      "file": "packages/model/src/types/user-adapter.ts",
+      "sha256": "2d84f3edca56d886d6c560211ca03e35bb6a2c082a569de910a746352d58385a",
+      "committedBlob": "5fcad9c59e655bc64ee27d3b08c7d00fac9fc650"
+    },
+    {
+      "file": "packages/model/src/utils/catalog-http.ts",
+      "sha256": "0ad71ca5f4e2bb7e80a63a08155661749a6d9080c650a8fe1ad4f3b9133f46f3",
+      "committedBlob": "248e56710d0849524e6f3eb667fc9d772e245f2e"
+    },
+    {
+      "file": "packages/model/src/utils/catalog/context-windows.ts",
+      "sha256": "e62c6719d20c568966f09de6839bb4368f3a7e99637115890021010ab48b3401",
+      "committedBlob": "e309fe2c040e87e645445f9374330812eddcd639"
+    },
+    {
+      "file": "packages/model/src/utils/catalog/embedding.ts",
+      "sha256": "6de3ff87ab9dc40da8d1e2f718f203fc3e2a252952a08259ad346ffc997a0845",
+      "committedBlob": "a69adec3ac7e72e1a762d974b49010d17dbd1e22"
+    },
+    {
+      "file": "packages/model/src/utils/catalog/manifests.ts",
+      "sha256": "5720c0099ed81413c160e89bea970d4c5e23e9464e4c59c68dc32cf8caf7f338",
+      "committedBlob": "3941c52c7ebb5ac0b204b233c7a9f4fe6ee9a4c0"
+    },
+    {
+      "file": "packages/model/src/utils/catalog/model-selection.ts",
+      "sha256": "52e7ccf9d6ca8089cdc8d7391d6cd2f527ffc73e2d2a524df63ecda25c7f546f",
+      "committedBlob": "3029f674be900bfd0e0db188807b601b23bb98b0"
+    },
+    {
+      "file": "packages/model/src/utils/catalog/provider-catalogs.ts",
+      "sha256": "46f2a7964e9ad662433d8b140372c09ac5c97fb98d9ef64b695061d3178f3abf",
+      "committedBlob": "707ccfd30d5e423258ac25081df8e77967ac5639"
+    },
+    {
+      "file": "packages/model/src/utils/finish-diagnostic.ts",
+      "sha256": "43d9ff35699a0270c9341642f348ce979a6fd765bc6cb328dc446349dd681443",
+      "committedBlob": "beb547fbdd28d965d90ffeed7a69396806d00f10"
+    },
+    {
+      "file": "packages/model/src/utils/kernel-input.ts",
+      "sha256": "a80a64d5f85b5f35aa23ef2dd994a90182a47532b5ce1a23af6b6c747db50933",
+      "committedBlob": "8fb921393e5ead7911282f50d31e46eef7f5cf3d"
+    },
+    {
+      "file": "packages/model/src/utils/numbers.ts",
+      "sha256": "d4f4ee10cc1ce3d5e6c19591040553637d4c34d14b2632488a90e4c7780ef83f",
+      "committedBlob": "4cf6016e77cb7075fd2a3b55bffcf4f4bbabca03"
+    },
+    {
+      "file": "packages/model/src/utils/profiles.ts",
+      "sha256": "bc4ef851accd4580c64f6c85306aa9e7e870c68f0c54774911c0072e7caef05f",
+      "committedBlob": "dab939740500d3ff83bfe7dd3ef34149f41baa00"
+    },
+    {
+      "file": "packages/model/src/utils/provider-audit.ts",
+      "sha256": "0b7fbc1291c7a87c91cbb21b1599ca534a2f0fe959ed81592c226b48cadb91b5",
+      "committedBlob": "e1ff71d8f348e0669e76084541c26f0033bff0f6"
+    },
+    {
+      "file": "packages/model/src/utils/provider-fingerprint.ts",
+      "sha256": "70452658529983ef6eb28d4315407b5223e92012161450c82f0374703306ba20",
+      "committedBlob": "6b2170c9744c437d5cf84ba40943cc12fee2cdeb"
+    },
+    {
+      "file": "packages/model/src/utils/provider-hash.ts",
+      "sha256": "129a4a5d70686f0ab5738f4bfb88fb5c819686a116560540378b655983f8216e",
+      "committedBlob": "1a3c7e8db6af0e6283d1847b73bd1af596dd3a28"
+    },
+    {
+      "file": "packages/model/src/utils/request-estimate.ts",
+      "sha256": "582290fbbea73b44b74e4cbcb35cae386bd0e7aced16938374de01a29973332c",
+      "committedBlob": "dd57089e48fbdb9021a6198af59ab81c002ae827"
+    },
+    {
+      "file": "packages/model/src/utils/resolution.ts",
+      "sha256": "5c3388161d21d84b0ba2d80d5ecbe4058e369a623215bd6d7b7c4eadf315275b",
+      "committedBlob": "8f83cbe2fb217c55577133d99e41cb777c78323d"
+    },
+    {
+      "file": "packages/model/src/utils/retry.ts",
+      "sha256": "019f026340e74627cfad1e895001d96015e27fa0e7d3b0c1aa1e28e0907b2994",
+      "committedBlob": "f3eb12a04c50f4548daf8aa3c39990d71f868e77"
+    },
+    {
+      "file": "packages/model/src/utils/scripts/provider-scripts.ts",
+      "sha256": "573217a7affa196537349648519a85f132161485117ed761a580565384ea55f0",
+      "committedBlob": "152ba7c232464e799a2611c362acf79ee435a2f4"
+    },
+    {
+      "file": "packages/model/src/utils/scripts/selection.ts",
+      "sha256": "758032aeacbd9690121470c1e2a7c60470b07deaad4daa6f81b323db33494519",
+      "committedBlob": "603066a25d12e69bef528e3cee80b7771b9bba6f"
+    },
+    {
+      "file": "packages/model/src/utils/scripts/user-adapter.ts",
+      "sha256": "0e519ebca5433d176dec478993052b34ebdee249a801697d7301df67ee5b65b5",
+      "committedBlob": "c7e449864d1bdc9a95bd28140be636fd65b244ed"
+    },
+    {
+      "file": "packages/model/src/utils/snapshots.ts",
+      "sha256": "31faf9bea213a20ef4ce7040120c09f3033802d62ea9a067e19baef3a97ebc3e",
+      "committedBlob": "e1d752aa5f24301713f895998ad98cc288b30d84"
+    },
+    {
+      "file": "packages/model/src/utils/tuning.ts",
+      "sha256": "8c2d9f4414e98275efd44c758fe6847b6542cf4c28ead94a80503efaf370a93a",
+      "committedBlob": "52baf6824ea620f34a64c1940083e3a09b27cf8d"
+    },
+    {
+      "file": "packages/model/src/utils/urls.ts",
+      "sha256": "9668ee0beb2f30a0b176c174dddf0ac1f67827c11a6e4ea4e45a8813f6c474b2",
+      "committedBlob": "b58fc9b1e9c59610dc2867f775e5b38f096778ad"
+    },
+    {
+      "file": "packages/model/src/utils/usage.ts",
+      "sha256": "723b1fe463895b7aea9a1bb725eac810927ebeea6736d6691a6a888e7f1d09b3",
+      "committedBlob": "c4180ea275d4ac294922b2af3ae8128e5e5a0c65"
+    },
+    {
+      "file": "packages/model/src/utils/wire/chat-reasoning.ts",
+      "sha256": "a7182718dd8bf6aa343f58dde1d61bac73e94a5152f7a49931c0c37fbf6435e9",
+      "committedBlob": "12a1d06b2057b085899b1e4b751e0c86abf3beab"
+    },
+    {
+      "file": "packages/model/src/utils/wire/continuation.ts",
+      "sha256": "5be80d7679b1628bfade0bf4ede57c94f3ff299ce1117512593dc58c951a2f98",
+      "committedBlob": "8f1da1a92531798f720c281c3e061b9d30b5d962"
+    },
+    {
+      "file": "packages/model/src/utils/wire/fetch-shims.ts",
+      "sha256": "aa0545baca8e6add407a79064920193fdfba40e29600a9abea16811dbbc54a05",
+      "committedBlob": "3f412d5f67b72b0a7d4453ac46612fde966e3fc0"
+    },
+    {
+      "file": "packages/model/src/utils/wire/language-models.ts",
+      "sha256": "46702e61c011f6b1421825e46bfd00708fabb0e73b794d3f1d3371d6cb0a85ea",
+      "committedBlob": "d3d85d85343e7629c99850c4d2febf3bb43f3943"
+    },
+    {
+      "file": "packages/model/src/utils/wire/openrouter.ts",
+      "sha256": "3eeda07ed0db467ef2af05e00776fda239dc0934609694f3ef321eb2c47cd881",
+      "committedBlob": "9df356763698110b517685e32c191778dcbcfff0"
+    },
+    {
+      "file": "packages/model/src/utils/wire/prompt-cache.ts",
+      "sha256": "fe00119388530900d74dac5e0ac46a1f061929febf87f38862d49ba59dba07d1",
+      "committedBlob": "20e1374cac3199428c3cf9725c16ca3198e9dc8f"
+    },
+    {
+      "file": "packages/model/src/utils/wire/reasoning.ts",
+      "sha256": "8c8c1fd9be4ad2a16b7a267b1f909052b9cdea0f9540d218a03bfd2c995027c6",
+      "committedBlob": "f60542b747a11f0907e6613c9e4361eec5aeb58a"
+    },
+    {
+      "file": "packages/model/src/utils/wire/request-policy.ts",
+      "sha256": "d87a7b55426aad36865cb853f50a71dd3bd1cd43ac2249fca160caad44942eba",
+      "committedBlob": "6c7524037ef023f607134971ad5b735091733fc3"
+    },
+    {
+      "file": "packages/model/src/utils/wire/responses-stream.ts",
+      "sha256": "970f31542e8b9b10a75f786f98de2da4e8f583f9b4f885f25dbdba09fbe1cf53",
+      "committedBlob": "bfca83ad5f857165ef6f053baf9e491980d42da8"
+    },
+    {
+      "file": "packages/model/src/utils/wire/stream-cancel.ts",
+      "sha256": "20ef71bd47ea08629660d2a0561534b1585d4b6954d705c142f3ea01c476d030",
+      "committedBlob": "5c0b079064742b5dc72e96ecdaac4b2767de5eeb"
+    },
+    {
+      "file": "packages/model/src/utils/wire/stream-terminal.ts",
+      "sha256": "027d85d48d4e5331f6fadc31f25b418099766446be258ab58216b7bf84c6c851",
+      "committedBlob": "4f60f332b47433b3851ad6436cca0ecb3d483843"
+    },
+    {
+      "file": "packages/model/src/velaros-globals.d.ts",
+      "sha256": "6543275f6830f8a2655db9a52451a2f8ab839f0e023f48a758d6dc2d12cd8060",
+      "committedBlob": "048f64053ef4355f5e705dd7d6b7f2e8772ffac9"
+    },
+    {
+      "file": "packages/model/tsconfig.build.json",
+      "sha256": "da3e5e6ef8084936bbd94eea3b4397baec9f5fdcabca0da05d0d65087d1ef844",
+      "committedBlob": "a70c9c60a8ac1f283cbb54b9156fd8f952a01498"
+    },
+    {
+      "file": "packages/model/tsconfig.json",
+      "sha256": "3a733c5dfc4a96ab90d8c59f0809e8e606f9bf381eac9cfadb7d7d24f8113185",
+      "committedBlob": "c6e82f23e657480d35c4463fb32d90c9e11ec1fe"
+    },
+    {
+      "file": "packages/script/package.json",
+      "sha256": "5b0b59d0a9863c162cb79e3785f06b1b803e4ba36a4d53985f02462be582b85d",
+      "committedBlob": "7744cf755ef7466a6a54788c22e3b22ed038ad35"
+    },
+    {
+      "file": "packages/script/src/contract/constants.ts",
+      "sha256": "d384c82ccda79ec72f786ba9b917fc04fc6cb4fcbf04483b6b2e4bc81764566d",
+      "committedBlob": "63bb8947e3eaf3fd354a0036dcadba6c74e321a6"
+    },
+    {
+      "file": "packages/script/src/contract/provides.ts",
+      "sha256": "912fd75c7fb1d11cc94d1326a96373c66b22ce19bc15ffa4f6bad6b188515f33",
+      "committedBlob": "60d3e700d3abc0e550f1b069aca8bf1e99cbf214"
+    },
+    {
+      "file": "packages/script/src/contract/requires.ts",
+      "sha256": "08adf937d0df1fdb28676aaf511c1574708da04db2e7acda233750cc14bb8cf1",
+      "committedBlob": "a646f707092dd150021348aada14fab5fa437aba"
+    },
+    {
+      "file": "packages/script/src/contract/surface.ts",
+      "sha256": "01e78a2dd56b21ffdeb345eed55089cbc13f38af55c227e0b6f901107f9d618b",
+      "committedBlob": "84d49299c0eb83097167b78adec6d9e010f0de7a"
+    },
+    {
+      "file": "packages/script/src/contracts.ts",
+      "sha256": "6c5845b60f3da4844db828cc8f0480c51961c1e9a1b55a9bbff87d47111de71f",
+      "committedBlob": "d57cabc0d50596646b2d7dae2fffc2b0de3703a1"
+    },
+    {
+      "file": "packages/script/src/impl/CapabilityOperationPort.ts",
+      "sha256": "2268404e2910b23dfa6a829cc87fef58d3d199a9b190e6e7dffd092234289f39",
+      "committedBlob": "c3f2595c02d69403748ff915f4ca5b8c4f4f6369"
+    },
+    {
+      "file": "packages/script/src/impl/CodeProgramChecker.ts",
+      "sha256": "1bd9ae7c5ebb576e8c35aacf4d6ec7f42666bf31f9660cb9d677e03b9b988ddf",
+      "committedBlob": "7dd0b45eaaa11a9ace8c19cd788f33dd3f3b37de"
+    },
+    {
+      "file": "packages/script/src/impl/CodeSurfaceSession.ts",
+      "sha256": "b52baf7ac6d9e60d6e648f1b5a27643c02e15ad0e53fe3a00b49266872064570",
+      "committedBlob": "a37b28e02000a034e44b7f41a0b3a95e89f6ecb5"
+    },
+    {
+      "file": "packages/script/src/impl/KernelInvocationPort.ts",
+      "sha256": "e50fb3e80986113deb174fb8a3e27530d89cf85b2102e08ca7ffc1c49f208ab2",
+      "committedBlob": "e78f2d1ce9bf3716fac280890f5b7e2206861623"
+    },
+    {
+      "file": "packages/script/src/impl/KernelScriptSession.ts",
+      "sha256": "0e9daf71ee3cc82f5e7eb17091ca356653bc3c900fa87f744e053d37b80d27e3",
+      "committedBlob": "b8f050237af11731660280ff1d61ff274bb81eba"
+    },
+    {
+      "file": "packages/script/src/impl/NodeCodeRunner.ts",
+      "sha256": "92ecf087f8ce3aa49dff7fee03bc3144e1d8151ade6687fac9a30ba47d3ace36",
+      "committedBlob": "acdc66e8e2532a778911d1938bff1c1688ad66a5"
+    },
+    {
+      "file": "packages/script/src/impl/NodeExecutable.ts",
+      "sha256": "1adbb52af334555fde11f49173eee9ed1edb1a37b08469ad16e708c19a5202e8",
+      "committedBlob": "030f9bcdbf588e54cdb5906665beaa122ec94402"
+    },
+    {
+      "file": "packages/script/src/impl/NodeProgramChecker.ts",
+      "sha256": "6c8cd73b3e787bb739f4400fe2680323931b1c4fb6d8274b8bcc4cadca16aed8",
+      "committedBlob": "eed86313b2daddb5a9675f9c9c0edd7cd3989967"
+    },
+    {
+      "file": "packages/script/src/impl/NodeRuntimePackages.ts",
+      "sha256": "5df26d085781672f39ee21f6f550479b64f18390a2b7873909a70a4171d032ce",
+      "committedBlob": "b0f47b0ffead5bbd2799a655a6853626b618a24d"
+    },
+    {
+      "file": "packages/script/src/impl/NodeSubprocessCodeRunner.ts",
+      "sha256": "457bf5891550697e52d095c2617ca08c3e63c074cab14f597f2b4fcd17e6af21",
+      "committedBlob": "a317b3b486678f603200ccaa4ef77b679ad30c3a"
+    },
+    {
+      "file": "packages/script/src/impl/ScriptContractCompiler.ts",
+      "sha256": "e2af89991e79b416335ff1243310e217296323270ca8f5b60554fa59b2977a38",
+      "committedBlob": "c05db29ab1c1b8468cca5df256e21703b574483b"
+    },
+    {
+      "file": "packages/script/src/impl/ScriptOutputs.ts",
+      "sha256": "433cb964d834fa071a4797496ce5626c5e29ef70fabe6c143306865b97eae301",
+      "committedBlob": "97dfdf864b4098d5bd7831e5d95999fc28fcba30"
+    },
+    {
+      "file": "packages/script/src/impl/ScriptPackageCompiler.ts",
+      "sha256": "ff8f43422ba46df646cb1e4620e31077bc517971107925cfd448c8c000c3f0d4",
+      "committedBlob": "1161c9458705c6caf5df1235716957cf78499a6d"
+    },
+    {
+      "file": "packages/script/src/index.ts",
+      "sha256": "323c66fba217547125932a1ca520dfc29bfed8674af3bb5625d63718d889a799",
+      "committedBlob": "450d4e63df7a58c2a7717d3d74cc9973d84deecc"
+    },
+    {
+      "file": "packages/script/src/types/compiler.ts",
+      "sha256": "2cafe22417ece0f71e10d57694748e767abc3cda363abca16aebe2992352cacf",
+      "committedBlob": "d2358e98a1bed0b914b7807b53925f5ee2a765f2"
+    },
+    {
+      "file": "packages/script/src/types/editing.ts",
+      "sha256": "f8fac582758fe404f498f453f0ee78e8809c4d6a026c76ce2511ebd356d5b38e",
+      "committedBlob": "3bf53799395c99318753ce2d27fb715405b50732"
+    },
+    {
+      "file": "packages/script/src/types/environment.ts",
+      "sha256": "e9684e48f0af294e1c09652731950fa1aee1e8f2bd5a3756e3523787214a9ee5",
+      "committedBlob": "f7747bd0ff1d669b4ffb8437ae79968bfe971f9f"
+    },
+    {
+      "file": "packages/script/src/types/operations.ts",
+      "sha256": "6f70f3981dcf0021cd89d12a4a3c4812cd3450a5af4cfb8ba2b7de0bf83ade1c",
+      "committedBlob": "9a3fb7940f375f21e5e7ce4fcbe80d5a7de6e25a"
+    },
+    {
+      "file": "packages/script/src/types/outcome.ts",
+      "sha256": "3a861cdd265e06c0539c15ef8b94de7fdb95e4547d5a415438b1b6fc8d0bf009",
+      "committedBlob": "b8fb9c6fa89983011320a72198e737d06bf116f0"
+    },
+    {
+      "file": "packages/script/src/types/output.ts",
+      "sha256": "78d00e7d06d928418b40510751326c762f3bddfefb73e2fdc8730eeca3e92275",
+      "committedBlob": "d12a4be28de57286fca5b20bd727cc500eed2963"
+    },
+    {
+      "file": "packages/script/src/types/runner.ts",
+      "sha256": "5164be48aceb61331c08981798194e3643f3c2bfc421fb8b84ff9586b61c8a04",
+      "committedBlob": "345eb29af8ec60d32f7e10898f4f46c0a37cf6c9"
+    },
+    {
+      "file": "packages/script/src/types/script.ts",
+      "sha256": "59e2d7ff06d5f9db4754fd68e0edfde614c48e24d547db9416a64002a806aa91",
+      "committedBlob": "80da2fd0e840950bbe3d94e7455e35e5f22a23be"
+    },
+    {
+      "file": "packages/script/src/types/standard.ts",
+      "sha256": "396d83c9f698b1cf3326b03cd9868f50a044ef820b4b5caa887453c0c16ab965",
+      "committedBlob": "b3d06fea12bcc8290f1527dd7f71cc788d6008e1"
+    },
+    {
+      "file": "packages/script/src/utils/budget.ts",
+      "sha256": "809e262b6e92f8ea741ab952384b791d1f723c8e5869972803d7abdff3271d14",
+      "committedBlob": "faae2135572fc511deb7f2297420c7f8a486c291"
+    },
+    {
+      "file": "packages/script/src/utils/calls.ts",
+      "sha256": "52f408703fdddf4aaaadd2fc2c96d05842118fb4592d69942b5fd19c8756a86d",
+      "committedBlob": "164989de39b86224b688537346ff98cde39495fa"
+    },
+    {
+      "file": "packages/script/src/utils/capability-failure.ts",
+      "sha256": "915ef1fd906f2fc6c9ebb7bc4a2b5e8fa1fabf5eee530a92208874ab6b33230c",
+      "committedBlob": "4d6a1678cafcb84a492c64acd391cb293f9f32cb"
+    },
+    {
+      "file": "packages/script/src/utils/compiler.ts",
+      "sha256": "a371117d098e1ba17f789b2da99cb37b3330f98d51d04aa16f1b32c47f384da6",
+      "committedBlob": "4b37fc2e34c3595d484275601e6de3d64d1e4372"
+    },
+    {
+      "file": "packages/script/src/utils/diagnostics.ts",
+      "sha256": "4b5d10565d716eb01c8756e777f4df5c55af4df758f686d08c1b4a946df6332e",
+      "committedBlob": "e863bbc697fd187f573a41f65d64d59302227765"
+    },
+    {
+      "file": "packages/script/src/utils/edit.ts",
+      "sha256": "c9af0bb37233cc8a3790d24f5db579f11dd9118f305f7c8347f953a1fb36a120",
+      "committedBlob": "d819ef2b1a9fc911380d17db97ad9d9e8878fb54"
+    },
+    {
+      "file": "packages/script/src/utils/module-form.ts",
+      "sha256": "63f67b6c2d25cb24f6b77b8459c7f9ecb58f14c3a27900b17397dd34af158d5c",
+      "committedBlob": "4ad5058ccba6216a7255676d3141cf470e9a5dc0"
+    },
+    {
+      "file": "packages/script/src/utils/native-process.ts",
+      "sha256": "781885665f459a5494493f996a285dbc08884b5557cd5f46babf1da47f1cf915",
+      "committedBlob": "38cadc35e3798186aee056744d06119fbf3b1a11"
+    },
+    {
+      "file": "packages/script/src/utils/node-client.ts",
+      "sha256": "76b637bb32e9a22ea64d13643aad8a82ec950b354c2a57b012e07e08feb1d4e1",
+      "committedBlob": "399f95fa9c2841bc84849121fb3c2b2c7cf46380"
+    },
+    {
+      "file": "packages/script/src/utils/node-executable.ts",
+      "sha256": "587063055caf96d3f32a793231e9b23729124242dc2f627b0d73e12db9a582c6",
+      "committedBlob": "9830d2e23cdd0d2805a775f8aa19fa6190c93c16"
+    },
+    {
+      "file": "packages/script/src/utils/node-program.ts",
+      "sha256": "0d8a670f050a87b59866240c7948641e1895e26a22ef4c82f905c4ad197109ed",
+      "committedBlob": "496552850ceafceb936b455ec4bcabb808d74de9"
+    },
+    {
+      "file": "packages/script/src/utils/operation-schema.ts",
+      "sha256": "1811b04b542aeb5873437a7869088f3b8800b6419f4d5150a9f95bb4fdf99d4e",
+      "committedBlob": "70a11cd08d88694bfc01f802cef5b56dfb298abb"
+    },
+    {
+      "file": "packages/script/src/utils/output-capture.ts",
+      "sha256": "135daa6bd44b3bbea3e5a2532e541c537b36a0cf3d0ecdd313ae2c7d1dc7f39e",
+      "committedBlob": "5cba3b796dc9fd084f5b966e30483c49dc798016"
+    },
+    {
+      "file": "packages/script/src/utils/output-process.ts",
+      "sha256": "1551d144efa1b666a00ca2b95732b9127ed5512a9d192b865e6a8396b6307e2b",
+      "committedBlob": "ba778febfc64bd654c9534693bc2b44aeeec6c39"
+    },
+    {
+      "file": "packages/script/src/utils/output-render.ts",
+      "sha256": "5586dcc505f7af15e9806af7e3fb628b6f5a7d78a41665adeef1fd7615e9a101",
+      "committedBlob": "308d7a22808e5b600adca4e2631ae955ce3b4385"
+    },
+    {
+      "file": "packages/script/src/utils/output-source.ts",
+      "sha256": "cfbe75807007f219f8fb681997f8670e1cbafa83c4cb19cf930750184d4bddaf",
+      "committedBlob": "a6ad081e9b2f51293cbe3c91ffb76f2c89fd52d0"
+    },
+    {
+      "file": "packages/script/src/utils/process-error.ts",
+      "sha256": "c225c2acea5755226515d985174a236b6fa1de1043e9bf43d3b1e1088fb65226",
+      "committedBlob": "fb03bfb448fbd1d29220365066ee18dec00ec0a1"
+    },
+    {
+      "file": "packages/script/src/utils/program.ts",
+      "sha256": "9ec48551a6eea1a6f2f3598ec7a1e72eeb8b4aba6185dd4538e9f53047dca630",
+      "committedBlob": "fc085b91f86efeec4a53b92f1145d4f211014aee"
+    },
+    {
+      "file": "packages/script/src/utils/refs.ts",
+      "sha256": "11c9890b27dbb7d65014d85cf923665c4d442403e185e3460bbdbff67d4899b3",
+      "committedBlob": "22c388da8c103bb0f81c4de177c40eae2c24f62e"
+    },
+    {
+      "file": "packages/script/src/utils/result.ts",
+      "sha256": "28a4f9fefa6c0aeee95da5c1adc8aad885ec3872ab49ad3231fbe29339776229",
+      "committedBlob": "3af540a1fbd3dd1fb8eb69aac6226492383fc709"
+    },
+    {
+      "file": "packages/script/src/utils/tuning.ts",
+      "sha256": "b83f637885e79fbe49756a63f7865ee46ab55f26408e73d317f5903b3d690c43",
+      "committedBlob": "05d268d6defd64e4a97d5d86323feff20a8e6ed7"
+    },
+    {
+      "file": "packages/script/src/velaros-globals.d.ts",
+      "sha256": "6543275f6830f8a2655db9a52451a2f8ab839f0e023f48a758d6dc2d12cd8060",
+      "committedBlob": "048f64053ef4355f5e705dd7d6b7f2e8772ffac9"
+    },
+    {
+      "file": "packages/script/tsconfig.build.json",
+      "sha256": "da3e5e6ef8084936bbd94eea3b4397baec9f5fdcabca0da05d0d65087d1ef844",
+      "committedBlob": "a70c9c60a8ac1f283cbb54b9156fd8f952a01498"
+    },
+    {
+      "file": "packages/script/tsconfig.json",
+      "sha256": "94c8dd88424db35c89f8c254cc139b74d7ab4f272cd96371175a8f128844f271",
+      "committedBlob": "88ca1c90f2c4b14cbdd1c59700f3fa3b26c68713"
+    },
+    {
+      "file": "packages/velaros/README.md",
+      "sha256": "cfe49dfb6f862bf8d8ec79027c49aa705853e28025430ec6aee414b81b26d93a",
+      "committedBlob": "7671bb5cdd5b18c5d3a1f3c50b3df4ed45b6d5f4"
+    },
+    {
+      "file": "packages/velaros/act/agents/README.md",
+      "sha256": "973e5f817d28343e96cc61752546af4f1fad53c8c56c566006474490aefe6aba",
+      "committedBlob": "c6f4cfba08b45fb5fac5bb24a16fe64b3435d28b"
+    },
+    {
+      "file": "packages/velaros/act/agents/contract/constants.ts",
+      "sha256": "d2f20c3bb49e1b7c65c63fb7f9d56a4aa112cbf198a7fb87169305ad66850168",
+      "committedBlob": "e9bb87ab0a1ae236e9fe8338d38f08bea3cf80f7"
+    },
+    {
+      "file": "packages/velaros/act/agents/contract/provides.ts",
+      "sha256": "a822094b333849995ee353119b3b36a1e240d42d968ab88dcc24bac47973ed84",
+      "committedBlob": "b4d3bcd5aef3027740cc7719f27974ac75c3e9c5"
+    },
+    {
+      "file": "packages/velaros/act/agents/contract/requires.ts",
+      "sha256": "260e3f691f2c16f30d41ea5aa8abdc8697c0c645cf27f48260e88b5ba33ad19a",
+      "committedBlob": "0dc92aea5b68c97715c9dff78fc61f2c8c40b5c3"
+    },
+    {
+      "file": "packages/velaros/act/agents/contract/surface.ts",
+      "sha256": "25668a8d1928a096857d12f3fdfd8a9ab6b41173093e251f9c8c4cec97d15a18",
+      "committedBlob": "150482759a65cfb6553243959152f198f27ced47"
+    },
+    {
+      "file": "packages/velaros/act/agents/impl/AgentsModule.ts",
+      "sha256": "353a802e7ed6b6b7f4a1ce08519b27dea97de79f7f635869e26e59f082d5176b",
+      "committedBlob": "bb66c63150a8a72f0472c85187238240bb27b5c8"
+    },
+    {
+      "file": "packages/velaros/act/agents/impl/AgentsOperations.ts",
+      "sha256": "c033117b2c49dc970424ae23b2c1f3798f6d46aef936b012e56aa10ac65ddd1b",
+      "committedBlob": "d8582a02e081925fa1fb4ed83d8a56f37c354a49"
+    },
+    {
+      "file": "packages/velaros/act/agents/impl/InteractionModule.ts",
+      "sha256": "7ad1f59306cd15e7bf85c0c8401288ed1a9c30f89cb4a46a470be262b4dada4d",
+      "committedBlob": "5488693fd7a3e510d7b33cdbb847f48e4305f1f6"
+    },
+    {
+      "file": "packages/velaros/act/agents/impl/InteractionOperations.ts",
+      "sha256": "a631ba08599757f1b2597ddf7f0f0a88cbc4f398a3c272e3b3fdb14c4cf0cba8",
+      "committedBlob": "00ca01a848f242cf24f8e87ba6f497a1d1ea1f74"
+    },
+    {
+      "file": "packages/velaros/act/agents/impl/InteractionQuestions.ts",
+      "sha256": "8b97b5e8fa37e7decb512a5224cd891ad490443ea392e127932c8142e16d086e",
+      "committedBlob": "cd099b22e08bbac182a9788e6efd108cc06a34df"
+    },
+    {
+      "file": "packages/velaros/act/agents/impl/WidgetModule.ts",
+      "sha256": "9459db147ae46d56768d728a43a68988e9d80fd00cc8484a455d5555961d5b33",
+      "committedBlob": "ac8ff36c52d34f7074ae996c867a82f68e4dbb02"
+    },
+    {
+      "file": "packages/velaros/act/agents/impl/WidgetOperations.ts",
+      "sha256": "89d92a015bd502251f5960da87314462fe5413f5e21f3ebb462dd44d1bf0c1d9",
+      "committedBlob": "d944348c5e893d9f929e6636d35832c444bdd6ea"
+    },
+    {
+      "file": "packages/velaros/act/agents/index.ts",
+      "sha256": "a198002fc8262021d20ca670c43d3f54d3c4e091f2de8bb8edd1949142b76be1",
+      "committedBlob": "d64a9d113c70fc9fd6bb3a001d150488ad755e83"
+    },
+    {
+      "file": "packages/velaros/act/agents/interaction-template.js",
+      "sha256": "44089128cd378d779fa45114f216ee5768e6dca25afa12880d09020247aa64e0",
+      "committedBlob": "499210760ab393ea7d5865188b68d02335c04094"
+    },
+    {
+      "file": "packages/velaros/act/agents/template.js",
+      "sha256": "cfad62ff5fce10270337049877e8a3a0249586bf461d259307a5f67be62ca037",
+      "committedBlob": "193736a243856e5488ace91770c662f099c19af0"
+    },
+    {
+      "file": "packages/velaros/act/agents/types/agents.ts",
+      "sha256": "175c1a0276926dc5d9801b883114c77a8ce9ac3227d0957656bb22f13ba6987d",
+      "committedBlob": "75bb5024ab5ae4a7c07c380ab83308540fdecde7"
+    },
+    {
+      "file": "packages/velaros/act/agents/types/interaction.ts",
+      "sha256": "b74f8001bb2429d4d190e273c4fb983e262474572e9dcf980035c3609f91a12a",
+      "committedBlob": "e8ad9e5c2fb911d7bc11167a8e2df8b76c2d2dcd"
+    },
+    {
+      "file": "packages/velaros/act/agents/types/widget.ts",
+      "sha256": "8e92dd89986aa28f844941c428ac9c03bf1e7fe0221f6217e6c89bbe4656be48",
+      "committedBlob": "0180d56c53701f7161dc13e7880a3a7e8e190c2f"
+    },
+    {
+      "file": "packages/velaros/act/agents/utils/answers.ts",
+      "sha256": "9ec59c37eda77f0cb9165df4ce9acd195de92683501dd95f0b37c2047a9fc36b",
+      "committedBlob": "a9b0bd39e69cfbde84cbbc98a928dddaab60ce04"
+    },
+    {
+      "file": "packages/velaros/act/agents/utils/requests.ts",
+      "sha256": "2601b64c68da7ae0c912c23083665d11a58bf1c6c9476011e8a928c00ff801b6",
+      "committedBlob": "c61af7d34efe6188f29d271b1652960166f9e742"
+    },
+    {
+      "file": "packages/velaros/act/agents/widget-template.js",
+      "sha256": "9c269ee74210bcea93f9a24404f9208a7173089d6aa1b1e3da54dd531b11132a",
+      "committedBlob": "1d1c5dd1d4884cfbe0715bc44e94d90f8e4b8685"
+    },
+    {
+      "file": "packages/velaros/act/runtime/README.md",
+      "sha256": "d20975f724b73eb3162ae18d9e86e2327d5cf15be1bbceffcf5a41e336ca9e2a",
+      "committedBlob": "d5a1edd307d929ed3a2d81901df259a51041dd9a"
+    },
+    {
+      "file": "packages/velaros/act/runtime/contract/constants.ts",
+      "sha256": "3210680f1f974d8467f155eb8db3a1d5b333cad9b48c007c2ee59e968d552efb",
+      "committedBlob": "b886d28ccd8b297aedb9db19a4468bf64748b0ed"
+    },
+    {
+      "file": "packages/velaros/act/runtime/contract/provides.ts",
+      "sha256": "67f69aa1c8fe932635e2bb03d02b13cc3b0a02a5aaa7fb015cd81f0a90262bae",
+      "committedBlob": "13fb6f74202fcfa4d52d3254cc1ce3598b33d738"
+    },
+    {
+      "file": "packages/velaros/act/runtime/contract/requires.ts",
+      "sha256": "4589c992ea942bd77702817da394b4057e7f6a32a0d2372a35930756e725a9ac",
+      "committedBlob": "74a8076a19525b8b51a03808a1a3b313f813ecd8"
+    },
+    {
+      "file": "packages/velaros/act/runtime/contract/surface.ts",
+      "sha256": "9f6170eb8963711ec3a0dc1c3a28ea04e2089fcb9bd8171833ef4bd3bf4fe447",
+      "committedBlob": "108df30e2182ee80260fec3dd45d5e1b1c20db78"
+    },
+    {
+      "file": "packages/velaros/act/runtime/contracts.ts",
+      "sha256": "18f426d693b3e9a73a04df2b09048813347782d9dece1b434cf15bf5f492e60c",
+      "committedBlob": "d580c3eb1560b10e6214260bdedf8e0614d4e163"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ActEventProjector.ts",
+      "sha256": "ddfa6db71646ab51a20be76dc2294539192361a84b62be7c73fb9bf7ed55ae47",
+      "committedBlob": "8910c1ab6e7bc6c160b8e4303a02303899d23d11"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ActiveContext.ts",
+      "sha256": "4aaef900a53c911458e186848c0361e86ca9ca4c8c843052e2852673dd1187df",
+      "committedBlob": "9c3a9ac57048ae593090ac10aece22d4f4ef78ea"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/BudgetedModelDriver.ts",
+      "sha256": "fd4c7978710b26e2ff94e16c5b82aca6541e890711a95bed683da01736c505a3",
+      "committedBlob": "304843b77c3a12b84b9719a91abd0c6ed4d6586d"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/CapabilityModules.ts",
+      "sha256": "77c3175fbbf3db5395dcba421662e083d41114720874eb374d6405f4f909660e",
+      "committedBlob": "444f8a41c5d35a4ed81282081b99f18c27a0f0a0"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ChildTaskMaterials.ts",
+      "sha256": "e01ca8edc0d946a139b9a1aa49e8a2be4c1d9f6bad333fddffe88303a4e035c1",
+      "committedBlob": "d0d514b407a4d20d672ea413c4b3b694ee926b85"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ComposedRuntime.ts",
+      "sha256": "6a26a87986fb47ea64e592ab0ebaa6a542f465f5a8d13d24fe68e12f39c1af0c",
+      "committedBlob": "d404b18c25bb097221c4ea360080d1f9bd191f68"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ContextMaintenance.ts",
+      "sha256": "3b48df1053a3f15b09bafeafa898d36f40a97a5f6355a65230e045604157c75a",
+      "committedBlob": "e179ad4a2bbbbe03abb7b261447a645ad4ce5cdb"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ContextMemory.ts",
+      "sha256": "0bddc6237cf41b40d6ab9b723d191af1aac925ad662ab9e090f7584b5f58cba7",
+      "committedBlob": "bd6d57cdae95d66e714802382c11741cf62bbc16"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ContextPatchStore.ts",
+      "sha256": "1b0d916ed45926f4880fd880b4888730ff4b31121b272145c78f47328e51ef52",
+      "committedBlob": "daf6386d44ba64c6ee824923d65539666652df11"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/EffectScheduler.ts",
+      "sha256": "c8fd309d11cfd367f871b50879c26096f065ede32f3543dbe699c7607f41afc6",
+      "committedBlob": "c4e280f6aa821f8349017f513861cb2a4670de64"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/EventDelivery.ts",
+      "sha256": "6c060ba006dd2fe63f8ef382189eb817517a748ce377a45104944a6e18e3e48c",
+      "committedBlob": "40e6e1631729a1ce3a90e02b234c6e105edc60f8"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ExecutionProgress.ts",
+      "sha256": "1f0c4db59fa868fefe2439f428549d6ea9339116a9dd65a9c683cdc3b3743e73",
+      "committedBlob": "058186f38e946b987c5826ddfa0948acf4609c94"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/McpClientConnection.ts",
+      "sha256": "4a645e371c92cef77461c8ae141f9ad87d33d4bf6418783feb1fd4fbe5d39d24",
+      "committedBlob": "c49cded93663995a9a69cd4798dd2db06087743d"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/MemoryConsolidation.ts",
+      "sha256": "3c323495db4749f61bab96111e2c5d7cfb756218093d4341117f2eb3b8b1d0ae",
+      "committedBlob": "fa784f3df2150cee4f6a90554c12443bf92ac578"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ModelToolActivation.ts",
+      "sha256": "6b3fb6b00b86ce216d4e5aee45f31ecd9ce97f5bda45764f090dbe5d67d29424",
+      "committedBlob": "cf3cc9ea81ddf61e356e7775c193137b4170a770"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ModelToolRuntime.ts",
+      "sha256": "c9761ed548e03bffdd0d57c693695d51b250fe06b921bce4bed2eae40b99a90c",
+      "committedBlob": "6947796ca5b746259c2898647fd42048f5cfb998"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/NativeTurnDecoder.ts",
+      "sha256": "dc1f7803aee27789e1f1cf745bdbd1ad02c912e7cade0e727a5c187b6d4d4d49",
+      "committedBlob": "01dbb8a1c6dbf21026c95df483e8ca13a8f3b7f6"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/NodeExecutionEnvironment.ts",
+      "sha256": "2e8a448d9f9af92872da6ba94e61464c062144fbb3e881d20214716cd89014dc",
+      "committedBlob": "83fbd7de0c6a671b36ffbef63e02a20b3ef672e1"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/NodeRuntime.ts",
+      "sha256": "737a1b7eced7fdb2600634bcee435f1c94fb4c88d57cf7cd0cc1094e6d9c96ff",
+      "committedBlob": "8a5d393a3904b43850152c0a48621896e0a3b046"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/NodeRuntimeBinding.ts",
+      "sha256": "2de791aaaa9b104c4771725d3072925e93a7af4e3beb398313e93bfb03238b6a",
+      "committedBlob": "a739ae9cb56776c12d85e6272da2ffbd54c88117"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ProgramContext.ts",
+      "sha256": "362f443c281fe4ce666beffeeb0631231be0bdbcb49c5c54843a2c16e79aebf6",
+      "committedBlob": "aad85cd49fa4a83e4d9d5ff4536e6e7e3e684a28"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/RecentContext.ts",
+      "sha256": "f142530fba05a2e4b0ead0c0d21223cd16b9dd826263b72c829888d4c789c376",
+      "committedBlob": "52ea8c8424dc5b95df1e8d72f6dc72ce9c8f26f6"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/RuntimeBootstrap.ts",
+      "sha256": "8587d3ee6f0a0ca71ac31cbd5e686be3aec3df1237fa4c6436844391bb540232",
+      "committedBlob": "96a167dc33832558de96e6d2f5c113761f3371bd"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/RuntimeDiagnostics.ts",
+      "sha256": "e9823be77214c3fe059dc55b0afa7cef1869429666cf7bb64796e52046010f1b",
+      "committedBlob": "92963488d6610a79ac94a0ccff3735361956d4ee"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/RuntimeSession.ts",
+      "sha256": "4176561b8d087daac2e89d45477cd4f7882b9917c387b71c66490e52841f401c",
+      "committedBlob": "3663253da941167488ad59d9490a2e1e7bb371d1"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/RuntimeTrace.ts",
+      "sha256": "f0c631b0b0bab9217765821ddad7a68d90d1ca5ae1b61dccf03a2c56c00aa5df",
+      "committedBlob": "4f5cf58eb5b4808338acd616a449d3e9c5e6cc98"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/ScriptTurnDecoder.ts",
+      "sha256": "1d85f8a796b7f4254e9d89e367a393aa2f58b968b2691623d5f11097afde7d2a",
+      "committedBlob": "4a218ec58fcd941418348830fa398e585124dc94"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/SessionControl.ts",
+      "sha256": "982d6973a7dbd0cd180e8d5f3434e73bcf919a9c8329d79521b258426c948904",
+      "committedBlob": "a0de28dbc271ca92dd10678a5f62b7d6f109322d"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/SessionExecutionBinding.ts",
+      "sha256": "693a49fa5e461acb54a97e6c51fe9578890a9383a568395f3b7130c13c317b02",
+      "committedBlob": "93c8ccc573a04dcce521cbe54e2c465b0d887377"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/SessionGoal.ts",
+      "sha256": "0502b9810e36525f869433cf7261bd90173e88a9e516a33afeb03c1917ee02ac",
+      "committedBlob": "b9140e28af19a907417b2b91ee84c06107be9b19"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/SessionNotes.ts",
+      "sha256": "84ef8f69755d8cf5ed904335035e9a1ed08ed4e44980d482c356a87889866eae",
+      "committedBlob": "2273e0f3182fb84a43944e8616e925524c304a33"
+    },
+    {
+      "file": "packages/velaros/act/runtime/impl/StandardModules.ts",
+      "sha256": "791fa41eda1de1c76556ec06f140b02c50b596fe99fee1e124eed506ac2ee8fe",
+      "committedBlob": "29edbff4ed0f69416c7dec201ef369466be9183c"
+    },
+    {
+      "file": "packages/velaros/act/runtime/index.ts",
+      "sha256": "7e1a246336440245ba1f4e8a9cecf667621ceeb0de4133484f1492004d037346",
+      "committedBlob": "2bbd27fe489491476659dee25bf8b74103c407cf"
+    },
+    {
+      "file": "packages/velaros/act/runtime/invariants.md",
+      "sha256": "36e83c837bb9cbd838d72455c91722785a7a6af25244084f3c03ac2dd429068f",
+      "committedBlob": "eb4c2076fc57a0f779f9acbab7aefa368ab839d9"
+    },
+    {
+      "file": "packages/velaros/act/runtime/node.ts",
+      "sha256": "3e53d0fb90242c5b56e28044adaaadde35b065571c17cd12077bd524481b0f45",
+      "committedBlob": "5a6115350e88b4ad9e361a48067fb3050f7a0e35"
+    },
+    {
+      "file": "packages/velaros/act/runtime/renderer.ts",
+      "sha256": "e6344ddce389e1cf81bae7bb3771fb3ca47048f0fb21f91c7ab02f08329558a9",
+      "committedBlob": "0b094a02c80004e1e778db2280e19aec3fde95ed"
+    },
+    {
+      "file": "packages/velaros/act/runtime/test/session-control.test.mjs",
+      "sha256": "8515908c6b2b9f75f36c2d3e0899aaaccba31384e41f7d609a42ac525d09a3e3",
+      "committedBlob": "c8509cc98091e9b529dcd87c7034265c309c9409"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/binding.ts",
+      "sha256": "1e34e3b0a0d46b809925104099613ef42a80756d5dfaec96ee6cf2054b289e74",
+      "committedBlob": "5fd4873d1fb1244ee9cfee55a17268f41eaf1958"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/execution-output.ts",
+      "sha256": "845665bf4a4d3eacb60376c57579bbf931888cf55c2efa0810f27206deac6415",
+      "committedBlob": "e38b07a404d87a8b69f5a49ed263563510ddb868"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/goal.ts",
+      "sha256": "f0a7a9a458cf3dd3f757ee34e7fb41498006f0f12ddf7dd6ee43473ef9cd0210",
+      "committedBlob": "14031626838764e5ec976c39ccbf674eac2c59a2"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/instructions.ts",
+      "sha256": "ff6ae54e170be1153d06047ddabff83de11f6de0f02b8de8b798a91b492d73b4",
+      "committedBlob": "f708ed4a8c1e3b67ae2ff56a3f37a181f576ef0e"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/inventory.ts",
+      "sha256": "c07f6ade13f508d3627fc30563347f509863eed8cf49d76094068ed56b574651",
+      "committedBlob": "5e066c7732f44b603b15abacc53d4c416bc13026"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/mcp-runtime.ts",
+      "sha256": "2bb168bd01a30a98a711830104d29331063eede62ed94735b684ca101031db0d",
+      "committedBlob": "de91ab9a76c8b2d17fdf2b5bbe9884c550e81510"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/mcp.ts",
+      "sha256": "8bbd8b6a1d127350f0d995188fed58b5d4ccfb562c4b397ffa0cda64f496f1f4",
+      "committedBlob": "ab20cf009dec4d5bae8a4d7bebb255397e5f9615"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/memory.ts",
+      "sha256": "7dceea3ee47cf925d4c8c1e3e98b050d6e3ec406f35ad19908d299bcee84928d",
+      "committedBlob": "cf5216904317102191579fda9e09716ed424881d"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/model-budget.ts",
+      "sha256": "5acf936bcf33e050e8d049e15ace9873343043055b06726423238b490c899302",
+      "committedBlob": "ff258b3a3715d32c6531264efe91c193b4d216fd"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/model-tools.ts",
+      "sha256": "f38d59c4d2fe874096e50cc5ab83a03bb6c0d018cce4a46bd7b5be67a9314bb9",
+      "committedBlob": "28e54921cf985d209f1a7e6737ef5e4c4670f45d"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/native-tools.ts",
+      "sha256": "0cd75b3a77a339b1a0045e5ae6dcdc63b9478a206d90f6f5e78b3ce934400078",
+      "committedBlob": "09b223491f040255709b590247df0cabfc5d73bd"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/parent-task.ts",
+      "sha256": "b6555bf555edda5b081df33a3bdd2a2bfb82fa5b97196f6315b1273599453101",
+      "committedBlob": "89b76e269fad24200bf518eac8275354428b2862"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/presentation.ts",
+      "sha256": "7bdf8fccf348e43ed92bf0afc27cb0ee760f01408bfd2628260a7e0c43911da3",
+      "committedBlob": "3006cf760a6de4a340f9b8738f0c68b011b18b68"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/program.ts",
+      "sha256": "6ac445ae9fec750c4b2678feb4e9ab205c150a5c3ddb3126d206d4178b652001",
+      "committedBlob": "a150c88d92933d4a7ab930b9227723621fc0b57e"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/results.ts",
+      "sha256": "d6e2e1a9180ff110ca4ce2f6ec22fa87c302a02b53c121104803358c024ba9fd",
+      "committedBlob": "740e9d43ded723cb0ec1225eeb125c493567f84f"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/runtime.ts",
+      "sha256": "53ed79cc5ab8f898b2da3fdd583af991fb5748e74027d04da097f0b5bb64714c",
+      "committedBlob": "4f6bd25f0ca100f9ad065b0d7fb5d01c8e400e21"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/segment.ts",
+      "sha256": "bb2a3cb7a9d76d133b97dc7bf3627486ad0285f7fe1f4bd76c6b27f338724e8c",
+      "committedBlob": "0a59583cdf45ebcab1cc6a4d3dc05aa5893cae42"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/session.ts",
+      "sha256": "9a04ef6d2b4dbd0af14e397bb3cf976db159f398af2b8c8f7c2c5b3e8cd36b62",
+      "committedBlob": "1eb63c520ccc4642188367132de3b280b7598772"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/trace-read.ts",
+      "sha256": "b52aad9c3488cb645478a7da9b3fb84691fb5cdf2c9b9c438e112dbea3505eee",
+      "committedBlob": "26d87377b7f8e114a9538d53516fad6b0f11cb04"
+    },
+    {
+      "file": "packages/velaros/act/runtime/types/trace.ts",
+      "sha256": "0cf2136864f5be84718c98eb86770443ffab929602382b85bc64914bf8ad10bf",
+      "committedBlob": "844c370c13267e638960d4748f3c66911894d4f4"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/context-materials.ts",
+      "sha256": "df19c96dfce658358ef6fc7f80cda079e5c0fe5ba81e8035f0896bd8db8962a7",
+      "committedBlob": "4d01deb7e64d22dc011612025a3a60ac2837fc79"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/context-memory.ts",
+      "sha256": "bb62ae81f946893e1515a2e7d58a162978aed17a6d79f33322c79a56474484f4",
+      "committedBlob": "3a142ec10b76a7f2899c2a7388432c355decc6db"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/decision-state.ts",
+      "sha256": "170d4eacd0b988245bb245bfa87f7d2eccdc1ecc892f66a314fc6198cab002e0",
+      "committedBlob": "c9dab5b362d6d0f77bcef573882b5cc76879a316"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/effects.ts",
+      "sha256": "aa2c1ac8db39a456231c50babeeaf8193e9e400df1bbfa659cd015c33a6ef5c8",
+      "committedBlob": "cca51513ff53ba73d9e8ad2988ef258b19e1a44b"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/environment.ts",
+      "sha256": "2dce5dcae14704d87e723b948062800b7b693305ac88f74c19df9cd258b125c9",
+      "committedBlob": "38b01a5155aa6c84c145b7825e3bac95adca576a"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/execution-outcome.ts",
+      "sha256": "5f9abf6ea037769545d9214fb55cbf9161d60d82066284b9a3e9baeb5211774e",
+      "committedBlob": "697dec6222fe1504c4484a62f88fb103f7b2d98a"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/execution-output.ts",
+      "sha256": "3a9f5440d571f7c19cc283aacf3af2f29a6c2b57f5af836bdb618e1f2cbf30f6",
+      "committedBlob": "3b2d72e03285db05fda4fe71a0a661514deae78c"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/execution-policy.ts",
+      "sha256": "0e7906777bc28aa84fe730a58a2b1ab9c399f4aa529b55408a6234b78433e352",
+      "committedBlob": "383cc5982c684f30dadbf0418f803691bba0e5e6"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/goal.ts",
+      "sha256": "05f4919102bfbcea8e521044619345d77dcade39cbdb40a1d4e66da7485b9c9d",
+      "committedBlob": "fcce789b374249e097c07d67dd1127a7018220ad"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/instruction-manifest.ts",
+      "sha256": "4c7b527ee4533b0ddf095522ea16b3986f300ff9e88886f4e0b314ed3268f095",
+      "committedBlob": "92d7edae4ccf8b6d366f7bfb715661a06cc8bd7b"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/inventory.ts",
+      "sha256": "3baf10666e8596858036657339ae9c41f4354edb7256081ad877d4e8c561cb86",
+      "committedBlob": "ce2574d998a6c8295697a52e1912010cd973c8be"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/materials.ts",
+      "sha256": "1edd461df825c9cbbfb1eabd87b125e48043168a19fa53e9587484755e922231",
+      "committedBlob": "72e8e272fb91c102bbd460cf514d19ce6f4462ae"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/mcp-protocol.ts",
+      "sha256": "ae4975dccfab44a8c759654b90f3ad8bd71b4f50a176f249af828eb45b235994",
+      "committedBlob": "3cbac355f56c1467a655ee4cbb0ae3f2f2ac7370"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/memory-consolidation.ts",
+      "sha256": "a3ba6d9ceeccc162ad5fdb2d46f2d21ecb1af235eeef12dab583c6dbd094f9ce",
+      "committedBlob": "6f076204f8c8cba5214fc83358efa09e58ff3d1d"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/model-budget.ts",
+      "sha256": "e24fac2948dacb811ed7b9030d9ccf6da3422d2648887c96e87f722c129ca6c7",
+      "committedBlob": "5799bc28d6f6948cee61695ce2a9e1ed037a99cd"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/model-instructions.ts",
+      "sha256": "0b989166d43b60f27b278944ec9bd711b2783060da207b74010c9e10882e4ee2",
+      "committedBlob": "d5098a8cca91f08fb3f29ba08e7a57c14c46f213"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/native-protocol.ts",
+      "sha256": "f3b727f40399d3056939aa9ce43727b902ee3c0ac891e3e9045f45fd95e99ba7",
+      "committedBlob": "5ed0bf6c4ecf82afd8252eda8a01189e98c4417a"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/node-context.ts",
+      "sha256": "8edf25e1e52437b077d60a2c2c1f363ae4786a0e617a5fbd76fccf7bc54a28ad",
+      "committedBlob": "c1d3a67abca84a8c1cd28ef1969fe74ab3b2d57b"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/node-instructions.ts",
+      "sha256": "180f7a2240b8d075721886f7e7e9acf342dddff19f364731ae2148b316b1984f",
+      "committedBlob": "ba1c9d9097d6b014549d888ecf25f6f0f01e0138"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/package-environment.ts",
+      "sha256": "103fe4534f6d2c43642ee6337e2d11ceb4f28d63f95d6c0aa69f26f2184be961",
+      "committedBlob": "4ac6333dffef480b0c1f6daddeb4e29aafa3ca96"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/program-catalog.ts",
+      "sha256": "daed06d43ecefacb99faa4a182f34fd7f962605588a68428f673b54d51d888e9",
+      "committedBlob": "9d541ff3be7edc7313ace8b65e16fd62a00cdff6"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/program-context.ts",
+      "sha256": "3b944ece06bff4e603e037725cef3de0f16c6a38f37d00c2505359fc46abf7dc",
+      "committedBlob": "157e9c54beea317c960bf8827c998987f25daef2"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/results.ts",
+      "sha256": "a13ee51bb0b212334adb16bf72bb1f3257701b528baa14c511db6a212fe1923d",
+      "committedBlob": "5894abd7057ee7e500ae72a3807f3adc0934a3ca"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/script-protocol.ts",
+      "sha256": "33c52928711e33dbdf3931808397f2917595ebe27ab223c8d38dacbf4cb8ee0d",
+      "committedBlob": "f4ac5e28f3cb2e3dc469d24bf808d7563cdb4d4a"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/script-records.ts",
+      "sha256": "42671519f4804bd931c5cd859d6bc4c8330159715482bfee38a63252fbe2f4d2",
+      "committedBlob": "6f8d8113aed898cb7e9a55b2b9e69b3a92344f26"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/script-submission.ts",
+      "sha256": "5c66169e98edef5509179797e60a2fec45c82e5a926ac1f6dff2b4c54b08dda2",
+      "committedBlob": "3e015ba448637a1409af15a1e625d589304d924e"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/segment.ts",
+      "sha256": "0a6ea085e079ff9296a73e5121d736e6c443510ad6a637012f9dbfab14b2f835",
+      "committedBlob": "b91a5d8c6d47771bfcb8b08aa14d295a054b4828"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/session-binding.ts",
+      "sha256": "231a38e623c6821b08cf0094009429faa79f5832e48ef3baeeba483d4c54e385",
+      "committedBlob": "85f24be4e44a8a0ab028211a610977f54e4ac471"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/session-notes.ts",
+      "sha256": "a04a4ad2e0d30451812f7c7ec97ddbf0300b2198d8f93844618e8cc5908cdff4",
+      "committedBlob": "d0a8985af6a5bfe0c8415d8bd985725af822c60a"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/snapshot-observation.ts",
+      "sha256": "21d60ed8acffbbb49cc266e4f4a42bbb289506bc3b49b0e4043f2754c84dee96",
+      "committedBlob": "cfd041acfb0aecc2ac91d39d5f22f617d0ae7b39"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/task-projection.ts",
+      "sha256": "1d1db5def1aa1c958e93707c29d0ae84776422dc7f2f623e98b97fb5b963f5a5",
+      "committedBlob": "e863dc78e7bbe4a3e4e53369d704554904e8aa70"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/trace-accounting.ts",
+      "sha256": "b5fcbfac5abc91dcfbe1127f084939918f83d814a681139303e0022d3716dcd5",
+      "committedBlob": "25366bcf3690aa29364ae6a3ed2a653ed6ed56fc"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/tracePresentation.ts",
+      "sha256": "9a80e26ecdcef61f5ebfcbfd7f63ccfb1b03857c1001033bfc1114ae43cf9d9c",
+      "committedBlob": "9830382af6f79ce50a58ab8d7ee5d9f860672771"
+    },
+    {
+      "file": "packages/velaros/act/runtime/utils/tuning.ts",
+      "sha256": "ef2772089cdc0364cfecef981e1e0179acab23a60bbc76332ef9087979edff45",
+      "committedBlob": "bf44efa007a52be7ac7df55f99a4ce13df01904c"
+    },
+    {
+      "file": "packages/velaros/act/search/README.md",
+      "sha256": "d61c5438a3b692a61a300521718cc4b9a23b8c8d0f4cf06ff0bd567d7da3d2ea",
+      "committedBlob": "98609051a1eb0d800e9a7675f84841d690ee7f20"
+    },
+    {
+      "file": "packages/velaros/act/search/contract/constants.ts",
+      "sha256": "197505667169af1d487cfe36505611cd11327ed0e166f2d5831c0d279bdcb445",
+      "committedBlob": "413b857ec9d500566b4896a417759aed81227502"
+    },
+    {
+      "file": "packages/velaros/act/search/contract/provides.ts",
+      "sha256": "fee7d2ded629e220efd06b35ce45f4c1384fa1c3d3977bfc45593807ac24e2ef",
+      "committedBlob": "f819badaae62dfc31b70df129faf7a82f8a5193e"
+    },
+    {
+      "file": "packages/velaros/act/search/contract/requires.ts",
+      "sha256": "6a5bfabd2cd654804f2ac5fdb1e993c81c8d0d6714b9281cec92acb27862ed2c",
+      "committedBlob": "81756df05f3ca2f8a1a2943f7dbdc38444ce6cc1"
+    },
+    {
+      "file": "packages/velaros/act/search/contract/surface.ts",
+      "sha256": "0ded2c91c07a8febfd9a0f6e6f8f7a2dcb278495a0bc2bb6602e6a1f30ca9f65",
+      "committedBlob": "da7850488a20bc65422ae8948431604c72602545"
+    },
+    {
+      "file": "packages/velaros/act/search/evidence-template.js",
+      "sha256": "3a271714efd19b21ba65d47e43e1c614f8d339d1a13f78eec5e45ef080e2b120",
+      "committedBlob": "700ed7e8fa3c5efc67c96b88b3b9bd9fa0fcda0f"
+    },
+    {
+      "file": "packages/velaros/act/search/impl/AdvancedSearch.ts",
+      "sha256": "f41bf9a37e24db1f382c90634bc583356e0b668dd0e090395d05165e46bd3c68",
+      "committedBlob": "29ee8a05137b28ec8529e7bbb4d0e7121189b74d"
+    },
+    {
+      "file": "packages/velaros/act/search/impl/EvidenceModule.ts",
+      "sha256": "03d42448ce92e04d4b10e47ac8796ae667c5db000780809e29657d690167fdd3",
+      "committedBlob": "1fb04b00d12afaa3c2e37500f69ca3d57e127b0f"
+    },
+    {
+      "file": "packages/velaros/act/search/impl/EvidenceOperations.ts",
+      "sha256": "b1e01738460460f4538613d2dc5c008a2d947dc4ca6097db007a14d99a28a694",
+      "committedBlob": "34928fb7f6c72ffa0627685bbd8069a6ab786ed1"
+    },
+    {
+      "file": "packages/velaros/act/search/impl/SearchActivation.ts",
+      "sha256": "03e1a2643d6463b15c9c2077baa4136a675d944a4fc50103e5ba865b9c16a9ee",
+      "committedBlob": "fafdee5f7e35fcd4982339a32608f6b590ae35fc"
+    },
+    {
+      "file": "packages/velaros/act/search/impl/SearchModule.ts",
+      "sha256": "7a04dc6ab6fa3821577966697fc81dcb4d289a4a7b65fcecdf7bfed2ac608d6c",
+      "committedBlob": "dcb0bc84c3585577ae3dd215f96982994e0fb92d"
+    },
+    {
+      "file": "packages/velaros/act/search/impl/SearchOperations.ts",
+      "sha256": "7f01ead62fc366b226a5a35754dbb7ce1e2fd2b063b2b072137f52fe27d9ddb3",
+      "committedBlob": "6ed622f36da3074f25f86640a41fea71eedaad30"
+    },
+    {
+      "file": "packages/velaros/act/search/index.ts",
+      "sha256": "6669aa37feb856303858f1b41f0b613017d3000d1a534670a13119989f7f151f",
+      "committedBlob": "cff95b752cc297cb0498b6e2311b1f48864980d0"
+    },
+    {
+      "file": "packages/velaros/act/search/template.js",
+      "sha256": "8c95f57891e684984a6cdaf336f1a50d89b83e3e55514729cc9f2de55ab77164",
+      "committedBlob": "5ac3730d6abeb2d6be66326d7292c8f4105965b5"
+    },
+    {
+      "file": "packages/velaros/act/search/types.ts",
+      "sha256": "d5f2ec9f5b4452e823a81ef5bec0a92011886ee7a65470c4ca75737e8c9dde93",
+      "committedBlob": "86d64d1869a1bb66e627e4c5de0a19ad3daeecd4"
+    },
+    {
+      "file": "packages/velaros/act/search/utils/requests.ts",
+      "sha256": "6a9669d792880cfa4dc9bd14238118086cc342249d77a0321eb736ad7b008256",
+      "committedBlob": "1ec0a6f423aa27f3fbf27b8f7066a83ed19b9a3b"
+    },
+    {
+      "file": "packages/velaros/act/search/utils/tuning.ts",
+      "sha256": "b33d4b154d27614fdf798defadb88d6fa72f38aaa693812ba7800131fe15ea53",
+      "committedBlob": "9b49bdf5b510559b97f09eea17cf96711f118757"
+    },
+    {
+      "file": "packages/velaros/act/system/README.md",
+      "sha256": "2461b0dfccdd0b355f8fc2a46526205005cfb207697900ba5615baab57e78ec2",
+      "committedBlob": "efbab3dca8efffa8ad88f9cba6a19407e3556693"
+    },
+    {
+      "file": "packages/velaros/act/system/context-materials-template.js",
+      "sha256": "141365c44b2011540adbb09a9db8f56bb5721b640f8f6cb76e9853b430d04a06",
+      "committedBlob": "45fbdde2a7ea81ffed983821bb66d3fc10d4387a"
+    },
+    {
+      "file": "packages/velaros/act/system/contract/constants.ts",
+      "sha256": "1a1ff34734549e897aef1df3cc3a9d999e964ff400a7830bd144840903d77a45",
+      "committedBlob": "20ec7d040f8f98390e32e450474a8984075e4911"
+    },
+    {
+      "file": "packages/velaros/act/system/contract/provides.ts",
+      "sha256": "a6a2ffa983d0a837908dc245a0e3ee72bc7fc68d47c6f4cf4a044a92d6275666",
+      "committedBlob": "8cb8c6601798adf5f5c153157d9bb14960ffb710"
+    },
+    {
+      "file": "packages/velaros/act/system/contract/requires.ts",
+      "sha256": "38845f744a780d34a598ee2419ff7907ac554c78ad85c9cc7de820d1b5ccdfce",
+      "committedBlob": "9ba884f6291244be015d5334459888cfa03712d3"
+    },
+    {
+      "file": "packages/velaros/act/system/contract/surface.ts",
+      "sha256": "871a3f0291dcb9996da25bb6732365b3e40be195476f7b7eca67a1084b422669",
+      "committedBlob": "1b2088772a6f5d782309e9b039623fe2fd16d3b2"
+    },
+    {
+      "file": "packages/velaros/act/system/environment-template.js",
+      "sha256": "66ff2af35de0d3c5ff5d28a404d9260201e34e0ff2948ad3202fe1fe09175c1c",
+      "committedBlob": "20a0df29ecc74d92cab9f11751e3ead6fa4a7f8f"
+    },
+    {
+      "file": "packages/velaros/act/system/executions-template.js",
+      "sha256": "0818df92acc757ce3a6bf23a0d29cf8758a53296162443eef22b1c3c61b023d7",
+      "committedBlob": "69c3893079ce9b846ff3c2e9d26c25d6bea1f9ee"
+    },
+    {
+      "file": "packages/velaros/act/system/goal-template.js",
+      "sha256": "836a86fc3cf395aec5283620a7d338bf73a0da312a542e46d9e1d667b7f575e0",
+      "committedBlob": "110abb4d9773680d17affc74caff9ca6d609bc70"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ContextMaintenanceState.ts",
+      "sha256": "a082cacf8e8f945ac680c704d628421858a536d932c515ad07ac3575ae5b406a",
+      "committedBlob": "b7e357841b760faeb084e6cf8319ea8b7289a050"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ContextMaterialsOperations.ts",
+      "sha256": "1eeaf3ab8e06a2d7207c10629fc93f09e69dfef19501681d68cd9e8987a1039a",
+      "committedBlob": "2ea71d989ad1bfe6261eb2cfb20927c47ffad4b2"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ContextModule.ts",
+      "sha256": "4363019012f9bf03218699518f3c4b3d176e4a356a950ce1e589f9aa12a332cf",
+      "committedBlob": "182329e0438bcc19e7af2d4b292d6708358059c6"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/EnvironmentFiles.ts",
+      "sha256": "1c718a18891396538d7c2ee86f2e4a81a28ebe6c67baa3ff0074018338928ec8",
+      "committedBlob": "950d80e4f4148173943dcb48bc228634ff9ce671"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/EnvironmentModule.ts",
+      "sha256": "fb65cd7014c066f88bc0f698bcaf07d385dba3e8d747c380e5fae1bd3b95cb32",
+      "committedBlob": "a0f7432396aa4dcb08ecea111ebabec1fde2bdad"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/EnvironmentOperations.ts",
+      "sha256": "fa133878d5c01905b6da40664e846b65a626d06f9818ce5693e9e48eb6159bab",
+      "committedBlob": "82b8f709b2ca9f44a51a6b2d18831fdb35051407"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/EnvironmentRegistry.ts",
+      "sha256": "92f3b9783cbbd2bc11dac20dc5901a44fc29a2b1444a3c516481c214a4ef5816",
+      "committedBlob": "c933bc6569889da424610f1721c38075e7300d9c"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ExecutionsModule.ts",
+      "sha256": "df02978bb0f4646d1d19a231eedce948551b6f12d97c372e830387dd8d097eb0",
+      "committedBlob": "78e13801cb2d811b84653383c68bf034ffd378bd"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ExecutionsOperations.ts",
+      "sha256": "c53281f2f17ccb8fad6cdf35f394d3639565384f6b6ef748af08faa45ed641f3",
+      "committedBlob": "4bb93a4785efeaa47a8b5a1b6d965d0a4b919b12"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/GoalModule.ts",
+      "sha256": "9768bd942d25efabeeb25c73190f89796d28ca2850a8ad8baf9e82031c257505",
+      "committedBlob": "d99bccdc1b6720afef75bd608ea6146621c565c1"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/GoalOperations.ts",
+      "sha256": "0f13415755fb272ccd81c1e8d81fba0649dd5494a41af0a0495482744b61bcf4",
+      "committedBlob": "f46a93d6c80c1189ccd35013d962dc74a466486b"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/MemoryModule.ts",
+      "sha256": "66821b54b25c7adde2e0c7bd33b9eb57a67beb452e46b0195c4bbf7660566f28",
+      "committedBlob": "d391438ab5fcf7d985abe7a8675a68315e802e2c"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ModulesModule.ts",
+      "sha256": "8b58220e3afa592ded7d475d15853b7dabc36be176bbf228080d857f0b9e9158",
+      "committedBlob": "a599e01c2912cbb2f42fb9433f65e61be4d7c1b4"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ModulesOperations.ts",
+      "sha256": "b251299210af83ba73750ab7104095142db81ae5731060c9bb1ef7e5637d152f",
+      "committedBlob": "fdb62dc50cbf9907889f6f16dee3bb7b2228cb7d"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ProgramsModule.ts",
+      "sha256": "80812c4fead610ad0817224d1a9c2a6cc9bd546018dd356f82d6b7f8ad2072a0",
+      "committedBlob": "c9626590d96ea1fa7e534d499f3132beb0319bf6"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/ProgramsOperations.ts",
+      "sha256": "499081aaadd927f8e703970e3634a127e5d02da287a399a2eb87df3b6ad5d027",
+      "committedBlob": "2e8df1784ae00a48e636945335c4cc3e31ac8f29"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/StoreModule.ts",
+      "sha256": "13f4a742bb7a0ea1f2c37853dc4b8ae31c3486ebe040aa31d2113d79e5184a9c",
+      "committedBlob": "52ae7294eb2b84e802a5af6a1ad14d2eb5a22d2b"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/StoreOperations.ts",
+      "sha256": "bc193c9efb3ee126ddfbee429887fa72b3d8fc826b85da7d0e89b8cd6268d5ac",
+      "committedBlob": "50061f9c5f9eb11d316348472df6c080131b946c"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/StoreSession.ts",
+      "sha256": "54f5f168508ae5a62f914c3b87542fffefafc985fac800518448cc39af4072b7",
+      "committedBlob": "ea0f406eda1ede82290211cf724d1967b96f0ed9"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/SystemCatalog.ts",
+      "sha256": "43a22694e39d5fed034930f6b46f44f67341855226411fd817504345f41868ba",
+      "committedBlob": "ec5b53e3422b446c60b2955307174bd6a2ec2b62"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/SystemMemoryOperations.ts",
+      "sha256": "7be501904ca49b363499c33956db8a19cd30893eb7acc927e5847c2443f8f7f8",
+      "committedBlob": "d8c9452edb8b381dd733904fd28defb48a361819"
+    },
+    {
+      "file": "packages/velaros/act/system/impl/SystemModules.ts",
+      "sha256": "29f6e87a34ef838f020f07345604a1f86dbec9db266a6c9a8247b55f732cd608",
+      "committedBlob": "0734c41ab0f9755474344cbdca2e4519c6b73b9d"
+    },
+    {
+      "file": "packages/velaros/act/system/index.ts",
+      "sha256": "80e794a77ac13127ffa37f7f468c77404126a74fb69f8cfda1623ebdb3dc219b",
+      "committedBlob": "706212bcab9f576af77f2dc296d8d65c9dac76a8"
+    },
+    {
+      "file": "packages/velaros/act/system/memory-local-template.js",
+      "sha256": "3cfbf229b5cfc20aa40bfdce3acce0565f3394ad374b4a8cc0f42d2ada4be865",
+      "committedBlob": "3d74ad2152bbf1df082ffd3275ee6c7874486a20"
+    },
+    {
+      "file": "packages/velaros/act/system/memory-long-term-template.js",
+      "sha256": "e4bd5df18c696639a74f4b1c8326456e863db2b10270626464d4870cd62e550f",
+      "committedBlob": "f4d26a23d17e73af717ec26e8316183e68826fc5"
+    },
+    {
+      "file": "packages/velaros/act/system/memory-template.js",
+      "sha256": "b76cd748aec8cb69277bcab5d9bb27315d41fc636356fc5a9c299a2502b432f8",
+      "committedBlob": "e82aca3600c878ba28f60974e67746fc1a725335"
+    },
+    {
+      "file": "packages/velaros/act/system/modules-template.js",
+      "sha256": "e71e13a624839e1fe2edbfddc54c9e8321c7b9b9635e9e06a9864fefe02f894c",
+      "committedBlob": "824df38516b45949a32e07c6d407fec13562e4fd"
+    },
+    {
+      "file": "packages/velaros/act/system/programs-template.js",
+      "sha256": "14422f3c061f0fb0a2ec5af02ca14eb93e229cee2535a58cdea87a3a5ec759ff",
+      "committedBlob": "98be4747f5362ccd177399d8e30a5c540b1126ba"
+    },
+    {
+      "file": "packages/velaros/act/system/store-read-template.js",
+      "sha256": "bb7a0808d3c1a954edd0514050acfbc482bd2616cf6b28562b37cff95cb2dbff",
+      "committedBlob": "aa041407e9dd86d928d697c59497ad1da6e78e30"
+    },
+    {
+      "file": "packages/velaros/act/system/store-template.js",
+      "sha256": "ff37f6779e543af34c4d61f3076db1e1c986666ffbf7594dc7e117fdb61c4227",
+      "committedBlob": "e851a7ebbdf64aca17889b48aedc992053df698f"
+    },
+    {
+      "file": "packages/velaros/act/system/store-write-template.js",
+      "sha256": "36974fe9bfc8049e98d25570b845ecb45c52745f642068515820da8af2b1b10a",
+      "committedBlob": "8d306a2b8f6c137188b1d0e86b2696eddc08868d"
+    },
+    {
+      "file": "packages/velaros/act/system/template.js",
+      "sha256": "33d4b169d02dadbf96bf7998b3a8fcdddb74770a0ce61da7c0b5168f78d39ffd",
+      "committedBlob": "8864cf5eb5c4a69960703110ec28ca918e5e2402"
+    },
+    {
+      "file": "packages/velaros/act/system/types/environment.ts",
+      "sha256": "a5cd8de41f87adf9f3c7a4b227c2b01d9c8946b81c88e47d4ef8f2fc88f392f4",
+      "committedBlob": "eb782c1f68b94f17ff0f3e96a82809a2afc59098"
+    },
+    {
+      "file": "packages/velaros/act/system/types/executions.ts",
+      "sha256": "bb1286955f64990fba2a2ea2f3b5b05cc7ebe231f281167154f4b8a71fe4c6d6",
+      "committedBlob": "eb8b2ba3f69848a460d0c2f5cec9adb723588b79"
+    },
+    {
+      "file": "packages/velaros/act/system/types/goal.ts",
+      "sha256": "f53dbbce319bc247202857c1c803ed5ef9b2320640a404e25a29b8d43c265f4d",
+      "committedBlob": "8e8f79d6081c58ef3fbb9938047d594bddcb1f38"
+    },
+    {
+      "file": "packages/velaros/act/system/types/history.ts",
+      "sha256": "c6033b6efa0e657c994cd4c04c3e22dc25e79f16d5204eb26c4d64025a093cc7",
+      "committedBlob": "fb60d042752a7e7b892a303ad4782c895533464a"
+    },
+    {
+      "file": "packages/velaros/act/system/types/maintenance.ts",
+      "sha256": "2643e354ba2457fb8c6016bd33710fb7558edf9e5eb0ffc6bd444b7c1293ceda",
+      "committedBlob": "3155ed06de2470ecc9721edd7d8bbd9cd38522df"
+    },
+    {
+      "file": "packages/velaros/act/system/types/memory.ts",
+      "sha256": "30fa207226da80791f117b4a18f321958e9bc10ea2903a77f620caa59a842404",
+      "committedBlob": "4d2762eef55626ac29b0737bd8f0e0ea2bd89889"
+    },
+    {
+      "file": "packages/velaros/act/system/types/modules.ts",
+      "sha256": "88c613ee85bbc044e8df8599e7e6c16d041cf0b6e2e497abc5b7e002be4e9366",
+      "committedBlob": "8f90d2771a82e9100e80ef237f331ae547e84af0"
+    },
+    {
+      "file": "packages/velaros/act/system/types/programs.ts",
+      "sha256": "83741a0c23a52474f3ba87cd91ae04f7bf4f8e698757a2a6cb694846eeea3ba0",
+      "committedBlob": "6d65b38fea62cdca6198061a3bb2ad10c0d7fa4d"
+    },
+    {
+      "file": "packages/velaros/act/system/types/results.ts",
+      "sha256": "7d38bb1cba59180bc8f5a56c8563949464ab3dffd161a5a3ba8a27e283910f04",
+      "committedBlob": "fee034dfd6394c154feb2be9ded01fe1e36f23bb"
+    },
+    {
+      "file": "packages/velaros/act/system/types/store.ts",
+      "sha256": "611d2afd6adb42d43f4fc713107ab68ba217e0bf90bc6f990c51f15341cd89d8",
+      "committedBlob": "66f19686a9b4b7366d7891b4aeb68e15f2e8143b"
+    },
+    {
+      "file": "packages/velaros/act/system/types/workspace.ts",
+      "sha256": "35c5b55510161dcaf87c5751ac88d708652d77a97e62bf1e1d313dfcd12d62dc",
+      "committedBlob": "c1613b3f5dad8908ce28639d2a882e3073a3ca65"
+    },
+    {
+      "file": "packages/velaros/act/system/utils/context-materials.ts",
+      "sha256": "6cd35d058ec0a4761b170e5e255d3d8b2403b9768676dadf69e6e3d5500191c2",
+      "committedBlob": "3da219bbc0939f1653774b5f8fa7192595ca5d65"
+    },
+    {
+      "file": "packages/velaros/act/system/utils/environment.ts",
+      "sha256": "8acd0704bb2ef24f033616701bbf582fd0edb565dbfbef48f17d37e4269b1596",
+      "committedBlob": "73ae0e9f9adc6c47bc48d035e91c993dde7cb82b"
+    },
+    {
+      "file": "packages/velaros/act/system/utils/members.ts",
+      "sha256": "418370d5f64961ab6ab71202161448a84b3cf89dbf6289aa90d84d8391dd7e64",
+      "committedBlob": "9d9a018d955530a0ab9928d9fff2eef8bb4f970c"
+    },
+    {
+      "file": "packages/velaros/act/system/utils/ports.ts",
+      "sha256": "265c322bd874913538aabfc7059bb1f2964bcd379e7284b554bcbd69b69a5cc2",
+      "committedBlob": "8973cb60e11b34a5076fdbf3713aaf0b7360ff53"
+    },
+    {
+      "file": "packages/velaros/act/system/utils/store.ts",
+      "sha256": "a0d0f50bbfe97ca71070243a317557b94b5f30f28633a2d2ba4e945e7162626e",
+      "committedBlob": "f3afeba89c6243728507e56dea6ea7d576a13cb5"
+    },
+    {
+      "file": "packages/velaros/execution/README.md",
+      "sha256": "aef918f3ee93c9b86636db58fdad2e5dc57086b116086ab7a65942fa7482a246",
+      "committedBlob": "aad2cfff161bc897a47d9c3f1d31a53ffe55fc23"
+    },
+    {
+      "file": "packages/velaros/execution/contract/constants.ts",
+      "sha256": "907268834ee933356941d412320bd61456087ac20e43c9c34f0c1a319e2f0389",
+      "committedBlob": "3937c6a2257d4d873060341933157895d64cfff7"
+    },
+    {
+      "file": "packages/velaros/execution/contract/provides.ts",
+      "sha256": "95af4eb610d3bcac183b110f20d6b4cbe6e1961cc9341a9a18c7c9f68b1ba544",
+      "committedBlob": "efcaa12b4d814976d1ff9f3b1c37929157b981db"
+    },
+    {
+      "file": "packages/velaros/execution/contract/requires.ts",
+      "sha256": "354abaa38ba89609c341e144016fbb3ac7f00042703367c5aaa90479ce4e0558",
+      "committedBlob": "c3276885d43eeea0eda57c44b5a9923011273abc"
+    },
+    {
+      "file": "packages/velaros/execution/contracts.ts",
+      "sha256": "9d417f6e6560c5f8ad61ffa103ce538fed694427a7f781070a29ced85fbde54f",
+      "committedBlob": "1b776f321599c2f5f662fe333d27a4a3b6cd5291"
+    },
+    {
+      "file": "packages/velaros/execution/impl/ShellCommandApproval.ts",
+      "sha256": "58bd9c2bc0f093b13d9f82a4cca7b72dccffbd6a832dfc623f8e0791db45a243",
+      "committedBlob": "754a453d0cc521914a815273a03eb65e36594057"
+    },
+    {
+      "file": "packages/velaros/execution/impl/ShellCommandPolicy.ts",
+      "sha256": "d127f4a9bf3bd6a436ae9ba08ff4666f53b55abbc47f23384cb8644062b3df87",
+      "committedBlob": "d46eff1f2b1e2593a36f5a7ef2dec8bd8d4c003f"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ConfinedShellRunner.ts",
+      "sha256": "bd18c82289894ee1ae618b855466e04e5115c2b1d065525c48551d9629f2e17a",
+      "committedBlob": "2b0dd6452d932557d7ecaa9900f0d4826af81b48"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/LocalShellHost.ts",
+      "sha256": "7e8f23e152b422464599e5d048bc7ebc6695f302b20178f8fcc833d940fc3ff1",
+      "committedBlob": "43395644e5c16c98e55aa65a9b53ab666008352f"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/NpmClient.ts",
+      "sha256": "808deb0d82f6d942e08262566887644b5b7f17ba83fb4b6eb45ad4d7b8ffcb2e",
+      "committedBlob": "be7b14302c2a75c3cb49f2af5b52513c4b21e249"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ShellCommandRunner.ts",
+      "sha256": "271d4e50e10a33731665a829d7bbde0a8c9ea141415af36ab60740760d72b278",
+      "committedBlob": "6ff44fe57e1d79a41c3a1705831563e36326cbe8"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ShellEnvironment.ts",
+      "sha256": "cff9fcbab3cf99a61c688ebb11a18f3d306b7d2fe1ae236de3bf14b9828c1510",
+      "committedBlob": "403f49f9ae0d96f45fef93d46180893b39512733"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ShellManagedProcess.ts",
+      "sha256": "4b0769694784cf9e7c4cc67e52ef322b0aef3a3650fa451ca5a7ba8f2fbb5baa",
+      "committedBlob": "6d17cda84114be7923b8205e0ba8cb09e929173d"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ShellOutputDecoder.ts",
+      "sha256": "2a88f5351368ba0f6f2e3cf4720ca42f5b6c0461747fdf4ee8b46aa78164dece",
+      "committedBlob": "6609d4434bb67df06fc5a8d0300591aaf342ac86"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ShellProcessManager.ts",
+      "sha256": "b5a1bd46a9f5c1aadfde386b33f2f09ae9d0f3d638e9fe0645fe92c307be0abb",
+      "committedBlob": "b3c8e3f630008994088ac97ad3a92ecf20fc25c6"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ShellResolver.ts",
+      "sha256": "25c7c75a39e513b61d9d10ff66764378f275dfe50120e0f1b12519362300d9b6",
+      "committedBlob": "516db725e3c658a725d6b55422267562a3122865"
+    },
+    {
+      "file": "packages/velaros/execution/impl/local/ShellUnavailableError.ts",
+      "sha256": "4e6303ab0ee824db5394d88cbd0ea1916809def356dd3f2f3995a529136262d2",
+      "committedBlob": "85eac9064e21e4fe40b4d921a218b2b115f4de37"
+    },
+    {
+      "file": "packages/velaros/execution/index.ts",
+      "sha256": "db6b01126275af9037c27d610470c0bec1f2570d40d29d57ead866b85b092c29",
+      "committedBlob": "90e6e976c06a2701c4f581c16a4d360d2e192233"
+    },
+    {
+      "file": "packages/velaros/execution/local.ts",
+      "sha256": "d21baae2627dc25785b765e70b9acfcec23d4a270eee5530a0901c517b1ec46a",
+      "committedBlob": "c22ccfe84b0c98102d0f077e347e5b89a8585cda"
+    },
+    {
+      "file": "packages/velaros/execution/native/build.mjs",
+      "sha256": "bf576bdbbf12a937fae208bf342346ffc494c4382c7c99586b57a48c625aa754",
+      "committedBlob": "a851e3abf414714830184a4aa572821c36ab3ad7"
+    },
+    {
+      "file": "packages/velaros/execution/native/windows-process-host.cpp",
+      "sha256": "828d2185856c5299f84add62ab4297cd2612668956787ae4710e3043d01995e5",
+      "committedBlob": "c4842246b2a814003bc8e8b44df10f6589e96828"
+    },
+    {
+      "file": "packages/velaros/execution/spec/acceptance.test.ts",
+      "sha256": "3da0020f3c815f9b254643cd1f7b0c1765693e4cb00163a2c22d179ca1130751",
+      "committedBlob": "d06a3134c1b0a49a05168f8a4d97b28f03702ccc"
+    },
+    {
+      "file": "packages/velaros/execution/spec/invariants.md",
+      "sha256": "2c080e82b67b0f7ca74ec6afc3d6ce88a90ba78d7794f57acac38255854ec824",
+      "committedBlob": "d149f0d520b77bf8e7cf32614d688526137543ba"
+    },
+    {
+      "file": "packages/velaros/execution/test/local/interactive-console.test.ts",
+      "sha256": "faf98f6ed41f34e5769ea277e2ec55986bd037b0471593187698860619b10bee",
+      "committedBlob": "f9be486b27eadad75db03eec1d8c288def605e37"
+    },
+    {
+      "file": "packages/velaros/execution/types/approval.ts",
+      "sha256": "55c9f049957dbb29ffe82ec8890ca52d2b4ec1628c2dbf1ab6b9b3c32c092033",
+      "committedBlob": "545a6a77763df98c7526069f0fec4314e16fa07e"
+    },
+    {
+      "file": "packages/velaros/execution/types/invocation.ts",
+      "sha256": "37d1ef2edfc6972fd530c7b527a48e81535d6ad85a4d100bec1ed097dd828d61",
+      "committedBlob": "1a1231e461f021bce1f6dcb29fd8bccbaf45f063"
+    },
+    {
+      "file": "packages/velaros/execution/types/local.ts",
+      "sha256": "769e5f6ea0a980c818cc3ae19cbc3edf7ee199b81477b867655be1f1eba6178a",
+      "committedBlob": "17241dc24c9a4938c0dc2957c8e53b1d0ae1d83b"
+    },
+    {
+      "file": "packages/velaros/execution/types/processes.ts",
+      "sha256": "273ad3ee737b21c501b0925b6e5f3df928aa37644b895cffbf07322097fafc33",
+      "committedBlob": "c03eb5015d7d6cf2e4ecf0cb959ff7bad81fad92"
+    },
+    {
+      "file": "packages/velaros/execution/types/shell-command.ts",
+      "sha256": "9d54dc08c38156ca627c2d108001d0f36c8e69be669456d29a336823503bdebb",
+      "committedBlob": "7a7654c6ea35c4ef491d6a1bafa3dcd21adfa94a"
+    },
+    {
+      "file": "packages/velaros/execution/utils/command-policy.ts",
+      "sha256": "9883f926ef6446212ecded941d5c1f205c9033e384f592da038dedc096f38517",
+      "committedBlob": "23ffffedf9878b987314899ece2d148d05d17149"
+    },
+    {
+      "file": "packages/velaros/execution/utils/command-result.ts",
+      "sha256": "63ee358780b41f2b1f6f0f07c785d2f06ac2e66c2e495142375484a20c34279b",
+      "committedBlob": "7cd09b83716cf7f37d7967743c71d93710a51b6a"
+    },
+    {
+      "file": "packages/velaros/execution/utils/confinement.ts",
+      "sha256": "7015c7981f29dc4c4e40499c1a47ac2d538844662b4c21daa2d6f3f3af946b49",
+      "committedBlob": "e858cb97c64102e68f2320987b777891be44e9d8"
+    },
+    {
+      "file": "packages/velaros/execution/utils/effects.ts",
+      "sha256": "ca96fdb36c26bfe4ceef0221eb43f8c3045eea2cec87b14cf9a94a1693d0b3b4",
+      "committedBlob": "96da3ab6606d35e16d3fecbc7e97fa34bd6af8f6"
+    },
+    {
+      "file": "packages/velaros/execution/utils/environment.ts",
+      "sha256": "39a13dee4f23ff8ab99f9b464d1910450ad887cdf9298da3bd7872fd96e1ffce",
+      "committedBlob": "26ca19ae015fb089d75d2fac37baa8e01eda8214"
+    },
+    {
+      "file": "packages/velaros/execution/utils/limits.ts",
+      "sha256": "182955e741cb0d9e0de3daafe1545c763dec74dad4b2061e97c5cbd97fae234e",
+      "committedBlob": "3efc9928d2a0eab6dcabdff31c49546fdee12dc8"
+    },
+    {
+      "file": "packages/velaros/execution/utils/output.ts",
+      "sha256": "d96f3e27ce4bf96d27a2798fd4f82dbc2202b85b3b350e6149c3616aee918c66",
+      "committedBlob": "e011be7ca456b89387579aef5193eeaea1ba4fea"
+    },
+    {
+      "file": "packages/velaros/execution/utils/process.ts",
+      "sha256": "381d231a390b1d7b43a20d4244f34bf5d1774091ae3dc51d70e235e6ddeb45bb",
+      "committedBlob": "660de77df1a08fcae52b5610928d91d895d6f069"
+    },
+    {
+      "file": "packages/velaros/execution/utils/shells.ts",
+      "sha256": "8dd5172ed03992f022fbb988212caccb996a0bf420e3bf35ae66a6eeba06aae1",
+      "committedBlob": "9d7f031ca9f9bb5c695f20d303d7e37dfd8efbe9"
+    },
+    {
+      "file": "packages/velaros/execution/utils/system-info.ts",
+      "sha256": "d9a755e3692c5b67dd5211c444bceca2e8a4880697d77a98c5dcd29b29143641",
+      "committedBlob": "fc673b4a22d3e70520270f41aa497f28cb178817"
+    },
+    {
+      "file": "packages/velaros/execution/utils/tuning.ts",
+      "sha256": "474a723190443e8a31fdc8e7ae0fb06cc7971525117235904d074735467a034d",
+      "committedBlob": "98e466f2e541108c7d45d3af07e59279c98b69e1"
+    },
+    {
+      "file": "packages/velaros/memory/README.md",
+      "sha256": "7d1acc598c1c3a1a433625f62d9c39b6a8d3f0e8c6408dd7463806b11aba9325",
+      "committedBlob": "e67e17c92231191f74bb56966af14218279b38e4"
+    },
+    {
+      "file": "packages/velaros/memory/contract/constants.ts",
+      "sha256": "4243ba020a237ee529c76a65c98e6400296e4b727c43d44bb7ef0698417b04ad",
+      "committedBlob": "acb94ada4367612a1039c145e83ee61271e2d8b9"
+    },
+    {
+      "file": "packages/velaros/memory/contract/provides.ts",
+      "sha256": "b3d046e4c969cbd4a9896729245f724dcf19f2a0cb79a55fb290485c132e0206",
+      "committedBlob": "95a40bdfd959bf605efe3e490682a89401281066"
+    },
+    {
+      "file": "packages/velaros/memory/contract/requires.ts",
+      "sha256": "c51c5f381b8e8c9134e36b7d7ef29926c3c0fa31f786d947bd9ded36a2088f20",
+      "committedBlob": "3a0957e8c477681da457348c416faef959294f24"
+    },
+    {
+      "file": "packages/velaros/memory/contract/surface.ts",
+      "sha256": "3bbd64831aec5effcd40069cc44fbd1cb7dc49a6500b5fe01a90524fb44e0bc8",
+      "committedBlob": "834063b5831b86c90a9bf897d579da2ca8f9628e"
+    },
+    {
+      "file": "packages/velaros/memory/contracts.ts",
+      "sha256": "df181b509da4cadcd567cb1452d65f0318e9777e1b77cfe84c61c35e65bbc7ef",
+      "committedBlob": "827e801e2a699dd9fc016f311ff3cd2ab9fb1738"
+    },
+    {
+      "file": "packages/velaros/memory/impl/MemoryOperations.ts",
+      "sha256": "871c15135cb2916460d994718d23532a67f95700f100e17b723594350283fe93",
+      "committedBlob": "cb94749fd92427d8c5d4140d8eccb61dc52e1de1"
+    },
+    {
+      "file": "packages/velaros/memory/impl/MemoryScope.ts",
+      "sha256": "8bfcd71f49f6687d0231aa7a7035ee13267ec6094301d5f00708e891d46518a2",
+      "committedBlob": "52c2e6268ec7b92ab58aea6c78b6393fba2a8bf1"
+    },
+    {
+      "file": "packages/velaros/memory/impl/MemoryStore.ts",
+      "sha256": "a9a04e6c3b1441798925deebd238ff01a618d79bf067130f7ed04b9af7bfdf2e",
+      "committedBlob": "bb228c9b8b569b8683d067e804388ff1750fde0e"
+    },
+    {
+      "file": "packages/velaros/memory/index.ts",
+      "sha256": "ec3e20820b9782a74945ae350467fab80f4699f9edc254fb1b8ed68fd4ff8378",
+      "committedBlob": "13460ab520b88170a6b539e0af4ab402c71969f0"
+    },
+    {
+      "file": "packages/velaros/memory/template.js",
+      "sha256": "d97ae071297ff36427a15de815d98ac3428636558dcead6a093ce878a6b424d7",
+      "committedBlob": "b6ae7a5cb65eec7bf8cfb329ff3fd9f02ccc4a77"
+    },
+    {
+      "file": "packages/velaros/memory/types/memory.ts",
+      "sha256": "c64866ee73e65a81bb576a291bbfdded081db00122d10cf38660c0d1d596d56e",
+      "committedBlob": "c451b59eb3e190266caeb40c1ce247d4afc4d48a"
+    },
+    {
+      "file": "packages/velaros/memory/utils/entry-file.ts",
+      "sha256": "8ed0445d3bb6e5c023da18d29e7fae06e4abde2d2f4f9958d366312fe1e3a184",
+      "committedBlob": "072dcd2597a9b41dbff911897c57e1b37ecf4662"
+    },
+    {
+      "file": "packages/velaros/memory/utils/fs.ts",
+      "sha256": "ca21a828de194423fbfd22c6a47ba9a320c2f6c233dd4f02c9ca44cc50971f53",
+      "committedBlob": "7203575e60bb1dbc139ed9fff31d1a61090c1b89"
+    },
+    {
+      "file": "packages/velaros/memory/utils/input.ts",
+      "sha256": "5d9cdfd8696405a4eeda3def2635974eda4e88458e5e54f99e64c0dee4369bad",
+      "committedBlob": "b935c3d5e92ce083f24ccd1e69ad104b5c2cacfe"
+    },
+    {
+      "file": "packages/velaros/memory/utils/scope-directory.ts",
+      "sha256": "a343b2236d1ba9faf01e592fc1f4da365c467d9b98bb28a697dfefcdfcceab40",
+      "committedBlob": "3cde7f25d3c17516bd2ea59cc7d66f8965631005"
+    },
+    {
+      "file": "packages/velaros/package.json",
+      "sha256": "34cc31b32c5991b64b8abff39b581cd7d8fb30f947473307c7f021c0b6df87b3",
+      "committedBlob": "ad09f466ab61943a455f0adb9fd9d1e8b38b8460"
+    },
+    {
+      "file": "packages/velaros/tsconfig.build.json",
+      "sha256": "69ab8e42711f9e14e25b3ca6cd874a243501ee4945590cb7b4691bd785fd3dc2",
+      "committedBlob": "6bd278cff702e9721d2dc6f98840dbdc52bcefbc"
+    },
+    {
+      "file": "packages/velaros/tsconfig.json",
+      "sha256": "b5ad627c91be2846efbf786f3cdd7333e353b64456ce5ed37f27d39c5782953d",
+      "committedBlob": "ba4ea0335f3f680a6fce701f22d7706299752093"
+    },
+    {
+      "file": "scripts/agent/benchmark-context-recall.mjs",
+      "sha256": "5d2481c8e4fbd001034f2ac340406c16db4c9421bbeadc5d69f7a27434249563",
+      "committedBlob": "d4ee758373ffcc34bcded4d8e0f33872b4f1aeb1"
+    },
+    {
+      "file": "scripts/ownership/governed-modules.mjs",
+      "sha256": "e59fe2eacdc75c59b0e63f4b0e39f6b43b83c465673be7b091d664394911e79d",
+      "committedBlob": "ccc27fa961ffd4e160856fda1aaccdea51318957"
+    },
+    {
+      "file": "scripts/release/check-session-control-consumer.mjs",
+      "sha256": "99814fc121b74cbf8d6f596d0bbfbd40617b30d7f1bbd7cb7985592cbbd11ac5",
+      "committedBlob": "fa5fa5f1a0429084c498a430a3ad7ca2dbdab8dc"
+    },
+    {
+      "file": "scripts/release/fixtures/host-contract-consumer/session-control-consumer.mjs",
+      "sha256": "c865bb48f9d02bbb18027cb5ac335f828f4733f3f1670c460e71c9c325e53028",
+      "committedBlob": "e931d458966071c451606812682cd3b4f1683c06"
+    },
+    {
+      "file": "scripts/release/fixtures/host-contract-consumer/session-control-consumer.mts",
+      "sha256": "ffafe048646f650ec5add66eaf2867ab7dbecb861a59bf9f360b5acfd32e0f95",
+      "committedBlob": "abaaac67666b269c262bba31399e553ac2ff41b2"
+    },
+    {
+      "file": "scripts/release/unified-platform-package.mjs",
+      "sha256": "3556af927698de3894b0310c79a231099f40c54a77f6cc6a94a744bfdb7334c0",
+      "committedBlob": "c3b03563b03ab3fd0e89c76683954ce998e7e16e"
+    },
+    {
+      "file": "scripts/release/unified-platform-package.test.mjs",
+      "sha256": "8646fb090c0a32da326bc36169f87a2e15941146e15720d7549d099edbb5c3bb",
+      "committedBlob": "86b0c35af969476e95adbd0ae3e0bd311f4e6029"
+    },
+    {
+      "file": "tsconfig.json",
+      "sha256": "63b853c114207929c66fe8fc2400725c29c3fe417dff3a42852949621d84703f",
+      "committedBlob": "7c41ed1ec3526e7e7704db0a142cc851b89e0334"
+    }
+  ]
+}

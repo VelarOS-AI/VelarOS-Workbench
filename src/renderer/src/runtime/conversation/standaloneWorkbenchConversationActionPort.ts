@@ -1,5 +1,6 @@
 import type { ConversationActionPort } from '@velaros-ai/ui/conversation'
 import type { ActiveContextArtifact } from '@velaros-ai/ui/conversation/contracts'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { resolveStandaloneChatSessionProjectRoot } from '../standaloneChatSessionRegistry'
 
@@ -52,12 +53,13 @@ export const standaloneWorkbenchConversationActionPort: ConversationActionPort =
   provideExecutionGuidance: async (sessionId, guidance) => {
     const request = sessionRequest(sessionId)
     if (!request) return
-    // 与 Desktop 相同，这条引导不进对话；这一轮恰好收尾时会被拒收——目标已经恢复，下一条消息接着推进。
-    await window.velarosWorkbenchConversation.guidance({
+    // 这条引导不进对话；目标运行恰好收尾时，拒收必须交回调用方处理。
+    const result = await window.velarosWorkbenchConversation.guidance({
       ...request,
       inputId: `goal-dock-continue:${Date.now()}`,
       text: guidance,
     })
+    if (!result.ok) throw new AppError(result.code ?? 'UNAVAILABLE', result.message)
   },
   resolveHandoffSuggestion: () => undefined,
 }

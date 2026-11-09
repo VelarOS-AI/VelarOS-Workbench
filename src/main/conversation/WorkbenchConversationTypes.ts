@@ -1,15 +1,12 @@
-import type {
-  NodeExecutionOutput,
-  VelarosRuntime,
-  VelarosRuntimeOptions,
-  VelarosSession,
-} from '@velaros-ai/velaros'
+import type { SessionsSpacePort } from '@velaros-ai/capabilities/sessions'
+import type { SessionAnswer } from '@velaros-ai/capabilities/sessions/contracts'
+import type { WebSpacePort } from '@velaros-ai/capabilities/web'
+import type { VelarosRuntime, VelarosSession } from '@velaros-ai/velaros'
 import type { WidgetView } from '@velaros-ai/velaros/act/agents'
 import type { MemoryScopeApi } from '@velaros-ai/velaros/memory'
+import type { ModelDriver } from '@velaros-ai/velaros/model'
+import type { NodeExecutionOutput } from '@velaros-ai/velaros/node'
 import type { ActEventProjectorApi, ActPresentation } from '@velaros-ai/velaros/renderer'
-import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
-import type { SessionAnswer } from '@velaros-ai/velaros/sessions/contracts'
-import type { WebSpacePort } from '@velaros-ai/velaros/web'
 
 import type {
   WorkbenchConversationSendRequest,
@@ -19,13 +16,10 @@ import type { ConversationBrowser } from '../browser/WorkbenchBrowserService'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 /** 当前模型驱动。 */
-export type ConversationModel = Extract<
-  NonNullable<VelarosRuntimeOptions['model']>,
-  { stream: unknown }
->
+export type ConversationModel = ModelDriver
 
 /** 模型驱动声明的窗口上限。 */
-export type ConversationModelLimits = Extract<ConversationModel, { limits: unknown }>['limits'] & {
+export type ConversationModelLimits = ModelDriver['limits'] & {
   /** 未经服务商确认的试探容量。 */
   readonly contextWindowEstimated?: boolean
 }
@@ -94,7 +88,7 @@ export interface ConversationWorkspaceOptions {
   signal: AbortSignal
 }
 
-/** 无模型的状态控制会话：只打开绑定工作区的存储。 */
+/** 无执行链的状态控制：产品先核对当前项目，再打开同一执行身份的存储。 */
 export interface ConversationControlOptions {
   sessionId: string
   dataDir: string
@@ -105,6 +99,11 @@ export interface ConversationControlOptions {
 export interface ConversationWorkspaceHandle {
   session: VelarosSession
   trace?(input?: Parameters<VelarosRuntime['trace']>[1]): ReturnType<VelarosRuntime['trace']>
+  close(): Promise<void>
+}
+
+export interface ConversationControlHandle {
+  session: Pick<VelarosSession, 'listNotes' | 'readNote' | 'getGoal' | 'controlGoal'>
   close(): Promise<void>
 }
 

@@ -7,9 +7,9 @@ import {
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
+import { browserAddress } from '@velaros-ai/capabilities/browser/renderer'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import { browserAddress } from '@velaros-ai/velaros/browser/renderer'
 
 import {
   normalizeWorkbenchBrowserPageUrl,

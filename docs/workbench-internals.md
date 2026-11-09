@@ -26,7 +26,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 ## 结构边界
 
 - 产品核心模块不依赖 Electron 主进程、Desktop store、Desktop IPC 或 Desktop 窗口实现。
-- Platform 与 UI 只经包的公开入口消费，默认使用固定依赖快照与 UI 发布版本，联调可使用兄弟仓链接（见 README）；具体能力由应用组合根安装。
+- Platform 基础、capabilities 扩展与 UI 只经包的公开入口消费，使用固定归档及来源证明；具体能力由应用组合根显式安装。
 - 跨产品共享的无状态组件继续归属 `@velaros-ai/ui`，不复制进 Workbench。
 - 通用语言宿主不包含 VelarScript 特判；editor 贡献归 renderer，服务描述归 shared。
 - Workbench 不依赖 VelarOS Desktop 内部源码，仍作为独立应用构建和发布。
@@ -44,9 +44,10 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
   原生程序和项目写操作各自登记 Agent 时间窗，完成后通知 Git、AI 改动采集与编辑器刷新；项目编辑先通知语言服务。
   后台任务由应用持有，会话删除与应用退出时回收。
 - **会话协作**：`WorkbenchSessionPeers` 装配 `velaros:sessions` 的宿主端口。会话目录来自项目窗口，
-  `ask` 等待匹配 inputId 的结果，`tell` 在目标忙时按顺序排队；依赖成环时拒绝。新会话沿用已批准的模型、
+  `ask` 等待匹配 inputId 的结果，`tell` 只向目标活动运行追加 guidance，空闲拒绝；依赖成环时拒绝。新会话沿用已批准的模型、
   权限与沙箱，界面先建消息和改动检查点再回执，运行时接纳后才算投递成功。会话接收器跟随
-  renderer 会话存储，聊天面板收起仍可交接；项目关闭撤销等待，排队失败写回来源会话。
+  renderer 会话存储，聊天面板收起仍可交接；项目关闭撤销等待。引导先在目标显示 pending 并回执，
+  再交给真实 steer，接纳后返回 queued；不建新运行或检查点，先到的 applied 不会降回 accepted。
 - **常驻服务**：与 Desktop 使用相同的 `velaros:console.start/list/read/stop` 合同，按需发现；进程由应用级 shell 宿主持有，按项目与宿主会话隔离，任务完成后保留，会话删除与退出应用时回收。每次询问模式在启动前确认命令，进程约束沿用项目沙箱；短命令仍使用 Node/Execa。
 - **后台进程**：聊天顶部进程入口查看当前会话的服务器与交互式命令，持续读取输出并提供输入、Ctrl+C、
   停止与强制停止。`WorkbenchShellHostRegistry` 按启动项目筛选宿主，IPC 再校验会话；命令 cwd 变化不改变归属。
@@ -62,8 +63,9 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - **执行展示**：脚本区分编写、排队、运行与结束；跨模型回合的异步执行持续回读原卡片，直至收到真实结果。原文 blobs 单独建卡，只在响应获接纳后标记完成。
 - **子任务展示**：通过根会话授权的 trace 入口增量读取子会话的执行记录和已接纳正文；名称按 Agent 身份复用，名称/模型与任务标题分别省略。长输出只裁剪卡片预览并标记截断，原始记录保留全文，不能因预览长度拒收完成状态。
 - **开发热更新**：聊天数据、活跃运行及订阅者通过 Vite hot data 保留，替换展示组件不丢弃主进程仍在执行的任务；旧事件订阅在 dispose 时释放，新模块重新订阅。
-- **状态**：会话数据在 `userData/conversation-runtime/<sha256(项目根 \0 会话 id)>`，任何项目之外；
-  空闲时读、改目标用无模型的控制会话。
+- **状态**：新执行数据在 `userData/conversation-runtime/foundation-v1/<sha256(项目根 \0 会话 id)>`，任何项目之外；
+  产品先原子保存执行凭据，再显式注入 context.sqlite 存储。旧目录不读不删。空闲读笔记/目标和目标控制用
+  storage-only lease，不创建 Node、模型或领域执行实现；活跃时借原 session。
 - **宿主说明**（`WorkbenchConversationRules.buildHostInstructions`）：身份、回复语言、执行首行注释（Node 用 `//`、Shell 用 `#`）
   （界面拿它当脚本卡标题）、计划 / 目标模式，以及项目里的 AI 规则文件原文（`.velar/rules.md`、`AGENTS.md`、
   `CLAUDE.md`、`.cursorrules`、`.cursor/rules/**`、`.github/copilot-instructions.md`，合计 32,000 字符，放不下的

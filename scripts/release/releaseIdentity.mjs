@@ -98,8 +98,7 @@ export function assertSameFileIdentity(
 }
 
 /**
- * 开发期 Platform 与 UI 经 `bun link` 从本机兄弟仓消费（`link:`）；那样打出的包取决于兄弟仓当时的构建，
- * 不可重现。发布前要换成已发布的版本。
+ * 正式发布只接收已发布的依赖来源；兄弟仓链接与带提交证明的冻结候选均不能由本地缓存冒充发布版本。
  */
 async function assertPublishedDependencies(manifest, root) {
   const snapshotDependencies = Object.values(manifest.dependencies ?? {}).some(
@@ -108,7 +107,7 @@ async function assertPublishedDependencies(manifest, root) {
       range.startsWith("file:build/runtime-packages/"),
   );
   const snapshot = snapshotDependencies
-    ? await verifyPlatformSnapshot(root)
+    ? await verifyPlatformSnapshot(root, { requirePublished: true })
     : undefined;
   if (snapshot)
     verifyPlatformSnapshotLock(
@@ -136,7 +135,7 @@ async function assertPublishedDependencies(manifest, root) {
   }
   if (unpublished.length > 0) {
     throw new Error(
-      `Release builds need published dependency versions or verified Platform snapshots:\n- ${unpublished.join("\n- ")}`,
+      `Release builds need published dependency versions or verified published snapshots:\n- ${unpublished.join("\n- ")}`,
     );
   }
 }

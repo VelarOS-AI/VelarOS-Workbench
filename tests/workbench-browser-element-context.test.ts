@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+import { type BrowserElementSelection } from '@velaros-ai/capabilities/browser/contracts'
 
 import {
   buildBrowserElementDisplayFallback,

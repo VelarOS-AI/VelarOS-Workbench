@@ -1,0 +1,2 @@
+# Provenance is verified by its original byte hash on every host.
+resources/runtime-sources/** -text

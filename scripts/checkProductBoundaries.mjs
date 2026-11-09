@@ -8,6 +8,7 @@ const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const sourceRoots = [resolve(rootDir, 'src')]
 const sourceExtensions = new Set(['.ts', '.tsx', '.css'])
 const forbiddenSpecifiers = [
+  /^@velaros-ai\/velaros\/(?:browser|web|sessions|project|images|office|computer|skills|sandbox|features|act\/bridge)(?:\/|$)/,
   /^@velaros-ai\/(?:core|model|agent|kernel|context|script|skill-jsts)(?:\/|$)/,
   /^apps\/desktop(?:\/|$)/,
   /^@(?:components|hooks|runtime)\//,

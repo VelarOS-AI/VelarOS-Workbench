@@ -1,4 +1,4 @@
-import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+import { type BrowserElementSelection } from '@velaros-ai/capabilities/browser/contracts'
 import { truncate } from '@velaros-ai/velaros/core'
 
 /**

@@ -6,10 +6,10 @@ import {
   type WebContents,
 } from 'electron'
 
+import type { WebPage, WebSpacePort } from '@velaros-ai/capabilities/web'
 import { numberOrNull } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
-import type { WebPage, WebSpacePort } from '@velaros-ai/velaros/web'
 
 import { WorkbenchWebSearchPartition } from '../../shared/workbenchBrowser'
 

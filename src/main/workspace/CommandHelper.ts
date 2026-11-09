@@ -183,7 +183,7 @@ class CommandHelper {
       }
     }
 
-    const killPid = systemPlatformCompatibility.getProcessKillPid(pid)
+    const killPid = systemPlatformCompatibility.shouldUseDetachedProcessGroup() ? -pid : pid
     try {
       process.kill(killPid, signal)
       return

@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from 'node:path'
 
+import { createProjectKernel, type ProjectKernel } from '@velaros-ai/capabilities/project'
 import { isFiniteNumber, optionalWhen } from '@velaros-ai/velaros/core'
-import { createProjectKernel, type ProjectKernel } from '@velaros-ai/velaros/project'
 
 import {
   type WorkbenchProjectAiRuleFile,

@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { ipcMain, type WebContents } from 'electron'
 import { z } from 'zod'
 
+import { Log } from '@velaros-ai/velaros/core'
 import { AppError, createAbortError, createTimeoutError } from '@velaros-ai/velaros/core/error'
 
 import {
@@ -41,48 +42,63 @@ export function registerWorkbenchSessionPeersIpc(options: {
     if (sender.isDestroyed()) throw new AppError('CLOSED', '项目窗口已关闭。')
     sender.send(Channels.event, event)
   }
+  const preparePeer = async (
+    task: WorkbenchPeerTask,
+    signal: AbortSignal,
+    type: 'prepare' | 'prepare-guidance'
+  ): Promise<WebContents> => {
+    signal.throwIfAborted()
+    const catalog = catalogs.get(resolve(task.projectRoot))
+    if (!catalog || !owns(catalog.sender, task.projectRoot))
+      throw new AppError('CLOSED', '项目窗口已关闭。')
+    await new Promise<void>((yes, no) => {
+      const abort = (): void => finish(AppError.from(signal.reason))
+      const timer = setTimeout(
+        () => finish(createTimeoutError('项目窗口未能接收会话任务。')),
+        30_000
+      )
+      const finish = (error?: unknown): void => {
+        clearTimeout(timer)
+        signal.removeEventListener('abort', abort)
+        pending.delete(task.inputId)
+        if (error) no(error)
+        else yes()
+      }
+      pending.set(task.inputId, { sender: catalog.sender, task, finish })
+      signal.addEventListener('abort', abort, { once: true })
+      try {
+        send(catalog.sender, { type, task })
+      } catch (error) {
+        finish(error)
+      }
+    })
+    if (!owns(catalog.sender, task.projectRoot)) throw new AppError('CLOSED', '项目窗口已切换。')
+    return catalog.sender
+  }
   const peers = new WorkbenchSessionPeers({
     runtime: options.runtime,
     catalog: (ref) => {
       const catalog = catalogs.get(resolve(ref.projectRoot))
       return catalog && owns(catalog.sender, ref.projectRoot) ? catalog.members : []
     },
-    prepare: async (task, signal) => {
-      signal.throwIfAborted()
-      const catalog = catalogs.get(resolve(task.projectRoot))
-      if (!catalog || !owns(catalog.sender, task.projectRoot))
-        throw new AppError('CLOSED', '项目窗口已关闭。')
-      await new Promise<void>((yes, no) => {
-        const abort = (): void => finish(AppError.from(signal.reason))
-        const timer = setTimeout(
-          () => finish(createTimeoutError('项目窗口未能接收会话任务。')),
-          30_000
-        )
-        const finish = (error?: unknown): void => {
-          clearTimeout(timer)
-          signal.removeEventListener('abort', abort)
-          pending.delete(task.inputId)
-          if (error) no(error)
-          else yes()
-        }
-        pending.set(task.inputId, { sender: catalog.sender, task, finish })
-        signal.addEventListener('abort', abort, { once: true })
-        try {
-          send(catalog.sender, { type: 'prepare', task })
-        } catch (error) {
-          finish(error)
-        }
-      })
-      if (!owns(catalog.sender, task.projectRoot)) throw new AppError('CLOSED', '项目窗口已切换。')
-      return createWindowSink(catalog.sender, task)
+    prepare: async (task, signal) =>
+      createWindowSink(await preparePeer(task, signal, 'prepare'), task),
+    prepareGuidance: async (task, signal) => {
+      await preparePeer(task, signal, 'prepare-guidance')
+    },
+    acceptGuidance: (task) => {
+      const sender = catalogs.get(resolve(task.projectRoot))?.sender
+      if (sender && owns(sender, task.projectRoot))
+        send(sender, { type: 'guidance-accepted', task })
     },
     cancelPreparation: (task, message) => {
       const sender = catalogs.get(resolve(task.projectRoot))?.sender
-      if (sender && owns(sender, task.projectRoot)) send(sender, { type: 'cancel', task, message })
-    },
-    failure: (ref, message) => {
-      const sender = catalogs.get(resolve(ref.projectRoot))?.sender
-      if (sender && owns(sender, ref.projectRoot)) send(sender, { type: 'failed', ref, message })
+      if (!sender || !owns(sender, task.projectRoot)) return
+      try {
+        send(sender, { type: 'cancel', task, message })
+      } catch (error) {
+        Log.tag('WorkbenchSessionPeersIpc').warn('投递准备已撤销，窗口未收到通知', { inputId: task.inputId, error })
+      }
     },
   })
   const releaseProject = (root: string): void => {

@@ -1,66 +1,73 @@
-# Workbench → Platform 0.9.1 接入准备
+# Workbench → Platform 0.9.1
 
-主协调已确认：空闲控制 lease 由 Platform owner 在独立 0.9.1 合同与双包中交付；冻结的 0.9.0 不改、不安装。
+Workbench 使用配套的基础与扩展固定候选，不引用兄弟仓源码，也不修改依赖包实现。
 
-## 空闲会话控制缺口
+## 执行与空闲控制
 
-实际调用：
+`WorkbenchConversationSession` 向根 createRuntime 显式提供 storage、binding、Node 执行口、模型与模块。
+项目/代码/图像及证据源、快照由 `WorkbenchConversationProject` 从 capabilities/project 装配。
+浏览器、web、产品会话协作、console 均显式安装；记忆、widget 和 worker profile 也由产品选择。
 
-- `src/main/conversation/WorkbenchConversationRuntime.ts:316` listNotes、`:325` readNote、`:346` getGoal、`:350` controlGoal。
-- 同文件 `:428` withSessionControl：活跃时借现有 session；空闲且已有数据时在 `:460` 打开控制 lease，操作后 finally close。
-- `src/main/conversation/WorkbenchConversationSession.ts:287` openControl：目前通过无模型 createRuntime/openSession 读取原状态，不执行输入。
-- `src/main/conversation/WorkbenchConversationIpc.ts` 先从发起窗口当前 ProjectHub 核验项目，再调用上述方法。
+产品先从窗口 ProjectHub 核验项目并解析真实根，再由公开 `/node.resolveNodeRuntimeBinding` 解析
+不透明执行身份、Node 可执行文件和真实进程约束。`execution-binding.json` 是产品自己的不可变凭据，
+仅首次原子发布；归属、沙箱或执行身份变化、损坏和孤立 context 文件均明确拒绝，不覆写或猜测旧绑定。
 
-当前可用公开接口是根 `createRuntime` / `VelarosRuntime.openSession` 和
-`VelarosSession.listNotes/readNote/getGoal/controlGoal`。新 Runtime 必须有 storage、binding、
-node 或 runner，SessionExecutionBinding 又要求真实模块 instance/generation 完全一致。
-Workbench 的空闲入口没有上一轮 request/model/权限选项，不能为读笔记重造 sessions/browser 等执行能力，
-也不能读私有 runtime:binding 记录后造伪实现来匹配。
+`WorkbenchConversationRuntime.listNotes/readNote/getGoal/controlGoal` 活跃时借原 session，空闲时
+经 `openSessionControl({sessionId, storage, binding})` 读取原事实，finally 关闭独立连接。
+不创建模型、Node、Host 或伪领域实现，不读核心私有 runtime:binding 记录。resume 只改变目标事实。
+从未运行时保留空页/null/NOT_FOUND 语义；并发控制、删除与关闭排斥仍由产品持有。
 
-需要的公开行为（命名和实现由 Platform 决定）：
+应用级 WorkbenchShellHostRegistry 是唯一进程 owner。Runtime.close 的 TIMEOUT 表示原关闭仍在收束，
+产品继续等待同一个关闭操作，不重放执行、不提前销毁 Host 或删除存储；不提高原关闭时限。
+同根会话的语言池由执行 lease 计数，最后一个 lease 收束后才释放，避免打断并发会话。
 
-1. **允许打开/恢复已有新代际会话的控制 lease**，只读笔记/目标，或以 baseRevision 执行现有 GoalControl。
-   不需要模型、Node/runner、浏览器页面或领域可执行实现；不调用 submit，不启动 Agent，不重新接纳历史输入。
-2. 产品提供已核验的不透明 executionIdentity/authorizationScope、sessionId 和存储。核心仍核验恢复边界，
-   不改绑、不扩大旧授权；若还需要模块身份清单，请给公开可核验的获取/传递合同，不能要求产品读私有记录。
-3. 应用重启后仍可读最后一次成功运行的笔记和目标；读操作不创建另一套执行 owner。
-   controlGoal 的 resume 在这里仅改变原有控制状态，不自行启动模型；执行继续走产品发送链。
-4. 保留原方法的分页、note key/revision、GoalControl.baseRevision 冲突、NOT_FOUND 和持久化错误语义；
-   lease 能明确关闭。Workbench 保留每会话串行控制和删除/关闭排斥。
-5. 从未运行：产品现有 getGoal 返回 null、listNotes 返回空页；readNote/controlGoal 报不存在，不因查询创建空会话。
-   旧 runtime:workspace 不走兼容恢复；产品切新存储代际，旧界面历史仍保留。
-
-若现有公开接口已经能安全做到以上行为，请给调用组合与边界证明；Workbench 不要求特定新函数名称。
+新执行数据位于 `conversation-runtime/foundation-v1/<项目根与会话哈希>`；旧 0.7 目录不读、不删，
+界面历史与项目 ID 保留。旧 runtime:workspace 不做兼容恢复，不把旧事实混入新执行身份。
 
 ## 一次接入所需归档
 
-目标为配套的 `@velaros-ai/velaros@0.9.1` 与 `@velaros-ai/capabilities@0.9.1`，准确 receipt/哈希待交付。
+安装身份为配套的 `@velaros-ai/velaros@0.9.1` 与 `@velaros-ai/capabilities@0.9.1`。
 Workbench 使用项目/代码/图像、浏览器、网页和产品会话协作，不能仅接基础包。
-下表是已核对的 **0.9.0 冻结参考**，不能拿它冒充补齐控制合同的 0.9.1：
-
-来源：Platform commit `697bcba2fdff5b7160116a7c936876df8bf4abb2`。
-receipt：`D:/Projects/VelarOS-Platform/.velaros-workspace/candidates/platform-0.9.0-ba4c31c4-7455cef2/candidate.json`。
+来源：Platform commit `e3e157696994a0d667cbd542a809484b93e40e71`。
+来源证明原字节保存于 `resources/runtime-sources/platform-0.9.1/`，schema2 快照固定其哈希。
 
 | 安装身份 | 版本 | 归档 | SHA256 |
 | --- | --- | --- | --- |
-| @velaros-ai/velaros | 0.9.0 | velaros.tgz | ba4c31c49582380d84f63b884c44bc2fbd4897bb45bbda6a33ad68f1aa789045 |
-| @velaros-ai/capabilities | 0.9.0 | capabilities.tgz | 7455cef23df7acab4db1c3e74d7bb036a480a5012000283c8a88e1add49af355 |
+| @velaros-ai/velaros | 0.9.1 | velaros.tgz | 7845f1e6c90fd93f90faf8d5c52203a7110580054365419acb1c38d72d0e93c2 |
+| @velaros-ai/capabilities | 0.9.1 | capabilities.tgz | 9e29f4b00ee12aa51a2d086b32eaff8ce7c15672041048590cac0dc6ba911a5a |
 
-receipt 已给全量 SHA512 integrity、大小及 638 输入与提交树的核对证明；这是冻结的本地候选，
-保留打包前 dirty 来源证据，不称为已发布的 registry/GitHub Release。owner 已验证 Windows JS/严格声明；
-Linux 和供应商 API 仍未覆盖。消费时复制到 Workbench 自己的哈希目录并验字节，不链接兄弟仓 node_modules。
+receipt 给出 SHA512 integrity、大小及 658 输入与提交树的核对证明；冻结本地候选保留打包前 dirty 证据，
+不称为已发布的 registry/GitHub Release。导入核对来源证明和归档，复制到本仓哈希目录，缺档不自动走 GH。
+正式 stage 拒绝候选依赖；正式发布来源另核 Release、tag→commit 和资源身份。UI 仍使用原 1.0.0 固定归档。
 
 切换范围：manifest/lock/快照来源；专项 import → capabilities；Node 工厂 → velaros/node；显式项目端口、
 context source/snapshot、worker/memory/widget 装配；执行身份与授权 scope；新会话数据代际；发行外置包闭包。
 继续使用 WorkbenchShellHostRegistry 唯一应用级 Host，产品项目/浏览器选择、登记和权限策略不进入核心。
 
-## 已核出的另外两项合同变化
+## 会话协作和宿主合同
 
 - `capabilities/sessions` 的 `SessionTold.status` 仅 `queued`，tell 只给目标活动 run 追加 guidance，空闲拒绝。
-  Workbench 现 `WorkbenchSessionPeers.ts:103` 会开新轮/排到下一轮并返回 delivered；切换时改为新合同，不能只换 import。
-- 0.9.0 capabilities 的 optional peer 是 Electron `42.11.16`、React `19.3.1`，而 Workbench 实装
-  Electron `41.10.2`、React `19.2.5`；现用 0.7.0 包声明为 Electron `>=41.0.0`、React `^19.0.0`。
-  请 Platform owner 在 0.9.1 明确支持范围或说明必须升级的真实 API，Workbench 不用 override 掩盖不匹配。
+  Workbench 先显示 pending guidance 并回执，再 await 真实 steer；不新建运行或检查点，目标换轮会拒绝。
+  接纳后来源取消或 UI 通知失败不误报未投递，不自动重放，也不把先到的 applied 降级。
+- 0.9.1 扩展 required peer 为基础精确 `0.9.1`；宿主 optional peer 是 Electron `>=41.0.0`、
+  React / @types/react `^19.0.0`，与本仓宿主版本一致，无本地依赖补丁或 peer override。
 
-活跃会话拟使用根 createRuntime + `/node.createNodeExecutionEnvironment` + 显式 localContextStorage，
-由产品统一派生 executionIdentity/authorizationScope 并供控制 lease 核对；不复制 NodeRuntime 便利入口的私有二次哈希公式。
+## 实际公开调用库存
+
+核对当前产品调用与安装的 0.9.1 公开声明：目前没有确认需要 Platform 新增的合同缺口。
+空闲 trace/traceBranches 不是 Workbench 当前产品调用；空闲 UI 恢复读取产品 Recovery 日志。
+后续验证若发现真实合同缺口再补充，不恢复已删除字段或导入包内私有实现。
+
+| 产品文件 / 公开调用 | 活动或空闲 | 真实语义 |
+| --- | --- | --- |
+| `WorkbenchConversationSession.open` / `createRuntime`、`resolveNodeRuntimeBinding` | 活动执行 | 产品核验项目与执行凭据，显式注入存储、Node、资源和领域模块。 |
+| `WorkbenchConversationRuntime.listNotes/readNote/getGoal` | 两者 | 活动借原 Session；空闲 `openSessionControl`，保留分页、版本与不存在语义。 |
+| `WorkbenchConversationRuntime.controlGoal` / `getGoal`、`controlGoal` | 两者 | 携 revision 修改目标；空闲 resume 只改事实，UI 继续操作另外显式 submit。 |
+| `WorkbenchConversationRuntime.guidance` / `VelarosSession.steer` | 仅活动 | 缺少活动 handle 明确拒绝；peer tell 同样不启动新一轮。 |
+| `WorkbenchConversationRuntime.readTrace` / `VelarosSession.trace` | 活动及本轮收尾 | 刷新当前执行卡、用量和结果；完成最终读取后关闭 runtime。 |
+| `ConversationAgents.refresh` / `VelarosRuntime.trace(rootSessionId, query)` | 活动及本轮收尾 | 根会话授权子分支，按 after/limit 分页，不创建子模型运行。 |
+| renderer `standaloneWorkbenchConversationActionPort` / 产品 goal、guidance IPC | 两者 | 空闲继续目标显式 submit；活动 guidance 检查错误信封并交 UI 处理。 |
+
+0.9.1 过期消费面已按公开合同清理：执行语言由产品固定的 Node 执行口确定，完成原因使用
+presentation.completion，删除 hourly throttled 事件与预算字段。POSIX 进程组目标由公开
+`shouldUseDetachedProcessGroup()` 决定，不再调用已删除的 getProcessKillPid。

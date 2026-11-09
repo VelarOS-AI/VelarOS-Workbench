@@ -1,5 +1,8 @@
 import { resolve } from 'node:path'
 
+import type { SessionsSpacePort } from '@velaros-ai/capabilities/sessions'
+import type { SessionAnswer } from '@velaros-ai/capabilities/sessions/contracts'
+import type { WebSpacePort } from '@velaros-ai/capabilities/web'
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
 import type { RuntimeNoteRead, VelarosSession } from '@velaros-ai/velaros'
 import type { GoalControl, GoalState } from '@velaros-ai/velaros/contracts'
@@ -7,9 +10,6 @@ import { isNotUndefined, Log, toNullable } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import type { ActPresentation } from '@velaros-ai/velaros/renderer'
 import { createActEventProjector } from '@velaros-ai/velaros/renderer'
-import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
-import type { SessionAnswer } from '@velaros-ai/velaros/sessions/contracts'
-import type { WebSpacePort } from '@velaros-ai/velaros/web'
 
 import {
   ConversationAgentNotice,
@@ -46,13 +46,13 @@ import {
   conversationDone,
   stalledMessage,
   terminalStatusMessage,
-  throttledMessage,
   toConversationInput,
 } from './WorkbenchConversationRules'
 import { WorkbenchConversationSession } from './WorkbenchConversationSession'
 import { WorkbenchConversationStore } from './WorkbenchConversationStore'
 import type {
   ActiveConversationRun,
+  ConversationControlHandle,
   ConversationControlOptions,
   ConversationInput,
   ConversationProjectRule,
@@ -123,7 +123,7 @@ interface WorkbenchConversationRuntimeOptions {
   /** 注入执行会话的资源所有者（测试用）。 */
   open?(options: ConversationWorkspaceOptions): Promise<ConversationWorkspaceHandle>
   /** 注入空闲状态控制会话的资源所有者（测试用）。 */
-  control?(options: ConversationControlOptions): Promise<ConversationWorkspaceHandle>
+  control?(options: ConversationControlOptions): Promise<ConversationControlHandle>
 }
 
 /** 主聊天的 Platform 控制面（与 Desktop 的会话运行时同一套流程）。 */
@@ -427,7 +427,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
 
   private async withSessionControl<T>(
     ref: WorkbenchConversationRef,
-    operation: (session: ConversationWorkspaceHandle['session']) => Promise<T>,
+    operation: (session: ConversationControlHandle['session']) => Promise<T>,
     missing?: T,
     options: { readActive?: boolean; controlActive?: boolean; stopAfter?: boolean } = {}
   ): Promise<T> {
@@ -456,13 +456,17 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         if (isNotUndefined(missing)) return missing
         throw new AppError('NOT_FOUND', workbenchMainText('conversation.neverRan'))
       }
-      const handle = await (
-        this.options.control ?? ((control) => this.session.openControl(control))
-      )({
-        sessionId: ref.sessionId,
-        dataDir: this.storage.path(ref.projectRoot, ref.sessionId),
-        workspace: await this.storage.workspace(ref.projectRoot),
-      })
+      let handle: ConversationControlHandle
+      try {
+        handle = await (this.options.control ?? ((control) => this.session.openControl(control)))({
+          sessionId: ref.sessionId,
+          dataDir: this.storage.path(ref.projectRoot, ref.sessionId),
+          workspace: await this.storage.workspace(ref.projectRoot),
+        })
+      } catch (error) {
+        if (AppError.from(error).code === 'NOT_FOUND' && isNotUndefined(missing)) return missing
+        throw error
+      }
       try {
         return await operation(handle.session)
       } finally {
@@ -709,7 +713,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         : terminalStatusMessage(
             status as 'failed' | 'context_blocked',
             run.locale,
-            run.presentation?.verification?.reason
+            run.presentation?.completion?.reason
           )
       sink.state(
         signal.aborted
@@ -822,13 +826,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         break
       case 'answer':
         sink.state({ kind: 'phase', teamPhase: 'executing' })
-        break
-      case 'throttled':
-        sink.state({
-          kind: 'reconnecting',
-          attempt: 1,
-          message: throttledMessage(event.retryAfterMs, run.locale),
-        })
         break
       case 'state':
         if (event.status === 'thinking' || event.status === 'executing')

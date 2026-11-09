@@ -645,7 +645,8 @@ test(
         return f.sink
       },
       cancelPreparation: () => assert.fail('the prepared peer should be accepted'),
-      failure: (_ref, message) => assert.fail(message),
+      prepareGuidance: async () => assert.fail('this case delegates a task, not guidance'),
+      acceptGuidance: () => assert.fail('this case delegates a task, not guidance'),
     })
     t.after(() => peers.close())
     const off = f.runtime.subscribeRunOutcome((outcome) => outcomes.push(outcome))

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-import { DefaultBrowserSearchEngine } from '@velaros-ai/velaros/browser/contracts'
+import { DefaultBrowserSearchEngine } from '@velaros-ai/capabilities/browser/contracts'
 import { isFiniteNumber, isObject, isString, Log } from '@velaros-ai/velaros/core'
 
 import {

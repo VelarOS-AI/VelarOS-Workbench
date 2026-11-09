@@ -1,7 +1,7 @@
-import type { NodeExecutionOutput } from '@velaros-ai/velaros'
 import type { ActTurnTrace } from '@velaros-ai/velaros/contracts'
 import { toNullable } from '@velaros-ai/velaros/core'
 import { type TimerLease, TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
+import type { NodeExecutionOutput } from '@velaros-ai/velaros/node'
 
 import {
   ConversationCommandOutputMaxChars,
