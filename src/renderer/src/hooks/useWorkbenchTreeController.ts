@@ -194,12 +194,12 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
     }
   )
 
-  const loadRootDirectory = useMemoizedFn(async (project: WorkbenchProject): Promise<void> => {
+  const loadRootDirectory = useMemoizedFn(async (project: WorkbenchProject): Promise<boolean> => {
     const owningProjectId = project.id
 
     try {
       setIsLoadingTree(true)
-      await loadDirectory(project, ROOT_PATH, { replace: true })
+      return !!(await loadDirectory(project, ROOT_PATH, { replace: true }))
     } finally {
       if (activeProjectRef.current?.id === owningProjectId) {
         setIsLoadingTree(false)

@@ -69,27 +69,20 @@ export class RecentProjectsStore {
 }
 
 function readRecentProjectEntries(filePath: string): RecentProjectEntry[] {
-  let raw: string
-  try {
-    raw = readFileSync(filePath, 'utf8')
-  } catch {
-    return []
-  }
-
   let parsed: unknown
   try {
-    parsed = JSON.parse(raw)
+    parsed = JSON.parse(readFileSync(filePath, 'utf8'))
   } catch {
     return []
   }
 
   if (typeof parsed !== 'object' || parsed === null) return []
 
-  const entries = (parsed as Partial<RecentProjectsFile>).entries
-  if (!Array.isArray(entries)) return []
+  const file = parsed as Partial<RecentProjectsFile>
+  if (file.version !== RecentProjectsFileVersion || !Array.isArray(file.entries)) return []
 
-  return entries
-    .map((entry) => parseRecentProjectEntry(entry))
+  return file.entries
+    .map(parseRecentProjectEntry)
     .filter((entry): entry is RecentProjectEntry => entry !== null)
     .slice(0, MaxRecentProjects)
 }
@@ -100,7 +93,8 @@ function parseRecentProjectEntry(value: unknown): Nullable<RecentProjectEntry> {
   const candidate = value as Partial<RecentProjectEntry>
   if (typeof candidate.path !== 'string' || candidate.path.length === 0) return null
   if (typeof candidate.name !== 'string' || candidate.name.length === 0) return null
-  if (typeof candidate.lastOpenedAt !== 'number' || !Number.isFinite(candidate.lastOpenedAt)) return null
+  if (typeof candidate.lastOpenedAt !== 'number' || !Number.isFinite(candidate.lastOpenedAt))
+    return null
 
   return {
     path: candidate.path,

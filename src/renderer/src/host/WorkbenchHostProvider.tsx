@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext } from 'react'
 
-import { workbenchHost, type WorkbenchHostRuntime } from './WorkbenchHost'
+import { type WorkbenchHostRuntime } from './WorkbenchHost'
 
 const WorkbenchHostRuntimeContext = createContext<Nullable<WorkbenchHostRuntime>>(null)
 
@@ -25,11 +25,9 @@ export function WorkbenchHostProvider({
   )
 }
 
-/**
- * 返回当前 React root 的宿主运行时。未安装 Provider 时回退到兼容单例。
- *
- * @deprecated 新应用应始终在根节点安装 `WorkbenchHostProvider`。
- */
+/** 返回当前 React root 的宿主运行时。 */
 export function useWorkbenchHostRuntime(): WorkbenchHostRuntime {
-  return useContext(WorkbenchHostRuntimeContext) ?? workbenchHost
+  const runtime = useContext(WorkbenchHostRuntimeContext)
+  if (!runtime) throw new Error('Workbench host runtime is not installed')
+  return runtime
 }

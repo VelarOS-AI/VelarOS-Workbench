@@ -7,14 +7,28 @@ import { stat } from 'node:fs/promises'
 
 import { BrowserWindow, ipcMain, shell } from 'electron'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import { WorkbenchProjectHubChannels } from '../../shared/projectHub'
 import { isWorkbenchAppLocale, setWorkbenchMainLocale } from '../i18n/workbenchMainLocale'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import { pickDirectory } from './ProjectPicker'
+import type { WorkbenchProjectRegistry } from './WorkbenchProjectRegistry'
 import type { WorkbenchWindowManager } from './WorkbenchWindowManager'
 
-export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
+export function registerProjectHubIpc(
+  windows: WorkbenchWindowManager,
+  registry: WorkbenchProjectRegistry
+): void {
+  ipcMain.handle(
+    WorkbenchProjectHubChannels.resolveRegistration,
+    (event, legacyProjects: unknown) => {
+      const project = windows.getHubForWebContents(event.sender)?.getState().currentProject
+      if (!project) throw new AppError('PERMISSION', 'The window has no active project')
+      return registry.resolve(project.path, legacyProjects)
+    }
+  )
   ipcMain.on(WorkbenchProjectHubChannels.setLocale, (_event, locale: unknown) => {
     if (isWorkbenchAppLocale(locale)) setWorkbenchMainLocale(locale)
   })
@@ -54,10 +68,12 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
       : { ok: false as const, reason: 'missing' as const }
   )
 
-  ipcMain.handle(WorkbenchProjectHubChannels.cloneProjectInNewWindow, (event, remoteUrl: unknown) =>
-    typeof remoteUrl === 'string'
-      ? windows.cloneProjectInNewWindow(event.sender, remoteUrl)
-      : { ok: false as const, reason: 'invalid-remote' as const }
+  ipcMain.handle(
+    WorkbenchProjectHubChannels.cloneProjectInNewWindow,
+    (event, remoteUrl: unknown) =>
+      typeof remoteUrl === 'string'
+        ? windows.cloneProjectInNewWindow(event.sender, remoteUrl)
+        : { ok: false as const, reason: 'invalid-remote' as const }
   )
 
   ipcMain.handle(WorkbenchProjectHubChannels.validateProjectPath, (_event, path: unknown) =>
@@ -79,13 +95,15 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
   )
 
   ipcMain.handle(WorkbenchProjectHubChannels.openSystemPath, async (_event, path: unknown) => {
-    if (typeof path !== 'string' || path.trim().length === 0) return { opened: false, error: 'Path is required.' }
+    if (typeof path !== 'string' || path.trim().length === 0)
+      return { opened: false, error: 'Path is required.' }
     const error = await shell.openPath(path)
     return error ? { opened: false, error } : { opened: true }
   })
 
   ipcMain.handle(WorkbenchProjectHubChannels.revealSystemPath, async (_event, path: unknown) => {
-    if (typeof path !== 'string' || path.trim().length === 0) return { opened: false, error: 'Path is required.' }
+    if (typeof path !== 'string' || path.trim().length === 0)
+      return { opened: false, error: 'Path is required.' }
     try {
       await stat(path)
     } catch {
@@ -119,9 +137,6 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
       : (windows.getHubForWebContents(event.sender)?.getState() ?? emptyState())
   )
 
-  ipcMain.handle(WorkbenchProjectHubChannels.closeProject, (event) =>
-    windows.closeProject(event.sender)
-  )
   ipcMain.handle(WorkbenchProjectHubChannels.returnToEntry, (event) =>
     windows.returnToEntry(event.sender)
   )

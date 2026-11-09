@@ -15,7 +15,7 @@ import {
   saveWorkbenchProjectSessionSnapshot,
 } from '@renderer/models/project/workbenchProjectSessionModel'
 
-import { isEmpty, Log, toNullable } from '@velaros-ai/velaros/core'
+import { isEmpty, Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
@@ -31,21 +31,15 @@ import {
 } from './useWorkbenchEditorController'
 import { useWorkbenchLanguageServiceInsights } from './useWorkbenchLanguageServiceInsights'
 import { useWorkbenchMutationController } from './useWorkbenchMutationController'
-import { useWorkbenchProjectController } from './useWorkbenchProjectController'
 import { useWorkbenchProjectIndexController } from './useWorkbenchProjectIndexController'
 import { useWorkbenchSearchController } from './useWorkbenchSearchController'
 import { useWorkbenchTreeController } from './useWorkbenchTreeController'
 
 interface UseWorkbenchControllerOptions {
-  bootstrapProjects?: readonly WorkbenchProject[]
-  lockedProjectId?: LooseOptional<string>
-  persistProjectList?: boolean
-  persistProjectSession?: boolean
-  restoreProjectSession?: boolean
-  projectIndexEnabled?: boolean
+  project: WorkbenchProject
   /** 「预览标签」这项设置：关着时单击文件、点搜索结果都开普通标签。 */
   previewTabsEnabled?: boolean
-  sessionCursorByPathRef?: React.MutableRefObject<Record<string, { line: number; column: number }>>
+  sessionCursorByPathRef: React.MutableRefObject<Record<string, { line: number; column: number }>>
   /** 打开着的文件（或它所在的目录）被改名 / 移动：跟着文件走的状态（如 AI 选区）换到新路径。 */
   onOpenEntryPathMoved?: (projectRoot: string, previousPath: string, nextPath: string) => void
 }
@@ -54,38 +48,28 @@ export type WorkbenchSelectFileOptions = WorkbenchFileOpenOptions
 
 const log = Log.tag('workbench-controller')
 
-export function useWorkbenchController(options: UseWorkbenchControllerOptions = {}) {
+export function useWorkbenchController(options: UseWorkbenchControllerOptions) {
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
-  const shouldPersistProjectSession = options.persistProjectSession ?? true
-  const shouldRestoreProjectSession = options.restoreProjectSession ?? true
   const [pendingSessionNavigation, setPendingSessionNavigation] =
     useState<Nullable<EditorNavigationRequest>>(null)
-  const internalSessionCursorByPathRef = useRef<Record<string, { line: number; column: number }>>(
-    {}
-  )
-  const sessionCursorByPathRef = options.sessionCursorByPathRef ?? internalSessionCursorByPathRef
+  const { project, sessionCursorByPathRef } = options
   const sessionNavigationIdRef = useRef(0)
-  const openedProjectIdRef = useRef<Nullable<string>>(null)
+  const [openedProjectId, setOpenedProjectId] = useState<Nullable<string>>(null)
 
-  const project = useWorkbenchProjectController({
-    bootstrapActiveProjectId: options.lockedProjectId,
-    bootstrapProjects: options.bootstrapProjects,
-    persistProjectList: options.persistProjectList,
-  })
-  const tree = useWorkbenchTreeController({ activeProject: project.activeProject })
-  const search = useWorkbenchSearchController({ activeProject: project.activeProject })
+  const tree = useWorkbenchTreeController({ activeProject: project })
+  const search = useWorkbenchSearchController({ activeProject: project })
   const command = useWorkbenchCommandController({
-    activeProject: project.activeProject,
+    activeProject: project,
     rootEntries: tree.rootEntries,
   })
   const commandState = command.state
   const commandActions = command.actions
   const projectIndex = useWorkbenchProjectIndexController({
-    activeProject: project.activeProject,
-    enabled: options.projectIndexEnabled ?? true,
+    activeProject: project,
+    enabled: true,
   })
   const editor = useWorkbenchEditorController({
-    activeProject: project.activeProject,
+    activeProject: project,
     previewTabsEnabled: options.previewTabsEnabled,
     onFileMetadataSaved: tree.refreshTreeFileMetadata,
     onFileSaved: () => {
@@ -115,14 +99,13 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
   const moveOpenEntryPath = useMemoizedFn(
     (previousPath: string, nextPath: string, modifiedAt?: LooseOptional<number>): void => {
       // 先把跟着文件走的状态挪到新路径，再换标签：换完标签的那次提交里，旧路径已经不算「被关掉」。
-      const rootPath = project.activeProject?.rootPath
-      if (rootPath) options.onOpenEntryPathMoved?.(rootPath, previousPath, nextPath)
+      options.onOpenEntryPathMoved?.(project.rootPath, previousPath, nextPath)
       editor.moveOpenEntryPath(previousPath, nextPath, modifiedAt)
     }
   )
 
   const importUpdateStateLatest = useLatest({
-    projectRoot: toNullable(project.activeProject?.rootPath),
+    projectRoot: project.rootPath,
     openTabs: editor.openTabs,
   })
   const importUpdaterRef = useRef<Nullable<WorkbenchImportUpdater>>(null)
@@ -160,7 +143,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
   )
 
   const mutation = useWorkbenchMutationController({
-    activeProject: project.activeProject,
+    activeProject: project,
     selectedEntry: tree.selectedEntry,
     selectedEntryPath: tree.selectedEntryPath,
     ensureNoUnsavedFilesInPath: editor.ensureNoUnsavedFilesInPath,
@@ -224,19 +207,16 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     [tree.childrenByPath, editor.openedFileSnapshots, projectIndex.indexedFileSnapshots]
   )
   const languageServiceInsights = useWorkbenchLanguageServiceInsights({
-    projectRoot: toNullable(project.activeProject?.rootPath),
+    projectRoot: project.rootPath,
     openTabs: editor.openTabs,
     selectedFilePath: editor.selectedFilePath,
     editorContent: editor.editorContent,
     externalRevision: editor.externalRevision,
   })
   const persistActiveProjectSession = useMemoizedFn((): void => {
-    if (!shouldPersistProjectSession) return
+    if (openedProjectId !== project.id) return
 
-    const projectId = project.activeProjectId
-    if (!projectId) return
-
-    saveWorkbenchProjectSessionSnapshot(projectId, {
+    saveWorkbenchProjectSessionSnapshot(project.id, {
       expandedPaths: tree.expandedPaths,
       selectedEntryPath: tree.selectedEntryPath,
       editorLayout: editor.editorLayout,
@@ -248,111 +228,59 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     setPendingSessionNavigation(null)
   })
 
-  const openProject = useMemoizedFn(
-    async (
-      nextProject: WorkbenchProject,
-      sourceProjects: WorkbenchProject[] = project.projects
-    ): Promise<void> => {
-      const previousActiveProjectId = project.activeProjectId
+  const restoreProject = useMemoizedFn(async (signal: AbortSignal): Promise<void> => {
+    try {
+      const session = readWorkbenchProjectSession(project.id)
+      const loaded = await tree.loadRootDirectory(project)
+      if (signal.aborted || !loaded) return
+      if (session) {
+        sessionCursorByPathRef.current = { ...session.cursorByPath }
 
-      if (
-        openedProjectIdRef.current === nextProject.id &&
-        project.activeProjectId === nextProject.id &&
-        !isEmpty(tree.rootEntries)
-      )
-        return
+        await tree.restoreExpandedPaths(session.expandedPaths, { quiet: true })
+        if (signal.aborted) return
 
-      if (previousActiveProjectId && previousActiveProjectId !== nextProject.id) {
-        persistActiveProjectSession()
-      }
-
-      try {
-        project.activateProject(nextProject.id)
-        await project.bindProjectWorkspace(nextProject, sourceProjects)
-        project.markProjectOpened(nextProject.id, sourceProjects)
-        tree.resetTree()
-        editor.resetSelectedFile()
-        projectIndex.resetProjectIndex()
-        search.resetSearch()
-        mutation.resetTreeAction()
-        setPendingSessionNavigation(null)
-        sessionCursorByPathRef.current = {}
-
-        await tree.loadRootDirectory(nextProject)
-
-        const session = shouldRestoreProjectSession
-          ? readWorkbenchProjectSession(nextProject.id)
-          : null
-        if (session) {
-          sessionCursorByPathRef.current = { ...session.cursorByPath }
-
-          await tree.restoreExpandedPaths(session.expandedPaths, { quiet: true })
-
-          if (session.selectedEntryPath) {
-            tree.setSelectedEntryPath(session.selectedEntryPath)
-          }
-
-          await editor.restoreEditorSession(session.editorLayout)
-
-          // 回到当前文件上次的光标位置（读不出来的标签已经丢掉，当前文件以恢复出来的为准）。
-          const cursorPath = getWorkbenchEditorFocusedPath(session.editorLayout)
-          const cursor = cursorPath ? session.cursorByPath[cursorPath] : null
-          if (cursorPath && cursor) {
-            sessionNavigationIdRef.current += 1
-            setPendingSessionNavigation({
-              id: sessionNavigationIdRef.current,
-              line: cursor.line,
-              column: cursor.column,
-            })
-          }
+        if (session.selectedEntryPath) {
+          tree.setSelectedEntryPath(session.selectedEntryPath)
         }
 
-        openedProjectIdRef.current = nextProject.id
-      } catch (error) {
-        if (
-          previousActiveProjectId &&
-          previousActiveProjectId !== nextProject.id &&
-          sourceProjects.some((item) => item.id === previousActiveProjectId)
-        ) {
-          project.activateProject(previousActiveProjectId)
-        } else {
-          project.clearActiveProject()
-          openedProjectIdRef.current = null
-        }
+        await editor.restoreEditorSession(session.editorLayout)
+        if (signal.aborted) return
 
-        const appError = AppError.from(error)
-        messageLatest.current.error({
-          title: tLatest.current('workbench.openProjectFailed'),
-          description: appError.message,
-        })
+        // 回到当前文件上次的光标位置（读不出来的标签已经丢掉，当前文件以恢复出来的为准）。
+        const cursorPath = getWorkbenchEditorFocusedPath(session.editorLayout)
+        const cursor = cursorPath ? session.cursorByPath[cursorPath] : null
+        if (cursorPath && cursor) {
+          sessionNavigationIdRef.current += 1
+          setPendingSessionNavigation({
+            id: sessionNavigationIdRef.current,
+            line: cursor.line,
+            column: cursor.column,
+          })
+        }
       }
+
+      setOpenedProjectId(project.id)
+    } catch (error) {
+      if (signal.aborted) return
+
+      const appError = AppError.from(error)
+      messageLatest.current.error({
+        title: tLatest.current('workbench.openProjectFailed'),
+        description: appError.message,
+      })
     }
-  )
-
-  const addProject = useMemoizedFn(async (openProjectHandler = openProject): Promise<void> => {
-    await project.addProject(openProjectHandler)
   })
 
-  function removeProject(projectId: string): void {
-    project.removeProject(projectId)
-    if (project.activeProjectId === projectId) {
-      closeProject()
-    }
-  }
+  useEffect(() => {
+    const controller = new AbortController()
+    void restoreProject(controller.signal)
+    return () => controller.abort()
+  }, [project.id, restoreProject])
 
   function closeProject(): boolean {
     if (!editor.ensureNoUnsavedChanges()) return false
 
     persistActiveProjectSession()
-    project.clearActiveProject()
-    tree.resetTree()
-    editor.resetSelectedFile()
-    projectIndex.resetProjectIndex()
-    search.resetSearch()
-    mutation.resetTreeAction()
-    setPendingSessionNavigation(null)
-    sessionCursorByPathRef.current = {}
-    openedProjectIdRef.current = null
     return true
   }
 
@@ -381,9 +309,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
   )
 
   return {
-    sortedProjects: project.sortedProjects,
-    activeProject: project.activeProject,
-    workspaceBindingVersion: project.workspaceBindingVersion,
+    activeProject: project,
+    projectSessionReady: openedProjectId === project.id,
     rootEntries: tree.rootEntries,
     selectedEntry: tree.selectedEntry,
     selectedEntryPath: tree.selectedEntryPath,
@@ -407,7 +334,6 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     ensureNoUnsavedChanges: editor.ensureNoUnsavedChanges,
     canEditSelectedFile: editor.canEditSelectedFile,
     selectedFileEditMode: editor.selectedFileEditMode,
-    isPicking: project.isPicking,
     isLoadingTree: tree.isLoadingTree,
     isSavingFile: editor.isSavingFile,
     autosaveFailures: editor.autosaveFailures,
@@ -447,9 +373,6 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     setActiveTerminalSessionId: commandActions.terminal.setActiveTerminalSessionId,
     clearCommandResult: commandActions.command.clearCommandResult,
     selectEntryPath: tree.setSelectedEntryPath,
-    addProject,
-    removeProject,
-    openProject,
     closeProject,
     refreshRootDirectory,
     refreshLoadedDirectories,

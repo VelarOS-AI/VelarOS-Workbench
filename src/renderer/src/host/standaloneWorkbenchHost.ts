@@ -5,7 +5,6 @@ import { getStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneW
 import { AppError, Result } from '@velaros-ai/velaros/core'
 import type { Result as ResultType } from '@velaros-ai/velaros/core/result'
 
-import { type SystemOverview } from '@shared/contracts/system'
 import {
   type WorkbenchIndexProjectRequest,
   type WorkbenchIndexProjectResult,
@@ -21,8 +20,7 @@ import type {
 /**
  * 独立 Workbench 应用的宿主适配器。
  *
- * Desktop 用 `installDesktopWorkbenchHost` 把 Workbench 产品端口接到 renderer IPC；独立应用
- * 把本地 IDE 端口接到自建 main 服务（经 `window.velarosWorkbenchFs` / `window.velarosWorkbenchLanguage`
+ * 本地 IDE 端口接到 main 服务（经 `window.velarosWorkbenchFs` / `window.velarosWorkbenchLanguage`
  * / `window.velarosWorkbenchTerminal` 等桥）。已实装：目录列表 / 读写族 / 双搜索 /
  * 一次性命令运行（含流式输出订阅）/ 本地历史读 + 11 个语言服务动词（定义 / 补全 / 诊断 /
  * 重命名 / hover / 引用 / 签名帮助 / 格式化 / 文档符号 / 文档高亮 / inlay，由 main 的语言服务
@@ -138,30 +136,6 @@ function isWorkspaceFileEntry(value: unknown): value is WorkspaceFileEntry {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   return typeof record.path === 'string' && (record.type === 'file' || record.type === 'directory')
-}
-
-function createSystemOverview(activeWorkspaceRoot: string): SystemOverview {
-  return {
-    providers: [
-      {
-        id: 'workbench-project-hub',
-        label: 'Workbench Project Hub',
-        description: 'Standalone Workbench project root provider.',
-        capabilities: ['workspace-roots', 'open-path'],
-      },
-    ],
-    workspaceRoots: [
-      {
-        path: activeWorkspaceRoot,
-        active: true,
-        exists: true,
-        removable: false,
-        source: 'project',
-      },
-    ],
-    activeWorkspaceRoot,
-    browserSiteContext: null,
-  }
 }
 
 function projectRootFromSessionId(sessionId: string): string | null {
@@ -299,25 +273,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         window.velarosWorkbenchTerminal.acknowledgeOutput(request),
     },
     sessions: {
-      readLocalAttachmentFile: async (request) => {
-        const projectRoot = projectRootFromSessionId(request.sessionId)
-        if (!projectRoot) return invalidSession()
-        const result = toHostResult(
-          await window.velarosWorkbenchFs.readFile({
-            projectRoot,
-            path: request.path,
-          })
-        )
-        if (!result.ok) return result
-        return Result.ok({
-          path: result.data.path,
-          name: request.name ?? result.data.path.split(/[\\/]/).at(-1) ?? result.data.path,
-          mediaType: request.mediaType ?? 'text/plain',
-          size: result.data.size,
-          lastModified: result.data.modifiedAt,
-          data: new TextEncoder().encode(result.data.content),
-        })
-      },
       writeLocalAttachmentFile: async (request) => {
         const projectRoot = projectRootFromSessionId(request.sessionId)
         if (!projectRoot) return invalidSession()
@@ -338,19 +293,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         })
       },
     },
-    settings: {
-      listProviderModels: (request) =>
-        Promise.resolve(
-          Result.ok({
-            provider: request.provider,
-            source: 'preset',
-            models: request.defaultModel
-              ? [{ id: request.defaultModel, label: request.defaultModel }]
-              : [],
-            fetchedAt: Date.now(),
-          })
-        ),
-    },
     workspace: {
       openPath: async (_sessionId, path, options) => {
         const opened = await window.velarosWorkbenchProjectHub.openSystemPath(path)
@@ -360,22 +302,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
           editor: options?.editor,
           application: opened.error,
         })
-      },
-      pickDirectory: async () => {
-        const picked = await window.velarosWorkbenchProjectHub.pickNewProjectLocation()
-        return Result.ok(picked.ok ? picked.path : null)
-      },
-      addWorkspaceRoot: async (_sessionId, path) => {
-        const opened = await window.velarosWorkbenchProjectHub.validateProjectPath(path)
-        if (!opened.ok)
-          return Result.fail(new AppError('VALIDATION', `Cannot open project root: ${path}`))
-        return Result.ok(createSystemOverview(opened.project.path))
-      },
-      setActiveWorkspaceRoot: async (_sessionId, path) => {
-        const opened = await window.velarosWorkbenchProjectHub.validateProjectPath(path)
-        if (!opened.ok)
-          return Result.fail(new AppError('VALIDATION', `Cannot activate project root: ${path}`))
-        return Result.ok(createSystemOverview(opened.project.path))
       },
       getWorkspaceGitSummary: async (workspaceRoot) =>
         toHostResult(await window.velarosWorkbenchGit.getSummary({ workspaceRoot })),
@@ -465,10 +391,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
           await window.velarosWorkbenchGit.performOperation({ workspaceRoot, ...request })
         ),
     },
-  },
-  shell: {
-    openChatWindow: (): Promise<void> => Promise.resolve(),
-    openSettingsWindow: (): Promise<void> => Promise.resolve(),
   },
 }
 

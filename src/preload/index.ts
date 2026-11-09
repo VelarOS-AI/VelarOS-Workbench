@@ -58,6 +58,8 @@ import {
 } from '../shared/workbenchWorkspace'
 
 const projectHubBridge: WorkbenchProjectHubBridge = {
+  resolveRegistration: (legacyProjects) =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.resolveRegistration, legacyProjects),
   getState: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.getState),
   openProjectDialog: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectDialog),
   openProjectPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPath, path),
@@ -86,7 +88,6 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
     ipcRenderer.invoke(WorkbenchProjectHubChannels.createProject, locationPath, name),
   removeRecentProject: (path) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.removeRecentProject, path),
-  closeProject: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.closeProject),
   returnToEntry: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.returnToEntry),
   onStateChanged: (listener) => subscribe(WorkbenchProjectHubChannels.stateChanged, listener),
   onMenuCommand: (listener) => subscribe(WorkbenchProjectHubChannels.menuCommand, listener),

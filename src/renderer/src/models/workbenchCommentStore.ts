@@ -181,9 +181,6 @@ export class WorkbenchCommentStore {
   }
 }
 
-/** 旧入口使用的默认实例。新应用应在 composition root 注入自己的实例。 */
-export const workbenchCommentStore = new WorkbenchCommentStore()
-
 const WorkbenchCommentStoreContext = createContext<Nullable<WorkbenchCommentStore>>(null)
 
 export function WorkbenchCommentStoreProvider({
@@ -196,9 +193,11 @@ export function WorkbenchCommentStoreProvider({
   return createElement(WorkbenchCommentStoreContext.Provider, { value: store }, children)
 }
 
-/** 未安装 Provider 时回退默认实例，仅用于兼容旧应用。 */
+/** 评论属于当前 composition root。 */
 export function useWorkbenchCommentStore(): WorkbenchCommentStore {
-  return useContext(WorkbenchCommentStoreContext) ?? workbenchCommentStore
+  const store = useContext(WorkbenchCommentStoreContext)
+  if (!store) throw new Error('Workbench comment store is not installed')
+  return store
 }
 
 /** 形如 `src/foo.ts:12` 或 `src/foo.ts:12-20` 的展示定位。 */
@@ -207,31 +206,6 @@ export function formatWorkbenchCommentLocation(comment: WorkbenchComment): strin
     ? `${comment.path}:${comment.startLine}`
     : `${comment.path}:${comment.startLine}-${comment.endLine}`
 }
-
-/** @deprecated 使用 `WorkbenchCommentStore.subscribe`。 */
-export const subscribeWorkbenchComments = workbenchCommentStore.subscribe
-/** @deprecated 使用 `WorkbenchCommentStore.getSnapshot`。 */
-export const getWorkbenchCommentsSnapshot = workbenchCommentStore.getSnapshot
-/** @deprecated 使用 `WorkbenchCommentStore.get`。 */
-export const getWorkbenchComment = workbenchCommentStore.get
-/** @deprecated 使用 `WorkbenchCommentStore.add`。 */
-export const addWorkbenchComment = workbenchCommentStore.add
-/** @deprecated 使用 `WorkbenchCommentStore.remove`。 */
-export const removeWorkbenchComment = workbenchCommentStore.remove
-/** @deprecated 使用 `WorkbenchCommentStore.updateBody`。 */
-export const updateWorkbenchCommentBody = workbenchCommentStore.updateBody
-/** @deprecated 使用 `WorkbenchCommentStore.removeMany`。 */
-export const removeWorkbenchComments = workbenchCommentStore.removeMany
-/** @deprecated 使用 `WorkbenchCommentStore.removeUnderPath`。 */
-export const removeWorkbenchCommentsUnderPath = workbenchCommentStore.removeUnderPath
-/** @deprecated 使用 `WorkbenchCommentStore.renamePath`。 */
-export const renameWorkbenchCommentsPath = workbenchCommentStore.renamePath
-/** @deprecated 使用 `WorkbenchCommentStore.updateAnchor`。 */
-export const updateWorkbenchCommentAnchor = workbenchCommentStore.updateAnchor
-/** @deprecated 使用 `WorkbenchCommentStore.listForPath`。 */
-export const listWorkbenchCommentsForPath = workbenchCommentStore.listForPath
-
-const EmptyComments: readonly WorkbenchComment[] = []
 
 /** 订阅当前 Provider 的评论列表；传 `projectRoot` 则只取该项目的。 */
 export function useWorkbenchComments(
@@ -245,5 +219,3 @@ export function useWorkbenchComments(
     return scoped.length === snapshot.length ? snapshot : scoped
   }, [snapshot, projectRoot])
 }
-
-export { EmptyComments as EmptyWorkbenchComments }

@@ -38,6 +38,7 @@ export function useWorkbenchProjectSessionPersistence({
   const internalCursorByPathRef = useRef<Record<string, PersistedWorkbenchEditorCursor>>({})
   const cursorByPathRef = externalCursorByPathRef ?? internalCursorByPathRef
   const snapshotRef = useLatest({
+    enabled,
     projectId,
     expandedPaths,
     selectedEntryPath,
@@ -66,9 +67,9 @@ export function useWorkbenchProjectSessionPersistence({
       SAVE_DEBOUNCE_MS,
       () => {
         const snapshot = snapshotRef.current
-        if (!snapshot.projectId) return
+        if (!snapshot.enabled || snapshot.projectId !== projectId) return
 
-        saveWorkbenchProjectSessionSnapshot(snapshot.projectId, {
+        saveWorkbenchProjectSessionSnapshot(projectId, {
           expandedPaths: snapshot.expandedPaths,
           selectedEntryPath: snapshot.selectedEntryPath,
           editorLayout: snapshot.editorLayout,
@@ -92,18 +93,4 @@ export function useWorkbenchProjectSessionPersistence({
     snapshotRef,
     timers,
   ])
-}
-
-export function flushWorkbenchProjectSessionPersistence(
-  options: UseWorkbenchProjectSessionPersistenceOptions,
-  cursorByPath: Record<string, PersistedWorkbenchEditorCursor>
-): void {
-  if (!options.projectId) return
-
-  saveWorkbenchProjectSessionSnapshot(options.projectId, {
-    expandedPaths: options.expandedPaths,
-    selectedEntryPath: options.selectedEntryPath,
-    editorLayout: options.editorLayout,
-    cursorByPath,
-  })
 }

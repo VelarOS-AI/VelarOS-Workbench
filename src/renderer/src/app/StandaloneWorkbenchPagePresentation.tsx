@@ -218,7 +218,7 @@ export function StandaloneWorkbenchPagePresentation({
     return () => {
       cancelled = true
     }
-  }, [activeProjectRoot, runtime, workbench.workspaceBindingVersion])
+  }, [activeProjectRoot, runtime])
   const velarStructureProjectPaths = useMemo(() => {
     const files = new Map<string, { path: string }>()
     for (const file of [
@@ -473,9 +473,7 @@ export function StandaloneWorkbenchPagePresentation({
                           openTabs={workbench.openTabs}
                           projectFiles={velarStructureProjectFiles}
                           projectSnapshots={velarStructureProjectSnapshots}
-                          refreshVersion={
-                            workbench.saveRevision + workbench.workspaceBindingVersion
-                          }
+                          refreshVersion={workbench.saveRevision}
                           workbenchTheme={workbenchPreferences.preferences.theme}
                           onProjectSnapshotsChange={handleVelarStructureProjectSnapshotsChange}
                           onOpenSource={(source) => {

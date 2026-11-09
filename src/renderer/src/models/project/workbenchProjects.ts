@@ -5,107 +5,23 @@ import {
   readStringScalar as readString,
 } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
+import type { WorkbenchProject } from '@shared/projectHub'
+
 import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
-export interface WorkbenchProject {
-  id: string
-  name: string
-  rootPath: string
-  createdAt: number
-  lastOpenedAt: Nullable<number>
-  pinned: boolean
-}
+export type { WorkbenchProject } from '@shared/projectHub'
 
 const STORAGE_KEY = 'velaros.workbench.projects.v1'
 const log = Log.tag('workbench-projects')
 
 export function normalizeWorkbenchProjectRootPath(rootPath: string): string {
-  return rootPath.trim().replace(/[\\/]+$/g, '')
+  const path = rootPath.trim()
+  if (/^[\\/]+$/u.test(path)) return path[0]!
+  if (/^[A-Za-z]:[\\/]+$/u.test(path)) return path.slice(0, 3)
+  return path.replace(/[\\/]+$/u, '')
 }
 
-function getProjectName(rootPath: string): string {
-  const normalized = normalizeWorkbenchProjectRootPath(rootPath)
-  const name = normalized.split(/[\\/]/).findLast((value) => !!value)
-  return name || normalized || rootPath
-}
-
-function createProjectId(): string {
-  const randomId = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-  return `project-${randomId}`
-}
-
-function hashProjectRootPath(rootPath: string): string {
-  let hash = 0x811c9dc5
-  for (let index = 0; index < rootPath.length; index += 1) {
-    hash ^= rootPath.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193)
-  }
-
-  return (hash >>> 0).toString(16).padStart(8, '0')
-}
-
-export function createWorkbenchProject(rootPath: string, now = Date.now()): WorkbenchProject {
-  const normalizedRootPath = normalizeWorkbenchProjectRootPath(rootPath)
-
-  return {
-    id: createProjectId(),
-    name: getProjectName(normalizedRootPath),
-    rootPath: normalizedRootPath,
-    createdAt: now,
-    lastOpenedAt: null,
-    pinned: false,
-  }
-}
-
-/**
- * 程序化入口（hook 发起的 workbench 任务）：确保项目根已正式注册进项目工作区。
- * 已存在按根路径复用；不存在则创建并落盘（更新 lastOpenedAt），返回注册后的项目记录。
- */
-export function ensureWorkbenchProjectRegistered(
-  rootPath: string,
-  storage?: StorageLike,
-  now = Date.now()
-): WorkbenchProject {
-  const normalizedRootPath = normalizeWorkbenchProjectRootPath(rootPath)
-  const projects = readWorkbenchProjects(storage)
-  const existing = projects.find(
-    (project) => normalizeWorkbenchProjectRootPath(project.rootPath) === normalizedRootPath
-  )
-
-  if (existing) {
-    const opened = { ...existing, lastOpenedAt: now }
-    saveWorkbenchProjects(
-      projects.map((project) => (project.id === existing.id ? opened : project)),
-      storage
-    )
-    return opened
-  }
-
-  const created = { ...createWorkbenchProject(normalizedRootPath, now), lastOpenedAt: now }
-  saveWorkbenchProjects([created, ...projects], storage)
-  return created
-}
-
-export function createTransientWorkbenchProject(
-  rootPath: string,
-  now = Date.now()
-): WorkbenchProject {
-  const normalizedRootPath = normalizeWorkbenchProjectRootPath(rootPath)
-
-  return {
-    id: `transient-project-${hashProjectRootPath(normalizedRootPath)}`,
-    name: getProjectName(normalizedRootPath),
-    rootPath: normalizedRootPath,
-    createdAt: now,
-    lastOpenedAt: now,
-    pinned: false,
-  }
-}
-
-export function normalizeWorkbenchProjectList(
-  projects: readonly WorkbenchProject[]
-): WorkbenchProject[] {
+function normalizeWorkbenchProjectList(projects: readonly WorkbenchProject[]): WorkbenchProject[] {
   const seenRoots = new Set<string>()
   const normalizedProjects: WorkbenchProject[] = []
 
@@ -116,7 +32,6 @@ export function normalizeWorkbenchProjectList(
     seenRoots.add(normalizedRootPath)
     normalizedProjects.push({
       ...project,
-      name: project.name || getProjectName(normalizedRootPath),
       rootPath: normalizedRootPath,
     })
   }
@@ -157,17 +72,9 @@ const workbenchProjectsStore = createLocalStorageJsonStore<WorkbenchProject[]>({
   normalize: normalizeWorkbenchProjects,
   log,
   readErrorMessage: '读取 workbench 项目列表失败，使用空列表',
-  writeErrorMessage: '写入 workbench 项目列表失败',
 })
 
+/** 新主进程 registry 首次初始化时导入的完整快照；renderer 不再写入此存储。 */
 export function readWorkbenchProjects(storage?: StorageLike): WorkbenchProject[] {
   return workbenchProjectsStore.read(storage)
-}
-
-export function saveWorkbenchProjects(projects: WorkbenchProject[], storage?: StorageLike): void {
-  workbenchProjectsStore.write(normalizeWorkbenchProjectList(projects), storage)
-}
-
-export function getWorkbenchSessionId(projectId: string): string {
-  return `workbench:${projectId}`
 }

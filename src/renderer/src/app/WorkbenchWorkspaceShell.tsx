@@ -1,12 +1,10 @@
 /**
  * 打开项目后的工作台装配根：窗口内容直接由完整 IDE surface 接管。
  *
- * 项目状态唯一权威在 main 侧项目枢纽（ProjectHub）；这里把当前项目根以
- * `lockedProjectRootPath + registerLockedProject` 喂给页面 model——语义与 desktop
- * hook 发起的项目窗口一致：正式注册进项目列表并锁定为活跃项目。最近项目状态
- * 继续由 main 侧权威传入，供统一顶部项目控件做当前窗口切换或新窗口打开。
+ * 项目状态和持久身份由 main 侧项目枢纽持有。登记成功后才挂载 IDE，最近项目状态
+ * 继续由 main 侧传入，供顶部项目控件做当前窗口切换或新窗口打开。
  */
-import { type ReactElement } from 'react'
+import { type ReactElement, useEffect, useState } from 'react'
 import { WorkbenchChatProvider } from '@renderer/composition/WorkbenchChatProvider'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
@@ -17,9 +15,15 @@ import {
   ConversationRenderSlotsProvider,
 } from '@velaros-ai/ui/conversation'
 import { ConversationComposerPortProvider } from '@velaros-ai/ui/conversation/composer'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import type { WorkbenchOpenedProject, WorkbenchProjectHubState } from '../../../shared/projectHub'
+import type {
+  WorkbenchOpenedProject,
+  WorkbenchProject,
+  WorkbenchProjectHubState,
+} from '../../../shared/projectHub'
 import { useStandaloneWorkbenchPageModel } from '../hooks/useStandaloneWorkbenchPageModel'
+import { readWorkbenchProjects } from '../models/project/workbenchProjects'
 import { standaloneWorkbenchComposerPort } from '../runtime/conversation/standaloneWorkbenchComposerPort'
 import { standaloneWorkbenchConversationActionPort } from '../runtime/conversation/standaloneWorkbenchConversationActionPort'
 import { standaloneWorkbenchConversationBlockHooks } from '../runtime/conversation/standaloneWorkbenchConversationBlockHooks'
@@ -39,17 +43,57 @@ interface WorkbenchWorkspaceShellProps {
 function WorkbenchProjectStage({
   project,
   projectHubState,
-}: WorkbenchWorkspaceShellProps): ReactElement {
-  const model = useStandaloneWorkbenchPageModel({
-    lockedProjectRootPath: project.path,
-    registerLockedProject: true,
-  })
+}: {
+  project: WorkbenchProject
+  projectHubState: WorkbenchProjectHubState
+}): ReactElement {
+  const model = useStandaloneWorkbenchPageModel(project)
 
   return (
     <WorkbenchPageModelProvider model={model}>
       <StandaloneWorkbenchPagePresentation projectHubState={projectHubState} />
     </WorkbenchPageModelProvider>
   )
+}
+
+type ProjectRegistration =
+  | { kind: 'loading' }
+  | { kind: 'ready'; project: WorkbenchProject }
+  | { kind: 'error'; message: string }
+
+function WorkbenchRegisteredProjectStage({
+  projectHubState,
+}: {
+  projectHubState: WorkbenchProjectHubState
+}): ReactElement | null {
+  const { t } = useWorkbenchI18n()
+  const [registration, setRegistration] = useState<ProjectRegistration>({ kind: 'loading' })
+
+  useEffect(() => {
+    let disposed = false
+    const legacyProjects = readWorkbenchProjects()
+    void window.velarosWorkbenchProjectHub.resolveRegistration(legacyProjects).then(
+      (project) => {
+        if (!disposed) setRegistration({ kind: 'ready', project })
+      },
+      (error: unknown) => {
+        if (!disposed) setRegistration({ kind: 'error', message: AppError.getMessage(error) })
+      }
+    )
+    return () => {
+      disposed = true
+    }
+  }, [])
+
+  if (registration.kind === 'loading') return null
+  if (registration.kind === 'error')
+    return (
+      <div role="alert">
+        <strong>{t('workbench.openProjectFailed')}</strong>
+        <p>{registration.message}</p>
+      </div>
+    )
+  return <WorkbenchProjectStage project={registration.project} projectHubState={projectHubState} />
 }
 
 /**
@@ -71,9 +115,8 @@ export function WorkbenchWorkspaceShell({
                 <div className="workbench-workspace-shell">
                   <main className="workbench-workspace-shell__stage">
                     {/* key=项目根：切换项目时整棵 IDE 状态树重建，避免跨项目残留。 */}
-                    <WorkbenchProjectStage
+                    <WorkbenchRegisteredProjectStage
                       key={project.path}
-                      project={project}
                       projectHubState={projectHubState}
                     />
                   </main>

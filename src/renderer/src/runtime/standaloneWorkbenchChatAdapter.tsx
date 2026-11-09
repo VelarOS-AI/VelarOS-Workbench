@@ -1223,7 +1223,6 @@ function buildStandaloneProjectRuntime(
     currentSession: toSnapshot(state, folderId),
     sessions: allStates.map((candidate) => toSnapshot(candidate, folderId)),
     conversationVersion: state.revision,
-    browserActivationToken: null,
     sessionList: {
       activeMemberSessionId: state.sessionId,
       activeSessionId: folderId,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -10,7 +10,19 @@ import { RecentProjectsStore } from '../src/main/projects/RecentProjectsStore'
 
 void describe('Workbench project window ownership', () => {
   void test('routes OS and renderer folder opens through the multi-window owner', async () => {
-    const [main, manager, menu, preload, app, presentation, settings, host, control, styles, builder] = await Promise.all([
+    const [
+      main,
+      manager,
+      menu,
+      preload,
+      app,
+      presentation,
+      settings,
+      workspaceShell,
+      control,
+      styles,
+      builder,
+    ] = await Promise.all([
       readFile('src/main/index.ts', 'utf8'),
       readFile('src/main/projects/WorkbenchWindowManager.ts', 'utf8'),
       readFile('src/main/projects/ProjectHubMenu.ts', 'utf8'),
@@ -18,7 +30,7 @@ void describe('Workbench project window ownership', () => {
       readFile('src/renderer/src/app/StandaloneWorkbenchApp.tsx', 'utf8'),
       readFile('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
       readFile('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx', 'utf8'),
-      readFile('src/renderer/src/host/standaloneWorkbenchHost.ts', 'utf8'),
+      readFile('src/renderer/src/app/WorkbenchWorkspaceShell.tsx', 'utf8'),
       readFile('src/renderer/src/components/chrome/WorkbenchProjectControl.tsx', 'utf8'),
       readFile('src/renderer/src/styles/02-chrome-top.module.css', 'utf8'),
       readFile('electron-builder.yml', 'utf8'),
@@ -35,7 +47,10 @@ void describe('Workbench project window ownership', () => {
     assert.match(manager, /this\.createWindow\(projectPath\)/u)
     assert.match(manager, /switchProjectPath[\s\S]*releaseProjectResources/u)
     assert.match(manager, /openProjectPathInNewWindow[\s\S]*openProjectPath\(null, path\)/u)
-    assert.match(manager, /cloneProjectInNewWindow[\s\S]*'git',[\s\S]*'clone'[\s\S]*openProjectPathInNewWindow/u)
+    assert.match(
+      manager,
+      /cloneProjectInNewWindow[\s\S]*'git',[\s\S]*'clone'[\s\S]*openProjectPathInNewWindow/u
+    )
     assert.match(menu, /app\.dock\?\.setMenu\(buildDockMenu\(windows\)\)/u)
     assert.match(menu, /buildRecentProjectItems\(windows, recentProjects, 'new-window'\)/u)
     assert.match(preload, /webUtils\.getPathForFile\(file\)/u)
@@ -57,12 +72,8 @@ void describe('Workbench project window ownership', () => {
       await readFile('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx', 'utf8'),
       /exitCurrentProject[\s\S]*velarosWorkbenchProjectHub\.returnToEntry\(\)/u
     )
-    assert.match(
-      manager,
-      /public async closeProject[\s\S]*?return this\.returnToEntry\(sender\)/u
-    )
-    assert.match(host, /addWorkspaceRoot:[\s\S]*validateProjectPath\(path\)/u)
-    assert.doesNotMatch(host, /addWorkspaceRoot:[\s\S]*openProjectPath\(path\)/u)
+    assert.match(preload, /WorkbenchProjectHubChannels\.resolveRegistration/u)
+    assert.match(workspaceShell, /resolveRegistration\(legacyProjects\)/u)
     assert.match(control, /projectControlRecentMain[\s\S]*onSwitchProject\(project\.path\)/u)
     assert.match(control, /projectControlNewWindowButton[\s\S]*onOpenProjectInNewWindow/u)
     assert.match(control, /projectAddLocal[\s\S]*projectCloneRemote/u)
@@ -155,6 +166,50 @@ void describe('Workbench project window ownership', () => {
 
       hub.acknowledgeFileOpen(second?.id ?? 0)
       assert.equal(hub.getState().pendingFileOpen, null)
+    } finally {
+      await rm(dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('switching projects discards old file requests and ignores their acknowledgements', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-file-open-switch-'))
+    const firstRoot = join(dataRoot, 'first')
+    const secondRoot = join(dataRoot, 'second')
+    await mkdir(firstRoot)
+    await mkdir(secondRoot)
+
+    try {
+      const hub = new WorkbenchProjectHub(new RecentProjectsStore(dataRoot))
+      hub.openProjectPath(firstRoot)
+      hub.requestFileOpen('src/first.ts')
+      const firstRequest = hub.getState().pendingFileOpen!
+      hub.requestFileOpen('src/queued.ts')
+
+      hub.openProjectPath(secondRoot)
+      assert.equal(hub.getState().pendingFileOpen, null)
+      hub.requestFileOpen('src/second.ts')
+      hub.acknowledgeFileOpen(firstRequest.id)
+      assert.equal(hub.getState().pendingFileOpen?.path, 'src/second.ts')
+      hub.acknowledgeFileOpen(hub.getState().pendingFileOpen!.id)
+      assert.equal(hub.getState().pendingFileOpen, null)
+    } finally {
+      await rm(dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('loads the current recent-project schema and rejects unsupported versions', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-recent-project-schema-'))
+    const storageRoot = join(dataRoot, 'storage')
+    await mkdir(storageRoot)
+    const filePath = join(storageRoot, 'recent-projects.json')
+    const entry = { path: join(dataRoot, 'project'), name: 'project', lastOpenedAt: 123 }
+
+    try {
+      await writeFile(filePath, JSON.stringify({ version: 1, entries: [null, entry] }))
+      assert.deepEqual(new RecentProjectsStore(dataRoot).list(), [entry])
+
+      await writeFile(filePath, JSON.stringify({ version: 2, entries: [entry] }))
+      assert.deepEqual(new RecentProjectsStore(dataRoot).list(), [])
     } finally {
       await rm(dataRoot, { recursive: true, force: true })
     }

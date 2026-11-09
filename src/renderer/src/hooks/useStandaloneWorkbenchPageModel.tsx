@@ -31,7 +31,6 @@ import { useWorkbenchProjectFileList } from '@renderer/hooks/useWorkbenchProject
 import { useWorkbenchProjectGitSettings } from '@renderer/hooks/useWorkbenchProjectGitSettings'
 import { useWorkbenchProjectRunSettings } from '@renderer/hooks/useWorkbenchProjectRunSettings'
 import { useWorkbenchRecentFiles } from '@renderer/hooks/useWorkbenchRecentFiles'
-import { useWorkbenchStandaloneProjectSync } from '@renderer/hooks/useWorkbenchStandaloneProjectSync'
 import { useWorkbenchSurfaceState } from '@renderer/hooks/useWorkbenchSurfaceState'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workbenchChatWorkspacePath'
@@ -54,9 +53,7 @@ import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenc
 import { resolveWorkbenchNavigationSurface } from '@renderer/models/layout/workbenchSurfaceModel'
 import { saveLightEditorTab } from '@renderer/models/lightEditorModel'
 import {
-  createTransientWorkbenchProject,
-  ensureWorkbenchProjectRegistered,
-  normalizeWorkbenchProjectList,
+  normalizeWorkbenchProjectRootPath,
   type WorkbenchProject,
 } from '@renderer/models/project/workbenchProjects'
 import type { PersistedWorkbenchEditorCursor } from '@renderer/models/project/workbenchProjectSessionModel'
@@ -67,7 +64,7 @@ import {
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
-import { isEmpty, isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/velaros/core'
+import { isEmpty, Log, toNullable } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
 import { Result } from '@velaros-ai/velaros/core/result'
@@ -103,15 +100,6 @@ const WorkspaceWatchUnavailableNoticeId = 'workbench-workspace-watch-unavailable
 const WORKBENCH_NATIVE_AI_RULES_PATH = '.velar/rules.md'
 const log = Log.tag('workbench-page')
 
-interface UseStandaloneWorkbenchPageModelOptions {
-  bootstrapProjects?: readonly WorkbenchProject[]
-  lockedProjectId?: LooseOptional<string>
-  lockedProjectRootPath?: LooseOptional<string>
-  /** hook 发起的项目窗口：把 lockedProjectRootPath 正式注册进项目工作区，而不是 transient。 */
-  registerLockedProject?: boolean
-  surface?: 'standalone' | 'embedded'
-}
-
 export type PendingWorkbenchBrowserElementSelection = WorkbenchBrowserElementSelectionDelivery
 
 /** 一次页面导航：去向（决定编辑区落在哪一组、左侧切到哪个面板）加上要放进编辑区的东西。 */
@@ -132,10 +120,6 @@ type WorkbenchNavigationRequest =
   | { target: 'ai-changes'; round: WorkbenchChatRunChangesTarget }
   /** 打开项目搜索；给了 seed 就拿它当查找词。 */
   | { target: 'search'; seed?: string }
-
-function normalizeWorkspaceRoot(root: LooseOptional<string>): string {
-  return (root ?? '').replace(/[\\/]+$/, '')
-}
 
 function countLines(content: string): number {
   return content ? content.split('\n').length : 1
@@ -195,13 +179,13 @@ function findFileChangeReviewEntry({
   activeProjectRoot: string
   entries: readonly WorkbenchChatFileChangeEntry[]
 }): Nullable<WorkbenchChatFileChangeEntry> {
-  const activeRoot = normalizeWorkspaceRoot(activeProjectRoot)
+  const activeRoot = normalizeWorkbenchProjectRootPath(activeProjectRoot)
 
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index]
     if (!entry) continue
 
-    const entryRoot = normalizeWorkspaceRoot(entry.rootPath)
+    const entryRoot = normalizeWorkbenchProjectRootPath(entry.rootPath ?? '')
     if (entryRoot && entryRoot !== activeRoot) {
       continue
     }
@@ -219,56 +203,16 @@ function getFileChangeOpenPath(entry: WorkbenchChatFileChangeEntry): string {
   return systemPlatformCompatibility.joinPathText(entry.rootPath, entry.path)
 }
 
-export function useStandaloneWorkbenchPageModel(
-  options: LooseOptional<string> | UseStandaloneWorkbenchPageModelOptions = null
-) {
-  const optionRecord = options && isObject(options) ? options : null
-  const lockedProjectRootPath = isString(options)
-    ? null
-    : toNullable(optionRecord?.lockedProjectRootPath)
-  const registerLockedProject = !isString(options) && isTrue(optionRecord?.registerLockedProject)
-  // hook 发起的窗口把 root 正式注册进项目工作区（出现在项目列表里）；
-  // 其余 rootPath 锁定窗口维持 transient 语义（临时 workspace root，不落项目列表）。
-  const rootLockedProject = useMemo(
-    () =>
-      lockedProjectRootPath
-        ? registerLockedProject
-          ? ensureWorkbenchProjectRegistered(lockedProjectRootPath)
-          : createTransientWorkbenchProject(lockedProjectRootPath)
-        : null,
-    [lockedProjectRootPath, registerLockedProject]
-  )
-  const explicitLockedProjectId = isString(options)
-    ? options
-    : toNullable(optionRecord?.lockedProjectId)
-  const lockedProjectId = toNullable(explicitLockedProjectId ?? rootLockedProject?.id)
-  const bootstrapProjects = useMemo(
-    () =>
-      normalizeWorkbenchProjectList([
-        ...((optionRecord?.bootstrapProjects ?? []) as readonly WorkbenchProject[]),
-        ...(rootLockedProject ? [rootLockedProject] : []),
-      ]),
-    [optionRecord?.bootstrapProjects, rootLockedProject]
-  )
-  const surfaceMode = optionRecord?.surface ?? 'standalone'
-  const shouldPersistProjectList =
-    surfaceMode === 'standalone' && (!rootLockedProject || registerLockedProject)
+export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
   const translate = useStableWorkbenchMessageTranslate()
   const { locale, t } = translate
   const {
     config: { defaultEditor, git: globalGitConfig },
   } = useWorkbenchProductRuntime()
   const sessionCursorByPathRef = useRef<Record<string, PersistedWorkbenchEditorCursor>>({})
-  const shouldUseProjectSession = surfaceMode === 'standalone'
   const workbenchPreferences = useWorkbenchPreferences()
   const workbench = useWorkbenchController({
-    bootstrapProjects,
-    lockedProjectId,
-    persistProjectList: shouldPersistProjectList,
-    persistProjectSession: shouldUseProjectSession,
-    restoreProjectSession: shouldUseProjectSession,
-    // Project 基础索引是内置能力；CodeGraph 只决定增强图谱入口是否点亮。
-    projectIndexEnabled: true,
+    project,
     previewTabsEnabled: workbenchPreferences.preferences.editorPreviewTabs,
     sessionCursorByPathRef,
   })
@@ -339,7 +283,6 @@ export function useStandaloneWorkbenchPageModel(
   const gitState = useWorkbenchGitState({
     activeProject: workbench.activeProject,
     gitSurfacesActive,
-    workspaceBindingVersion: workbench.workspaceBindingVersion,
   })
   const activePackageScriptRunConfigurations = useMemo(() => {
     if (!workbench.selectedFilePath) return []
@@ -506,7 +449,7 @@ export function useStandaloneWorkbenchPageModel(
   const recentFilePaths = useWorkbenchRecentFiles({
     projectId: toNullable(workbench.activeProject?.id),
     selectedFilePath: workbench.selectedFilePath,
-    persist: shouldUseProjectSession,
+    persist: true,
   })
   // 快速打开按文件名找文件用的整份清单：项目打开后空闲时先读好，快速打开开着时过期了就重读。
   const projectFiles = useWorkbenchProjectFileList({
@@ -514,7 +457,7 @@ export function useStandaloneWorkbenchPageModel(
     active: surface.isQuickOpenOpen,
   })
   useWorkbenchProjectSessionPersistence({
-    enabled: shouldUseProjectSession,
+    enabled: workbench.projectSessionReady,
     projectId: toNullable(workbench.activeProject?.id),
     expandedPaths: workbench.expandedPaths,
     selectedEntryPath: workbench.selectedEntryPath,
@@ -585,7 +528,7 @@ export function useStandaloneWorkbenchPageModel(
 
   useWorkbenchKeyboardShortcuts({
     activeRightTool: surface.activeRightTool,
-    enabled: surfaceMode === 'standalone' && !!workbench.activeProject && !settingsOpen,
+    enabled: !settingsOpen,
     isQuickOpenOpen: surface.isQuickOpenOpen,
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
@@ -605,24 +548,17 @@ export function useStandaloneWorkbenchPageModel(
     onToggleRightTool: surface.toggleRightTool,
   })
   useWorkbenchDebugShortcuts({
-    enabled: surfaceMode === 'standalone' && !!workbench.activeProject && !settingsOpen,
+    enabled: !settingsOpen,
     keymap: workbenchKeymap.keymap,
   })
-  useWorkbenchStandaloneProjectSync({
-    activeProject: workbench.activeProject,
-    lockedProjectId,
-    projects: workbench.sortedProjects,
-    standalone: true,
-    updateDocumentTitle: surfaceMode === 'standalone',
-    onOpenProject: workbench.openProject,
-  })
+  useEffect(() => {
+    document.title = project.name
+  }, [project.name])
 
   // 鼠标侧键：后退键（按钮 3）、前进键（按钮 4）与快捷键一样走编辑区的后退 / 前进。
   const navigateBackLatest = useLatest(editorNavigation.goBack)
   const navigateForwardLatest = useLatest(editorNavigation.goForward)
   useEffect(() => {
-    if (surfaceMode !== 'standalone' || !workbench.activeProject) return undefined
-
     const handleMouseUp = (event: MouseEvent): void => {
       if (event.button !== 3 && event.button !== 4) return
       event.preventDefault()
@@ -630,7 +566,7 @@ export function useStandaloneWorkbenchPageModel(
     }
     window.addEventListener('mouseup', handleMouseUp)
     return () => window.removeEventListener('mouseup', handleMouseUp)
-  }, [navigateBackLatest, navigateForwardLatest, surfaceMode, workbench.activeProject])
+  }, [navigateBackLatest, navigateForwardLatest])
 
   const zoomEditor = useMemoizedFn((action: WorkbenchEditorZoomAction): void => {
     workbenchPreferences.updatePreferences({
@@ -645,13 +581,10 @@ export function useStandaloneWorkbenchPageModel(
   // 主进程拦下关闭时交回这里，先存能存的，存不下的再问用户，答复送回去由主进程放行或作罢。
   const { hasUnsavedOpenTabs, confirmWindowClose } = workbench
   useEffect(() => {
-    if (surfaceMode !== 'standalone') return
     window.velarosWorkbenchWindowClose.setUnsavedChanges(hasUnsavedOpenTabs)
-  }, [hasUnsavedOpenTabs, surfaceMode])
+  }, [hasUnsavedOpenTabs])
 
   useEffect(() => {
-    if (surfaceMode !== 'standalone') return undefined
-
     const unsubscribe = window.velarosWorkbenchWindowClose.onCloseRequested((request) => {
       void confirmWindowClose(request.reason)
         .catch((error: unknown) => {
@@ -666,36 +599,36 @@ export function useStandaloneWorkbenchPageModel(
       unsubscribe()
       window.velarosWorkbenchWindowClose.setUnsavedChanges(false)
     }
-  }, [confirmWindowClose, surfaceMode])
+  }, [confirmWindowClose])
 
-  useEffect(() => {
-    if (surfaceMode !== 'standalone') return
-
-    return window.velarosWorkbenchProjectHub.onMenuCommand((command) => {
-      switch (command) {
-        case 'close-editor': {
-          // 设置页盖在编辑区上时不去关背后看不见的标签。
-          if (!settingsOpen) setCloseActiveEditorTabRequestId((requestId) => requestId + 1)
-          return
+  useEffect(
+    () =>
+      window.velarosWorkbenchProjectHub.onMenuCommand((command) => {
+        switch (command) {
+          case 'close-editor': {
+            // 设置页盖在编辑区上时不去关背后看不见的标签。
+            if (!settingsOpen) setCloseActiveEditorTabRequestId((requestId) => requestId + 1)
+            return
+          }
+          case 'close-project': {
+            void exitCurrentProject()
+            return
+          }
+          case 'zoom-editor-in': {
+            zoomEditor('increase')
+            return
+          }
+          case 'zoom-editor-out': {
+            zoomEditor('decrease')
+            return
+          }
+          case 'zoom-editor-reset': {
+            zoomEditor('reset')
+          }
         }
-        case 'close-project': {
-          void exitCurrentProject()
-          return
-        }
-        case 'zoom-editor-in': {
-          zoomEditor('increase')
-          return
-        }
-        case 'zoom-editor-out': {
-          zoomEditor('decrease')
-          return
-        }
-        case 'zoom-editor-reset': {
-          zoomEditor('reset')
-        }
-      }
-    })
-  }, [exitCurrentProject, settingsOpen, surfaceMode, zoomEditor])
+      }),
+    [exitCurrentProject, settingsOpen, zoomEditor]
+  )
   const workspaceFileRefreshInFlightRef = useRef(false)
   const workspaceFileRefreshQueuedRef = useRef(false)
 
@@ -1031,8 +964,8 @@ export function useStandaloneWorkbenchPageModel(
     const activeProject = workbench.activeProject
     if (!activeProject) return
 
-    const entryRoot = normalizeWorkspaceRoot(entry.rootPath)
-    const activeRoot = normalizeWorkspaceRoot(activeProject.rootPath)
+    const entryRoot = normalizeWorkbenchProjectRootPath(entry.rootPath ?? '')
+    const activeRoot = normalizeWorkbenchProjectRootPath(activeProject.rootPath)
 
     if (!entryRoot || entryRoot === activeRoot) {
       await navigate({ target: 'file', path: entry.path })
@@ -1317,7 +1250,6 @@ export function useStandaloneWorkbenchPageModel(
     projectSearch,
     /** 页面 chrome / i18n / 派生展示值。 */
     chrome: {
-      lockedProjectId,
       translate,
       locale,
       t,

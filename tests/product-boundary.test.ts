@@ -27,15 +27,12 @@ import {
   saveLightEditorTab,
 } from '../src/renderer/src/models/lightEditorModel'
 import {
-  createWorkbenchProject,
+  normalizeWorkbenchProjectRootPath,
   readWorkbenchProjects,
-  saveWorkbenchProjects,
 } from '../src/renderer/src/models/project/workbenchProjects'
 import { WorkbenchCommentStore } from '../src/renderer/src/models/workbenchCommentStore'
 import {
   createLocalStorageJsonStore,
-  JsonStorageStore,
-  type LocalStorageJsonStore,
   type StorageLike,
 } from '../src/renderer/src/support/localStorageJsonStore'
 
@@ -44,10 +41,8 @@ function createHost(marker: string): WorkbenchHost {
     kernel: {
       project: { marker },
       sessions: {},
-      settings: {},
       workspace: {},
     },
-    shell: {},
   } as unknown as WorkbenchHost
 }
 
@@ -87,7 +82,6 @@ void describe('Workbench product boundary', () => {
     installWorkbenchHost(second)
 
     assert.equal(workbenchHost.kernel, second.kernel)
-    assert.equal(workbenchHost.shell, second.shell)
   })
 
   void test('isolated host runtimes guard install and teardown ownership', () => {
@@ -176,7 +170,7 @@ void describe('Workbench product boundary', () => {
 
   void test('JSON stores own normalization and injected storage lifecycle', () => {
     const storage = createMemoryStorage()
-    const store = new JsonStorageStore<number>({
+    const store = createLocalStorageJsonStore<number>({
       key: 'count',
       fallback: 0,
       normalize: (value) => Number(value) || 0,
@@ -184,22 +178,17 @@ void describe('Workbench product boundary', () => {
     })
 
     assert.equal(store.read(), 0)
-    assert.equal(store.update((value) => value + 2), 2)
+    assert.equal(
+      store.update((value) => value + 2),
+      2
+    )
     assert.equal(store.read(), 2)
     store.remove()
     assert.equal(store.read(), 0)
   })
 
-  void test('legacy storage contract remains structural and factory methods stay bound', () => {
+  void test('JSON factory methods stay bound when passed as callbacks', () => {
     const storage = createMemoryStorage()
-    const custom: LocalStorageJsonStore<number> = {
-      read: () => 1,
-      write: () => undefined,
-      update: (updater) => updater(1),
-      remove: () => undefined,
-    }
-    assert.equal(custom.read(), 1)
-
     const { read, write } = createLocalStorageJsonStore({
       key: 'bound-count',
       fallback: 0,
@@ -209,11 +198,24 @@ void describe('Workbench product boundary', () => {
     assert.equal(read(), 3)
   })
 
-  void test('project persistence is owned by the product model', () => {
+  void test('project persistence imports existing identities without rewriting local storage', () => {
     const storage = createMemoryStorage()
-    const project = createWorkbenchProject('/workspace/velaros', 42)
-    saveWorkbenchProjects([project], storage)
-    assert.deepEqual(readWorkbenchProjects(storage), [project])
+    const roots = ['/workspace/velaros', '/', 'C:\\']
+    const projects = roots.map((root, index) => {
+      assert.equal(normalizeWorkbenchProjectRootPath(root), root)
+      return {
+        id: `project-${index}`,
+        name: root,
+        rootPath: root,
+        createdAt: 42,
+        lastOpenedAt: null,
+        pinned: false,
+      }
+    })
+    const source = JSON.stringify(projects)
+    storage.setItem('velaros.workbench.projects.v1', source)
+    assert.deepEqual(readWorkbenchProjects(storage), projects)
+    assert.equal(storage.getItem('velaros.workbench.projects.v1'), source)
   })
 
   void test('keyboard conflicts stay inside the product model', () => {
@@ -233,7 +235,10 @@ void describe('Workbench product boundary', () => {
       { path: 'README.md', indexStatus: '?', workTreeStatus: '?' },
     ])
 
-    assert.deepEqual(items.map((item) => item.group), ['unstaged', 'untracked'])
+    assert.deepEqual(
+      items.map((item) => item.group),
+      ['unstaged', 'untracked']
+    )
     const decoration = buildWorkbenchGitDecorationMap(items).get('src')
     assert.equal(decoration?.isDirectory, true)
     assert.equal(decoration?.tone, 'modified')

@@ -4,7 +4,7 @@ import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemir
 
 import { isEmpty } from '@velaros-ai/velaros/core'
 
-import { getWorkbenchComment, type WorkbenchComment } from '../../models/workbenchCommentStore'
+import { type WorkbenchComment } from '../../models/workbenchCommentStore'
 
 import { resolveWorkbenchAnchorEndLine } from './workbenchLineAnchors'
 
@@ -31,8 +31,8 @@ export const addWorkbenchCommentAnchorEffect = StateEffect.define<WorkbenchComme
 export const retainWorkbenchCommentAnchorsEffect = StateEffect.define<Set<string>>()
 
 export interface WorkbenchCommentExtensionOptions {
-  /** 当前 composition root 的评论读取器；省略时仅为兼容而读取默认仓库。 */
-  getComment?: (id: string) => Nullable<WorkbenchComment>
+  /** 当前 composition root 的评论读取器。 */
+  getComment: (id: string) => Nullable<WorkbenchComment>
   /** 锚点因文档编辑塌陷被自动丢弃时回调（把评论从存储移除）。 */
   onAnchorsRemoved: (ids: string[]) => void
   /** 锚点起止行随编辑变化时回调（回写存储行号，供展示与再锚定）。 */
@@ -237,7 +237,7 @@ function buildCommentDecorations(
           options.resolveSaveLabel,
           options.resolveCancelLabel,
           options.resolveDeleteLabel,
-          options.getComment ?? getWorkbenchComment
+          options.getComment
         ),
         side: 1,
       }).range(anchor.to)

@@ -10,7 +10,10 @@ import { createModelRuntimeComposition } from '@velaros-ai/velaros/model'
 
 import productionAppIconPath from '../../resources/icons/icon.png?asset'
 import developmentAppIconPath from '../../resources/icons/icon-dev.png?asset'
-import { WorkbenchBrowserPartition } from '../shared/workbenchBrowser'
+import {
+  normalizeWorkbenchBrowserPageUrl,
+  WorkbenchBrowserPartition,
+} from '../shared/workbenchBrowser'
 
 import { registerWorkbenchAccountIpc } from './account/WorkbenchAccountIpc'
 import { WorkbenchAccountService } from './account/WorkbenchAccountService'
@@ -52,10 +55,8 @@ import {
   installWorkbenchExternalNavigation,
   isWorkbenchAgentConsoleRequest,
 } from './projects/WorkbenchExternalNavigation'
-import {
-  normalizeWorkbenchInternalBrowserUrl,
-  prepareWorkbenchWebviewAttachment,
-} from './projects/WorkbenchWebviewSecurity'
+import { WorkbenchProjectRegistry } from './projects/WorkbenchProjectRegistry'
+import { prepareWorkbenchWebviewAttachment } from './projects/WorkbenchWebviewSecurity'
 import { WorkbenchWindowCloseGuard } from './projects/WorkbenchWindowCloseGuard'
 import { registerWorkbenchWindowCloseIpc } from './projects/WorkbenchWindowCloseIpc'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
@@ -242,7 +243,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
       }
     )
     guestContents.on('will-navigate', (event, url) => {
-      if (!normalizeWorkbenchInternalBrowserUrl(url)) event.preventDefault()
+      if (!normalizeWorkbenchBrowserPageUrl(url)) event.preventDefault()
     })
   })
   installWorkbenchEditorZoom(window)
@@ -455,7 +456,7 @@ if (hasSingleInstanceLock)
       windowManager,
       withLanguageSyncOnUserWrites(providers.chatRunAttribution, providers.language)
     )
-    registerProjectHubIpc(windowManager)
+    registerProjectHubIpc(windowManager, new WorkbenchProjectRegistry(dataRootDir))
     registerWorkbenchWindowStateIpc()
     registerWorkbenchWindowCloseIpc(windowCloseGuard)
     let shutdownStarted = false

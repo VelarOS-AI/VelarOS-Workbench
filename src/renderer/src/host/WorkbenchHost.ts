@@ -1,19 +1,12 @@
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import type { Result } from '@velaros-ai/velaros/core/result'
-import {
-  type ListProviderModelsRequest,
-  type ProviderModelCatalog,
-} from '@velaros-ai/velaros/model'
 
 import {
-  type SystemLocalAttachmentFileRequest,
-  type SystemLocalAttachmentFileResult,
   type SystemLocalAttachmentFileWriteRequest,
   type SystemLocalAttachmentFileWriteResult,
   type SystemOpenPathOptions,
   type SystemOpenPathResult,
-  type SystemOverview,
   type SystemWorkspaceGitActionRequest,
   type SystemWorkspaceGitActionResult,
   type SystemWorkspaceGitBlameResult,
@@ -34,8 +27,6 @@ import {
   type SystemWorkspaceGitStashResult,
   type SystemWorkspaceGitSummary,
   type SystemWorkspaceGitSwitchBranchResult,
-  type SystemWorkspaceRootAddOptions,
-  type SystemWorkspaceRootScope,
   type WorkspaceGitDiffOptions,
   type WorkspaceGitLogOptions,
 } from '@shared/contracts/system'
@@ -288,16 +279,9 @@ export interface WorkbenchProjectKernelPort {
 
 /** Workbench 使用的 Kernel 会话与附件能力。 */
 export interface WorkbenchSessionKernelPort {
-  readLocalAttachmentFile(
-    request: SystemLocalAttachmentFileRequest
-  ): Promise<Result<SystemLocalAttachmentFileResult>>
   writeLocalAttachmentFile(
     request: SystemLocalAttachmentFileWriteRequest
   ): Promise<Result<SystemLocalAttachmentFileWriteResult>>
-}
-
-export interface WorkbenchSettingsKernelPort {
-  listProviderModels(request: ListProviderModelsRequest): Promise<Result<ProviderModelCatalog>>
 }
 
 /** Workbench 使用的共享 workspace 与 Git Kernel 能力。 */
@@ -307,17 +291,6 @@ export interface WorkbenchWorkspaceKernelPort {
     path: string,
     options?: SystemOpenPathOptions
   ): Promise<Result<SystemOpenPathResult>>
-  pickDirectory(): Promise<Result<Nullable<string>>>
-  addWorkspaceRoot(
-    sessionId: string,
-    path: string,
-    options?: SystemWorkspaceRootAddOptions
-  ): Promise<Result<SystemOverview>>
-  setActiveWorkspaceRoot(
-    sessionId: string,
-    path: string,
-    scope?: SystemWorkspaceRootScope
-  ): Promise<Result<SystemOverview>>
   getWorkspaceGitSummary(workspaceRoot: string): Promise<Result<SystemWorkspaceGitSummary>>
   getWorkspaceGitLineStats(
     workspaceRoot: string
@@ -416,32 +389,17 @@ export interface WorkbenchWorkspaceKernelPort {
 export interface WorkbenchKernelPort {
   project: WorkbenchProjectKernelPort
   sessions: WorkbenchSessionKernelPort
-  settings: WorkbenchSettingsKernelPort
   workspace: WorkbenchWorkspaceKernelPort
-}
-
-export interface WorkbenchOpenSettingsWindowRequest {
-  tab?: string
-  focus?: string
-  request?: number
-}
-
-/** Workbench 仍需宿主提供的窗口和系统集成；这些能力不属于 Kernel core。 */
-export interface WorkbenchShellPort {
-  openChatWindow(): Promise<void>
-  openSettingsWindow(request?: WorkbenchOpenSettingsWindowRequest): Promise<void>
 }
 
 export interface WorkbenchHost {
   kernel: WorkbenchKernelPort
-  shell: WorkbenchShellPort
 }
 
 /**
  * Owns the host adapter installed at one Workbench composition root.
  *
- * A dedicated runtime can be instantiated by tests or multi-surface hosts. Package components use
- * the exported default instance for backward compatibility.
+ * React 子树与非 React 控制器通过运行时获取产品端口。
  */
 export class WorkbenchHostRuntime {
   private installedHost: Nullable<WorkbenchHost> = null
@@ -458,14 +416,7 @@ export class WorkbenchHostRuntime {
     return this.requireHost().kernel
   }
 
-  public get shell(): WorkbenchShellPort {
-    return this.requireHost().shell
-  }
-
   public install(host: WorkbenchHost): void {
-    if (!host?.kernel || !host.shell) {
-      throw new AppError('INVALID_ARGUMENT', 'Workbench host must provide kernel and shell ports')
-    }
     this.installedHost = host
   }
 
@@ -498,14 +449,7 @@ export class WorkbenchHostRuntime {
  */
 export const workbenchHost = new WorkbenchHostRuntime()
 
-/** 由产品入口安装具体适配器。Desktop、未来的独立 Workbench 应用可以提供不同实现。 */
+/** 由产品入口安装具体适配器。 */
 export function installWorkbenchHost(host: WorkbenchHost): void {
   workbenchHost.install(host)
-}
-
-/**
- * 卸载宿主适配器。`expectedHost` 可防止旧入口销毁时误卸载较新的安装。
- */
-export function uninstallWorkbenchHost(expectedHost?: WorkbenchHost): boolean {
-  return workbenchHost.uninstall(expectedHost)
 }

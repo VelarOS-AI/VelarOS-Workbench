@@ -27,8 +27,7 @@ const MaxProjectNameLength = 80
 export class WorkbenchProjectHub {
   private readonly listeners = new Set<ProjectHubListener>()
   private currentProject: Nullable<WorkbenchOpenedProject> = null
-  private pendingFileOpen: Nullable<WorkbenchPendingFileOpen> = null
-  private readonly queuedFileOpenPaths: string[] = []
+  private readonly fileOpenRequests: WorkbenchPendingFileOpen[] = []
   private nextFileOpenId = 1
 
   constructor(private readonly store: RecentProjectsStore) {}
@@ -36,7 +35,7 @@ export class WorkbenchProjectHub {
   public getState(): WorkbenchProjectHubState {
     return {
       currentProject: this.currentProject,
-      pendingFileOpen: this.pendingFileOpen,
+      pendingFileOpen: this.fileOpenRequests[0] ?? null,
       recentProjects: this.store.list().map((entry) => ({
         ...entry,
         missing: validateProjectDirectory(entry.path) !== null,
@@ -62,6 +61,7 @@ export class WorkbenchProjectHub {
 
     const project: WorkbenchOpenedProject = { path: projectPath, name: basename(projectPath) }
     this.store.touch({ path: project.path, name: project.name, lastOpenedAt: Date.now() })
+    if (this.currentProject?.path !== projectPath) this.fileOpenRequests.length = 0
     this.currentProject = project
     this.emitState()
     return { ok: true, project }
@@ -75,10 +75,12 @@ export class WorkbenchProjectHub {
       projectName.length > MaxProjectNameLength ||
       projectName.startsWith('.') ||
       InvalidProjectNamePattern.test(projectName)
-    ) return { ok: false, reason: 'invalid-name' }
+    )
+      return { ok: false, reason: 'invalid-name' }
 
     const location = resolve(locationPath)
-    if (validateProjectDirectory(location) !== null) return { ok: false, reason: 'location-missing' }
+    if (validateProjectDirectory(location) !== null)
+      return { ok: false, reason: 'location-missing' }
 
     const projectPath = join(location, projectName)
     if (existsSync(projectPath)) return { ok: false, reason: 'already-exists' }
@@ -107,8 +109,7 @@ export class WorkbenchProjectHub {
 
   public closeProject(): WorkbenchProjectHubState {
     this.currentProject = null
-    this.pendingFileOpen = null
-    this.queuedFileOpenPaths.length = 0
+    this.fileOpenRequests.length = 0
     this.emitState()
     return this.getState()
   }
@@ -126,31 +127,21 @@ export class WorkbenchProjectHub {
       normalizedPath.startsWith('/') ||
       normalizedPath === '..' ||
       normalizedPath.startsWith('../')
-    ) return this.getState()
+    )
+      return this.getState()
 
-    if (
-      this.pendingFileOpen?.path === normalizedPath ||
-      this.queuedFileOpenPaths.includes(normalizedPath)
-    ) return this.getState()
+    if (this.fileOpenRequests.some((request) => request.path === normalizedPath))
+      return this.getState()
 
-    if (this.pendingFileOpen) {
-      this.queuedFileOpenPaths.push(normalizedPath)
-    } else {
-      this.pendingFileOpen = { id: this.nextFileOpenId, path: normalizedPath }
-      this.nextFileOpenId += 1
-    }
+    this.fileOpenRequests.push({ id: this.nextFileOpenId++, path: normalizedPath })
     this.emitState()
     return this.getState()
   }
 
   public acknowledgeFileOpen(id: number): WorkbenchProjectHubState {
-    if (this.pendingFileOpen?.id !== id) return this.getState()
+    if (this.fileOpenRequests[0]?.id !== id) return this.getState()
 
-    const nextPath = this.queuedFileOpenPaths.shift()
-    this.pendingFileOpen = nextPath
-      ? { id: this.nextFileOpenId, path: nextPath }
-      : null
-    if (nextPath) this.nextFileOpenId += 1
+    this.fileOpenRequests.shift()
     this.emitState()
     return this.getState()
   }
@@ -166,7 +157,9 @@ export class WorkbenchProjectHub {
   }
 }
 
-export function validateProjectDirectory(path: string): Nullable<WorkbenchProjectOpenFailureReason> {
+export function validateProjectDirectory(
+  path: string
+): Nullable<WorkbenchProjectOpenFailureReason> {
   try {
     return statSync(path).isDirectory() ? null : 'not-a-directory'
   } catch {

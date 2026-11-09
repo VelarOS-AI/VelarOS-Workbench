@@ -1,35 +1,16 @@
 import { createContext, type ReactNode, useContext } from 'react'
 
-import type { Result } from '@velaros-ai/velaros/core/result'
-import { type AgentProviderRuntimeConfig } from '@velaros-ai/velaros/model'
-
-import {
-  type AuxiliaryModelConfig,
-  type AuxiliaryModelConfigs,
-  type AuxiliaryModelTaskId,
-} from '@shared/contracts/product'
 import { type SystemDefaultEditorId, type SystemGitConfig } from '@shared/contracts/system'
-
-export interface WorkbenchModelConfigurationPort {
-  auxiliaryModels: AuxiliaryModelConfigs
-  providerRuntimeConfigs: AgentProviderRuntimeConfig[]
-  setAuxiliaryModelConfig: (
-    taskId: AuxiliaryModelTaskId,
-    patch: Partial<AuxiliaryModelConfig>
-  ) => Promise<Result<void>>
-}
 
 /**
  * Workbench 消费的响应式产品配置切片。
  *
- * 它不是 Kernel 状态：Desktop 和未来独立应用分别从自己的配置 owner 投影并注入，产品代码不直接
- * import 任一宿主的 Context/store。
+ * 由应用入口注入默认编辑器、Git 配置和聊天样式。
  */
 export interface WorkbenchProductRuntimeValue {
   config: {
     defaultEditor: SystemDefaultEditorId
     git: SystemGitConfig
-    model: WorkbenchModelConfigurationPort
   }
   ui: {
     chatPanel: {

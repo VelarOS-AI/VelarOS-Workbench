@@ -54,10 +54,7 @@ export function createWorkbenchGitWorkspaceChangeRefresh({
   const topBarAndSurfaces = createCoalescedRefresh({
     delayMs: lineStatsDelayMs,
     run: async () => {
-      await Promise.all([
-        refreshLineStats(),
-        isGitSurfaceActive() ? refreshSummary() : undefined,
-      ])
+      await Promise.all([refreshLineStats(), isGitSurfaceActive() ? refreshSummary() : undefined])
     },
   })
   const treeDecorations = createCoalescedRefresh({
@@ -84,8 +81,6 @@ interface UseWorkbenchGitStateOptions {
    * 跟顶栏同一节奏；为 false 时完整快照也跟（文件树的 Git 颜色靠它），只是放慢。
    */
   gitSurfacesActive: boolean
-  /** 项目 workspace 绑定完成版本；用于修复首次进入时 Git 刷新早于 root 注册的竞态。 */
-  workspaceBindingVersion?: number
 }
 
 export function isWorkbenchGitSnapshotForProjectRoot(
@@ -100,7 +95,7 @@ export function isWorkbenchGitSnapshotForProjectRoot(
  * - 顶栏 +/-：`useWorkspaceGitLineStats`（轻量 IPC）
  * - Git 面板 / 变更树：完整 `useWorkspaceGitSummaries`
  *
- * 刷新时机都在这里：挂载与 workspace 绑定完成、Git 界面打开、`refresh`（Git 操作之后、手动刷新、一轮 Agent
+ * 刷新时机都在这里：项目挂载、Git 界面打开、`refresh`（Git 操作之后、手动刷新、一轮 Agent
  * 结束），以及工作区一有改动就合并刷新一次（见 {@link createWorkbenchGitWorkspaceChangeRefresh}）
  * ——顶栏 +/- 与完整快照都跟，文件树的 Git 颜色靠完整快照，打开了项目就要跟上；
  * Git 界面没开时完整快照放慢节奏。
@@ -110,7 +105,6 @@ export function isWorkbenchGitSnapshotForProjectRoot(
 export function useWorkbenchGitState({
   activeProject,
   gitSurfacesActive,
-  workspaceBindingVersion = 0,
 }: UseWorkbenchGitStateOptions) {
   const workspaceRoot = activeProject?.rootPath ?? null
   const projectEnabled = !!activeProject
@@ -122,7 +116,7 @@ export function useWorkbenchGitState({
     refresh: refreshSummary,
   } = useWorkspaceGitSummaries(workspaceRoot, {
     enabled: projectEnabled,
-    refreshOnMount: false,
+    refreshOnMount: true,
   })
 
   const {
@@ -198,14 +192,6 @@ export function useWorkbenchGitState({
 
     void refreshSummaryLatest.current()
   }, [activeProject?.id, gitSurfacesActive, refreshSummaryLatest])
-
-  // 项目的 workspace 绑定好了：顶栏 +/- 与完整快照都拉一次——文件树的 Git 颜色不等 Git 界面打开。
-  useEffect(() => {
-    if (!activeProject || workspaceBindingVersion <= 0) return
-
-    void refreshLineStatsLatest.current()
-    void refreshSummaryLatest.current()
-  }, [activeProject?.id, refreshLineStatsLatest, refreshSummaryLatest, workspaceBindingVersion])
 
   /** 顶栏 +/- 与完整快照一起重拉：Git 操作之后、手动刷新、一轮 Agent 结束都用它。 */
   const refresh = useMemo(

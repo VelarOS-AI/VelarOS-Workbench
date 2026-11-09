@@ -10,7 +10,10 @@ import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
 
 import { type SystemFileChangePreviewResult } from '@shared/contracts/system'
-import type { WorkbenchAgentEngineId, WorkbenchConversationEngineSelection } from '@shared/workbenchConversation'
+import type {
+  WorkbenchAgentEngineId,
+  WorkbenchConversationEngineSelection,
+} from '@shared/workbenchConversation'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
 import type { WorkbenchChatSurfaceScope } from './workbenchChatComposition'
@@ -105,8 +108,6 @@ export interface WorkbenchChatProjectRuntime {
   readonly currentSession: WorkbenchChatSessionSnapshot
   readonly sessions: readonly WorkbenchChatSessionSnapshot[]
   readonly conversationVersion: number
-  /** Desktop 负责把工具协议翻译成产品只读事件 token。 */
-  readonly browserActivationToken: Nullable<string>
   readonly sessionList: {
     readonly activeMemberSessionId: string
     readonly activeSessionId: string

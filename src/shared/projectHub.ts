@@ -3,13 +3,13 @@
  *
  * 起手页（欢迎页）与应用菜单共用这一面：最近项目持久化、目录校验与项目创建都在 main 侧
  * 服务完成，renderer 只投影 `WorkbenchProjectHubState` 并发起动作。本契约刻意不进
- * 产品核心——它是独立宿主入口形态，没有第二个消费者；
- * kernel-protocol 客户端接入后，项目打开链路若上移到 kernel 会话面，本契约随之重审。
+ * Platform 核心——项目、窗口和产品导航始终由 Workbench 持有。
  */
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
 export const WorkbenchProjectHubChannels = {
   getState: 'workbench-app:project-hub:get-state',
+  resolveRegistration: 'workbench-app:project-hub:resolve-registration',
   openProjectDialog: 'workbench-app:project-hub:open-project-dialog',
   openProjectPath: 'workbench-app:project-hub:open-project-path',
   switchProjectDialog: 'workbench-app:project-hub:switch-project-dialog',
@@ -25,12 +25,21 @@ export const WorkbenchProjectHubChannels = {
   pickNewProjectLocation: 'workbench-app:project-hub:pick-new-project-location',
   createProject: 'workbench-app:project-hub:create-project',
   removeRecentProject: 'workbench-app:project-hub:remove-recent-project',
-  closeProject: 'workbench-app:project-hub:close-project',
   returnToEntry: 'workbench-app:project-hub:return-to-entry',
   stateChanged: 'workbench-app:project-hub:state-changed',
   menuCommand: 'workbench-app:project-hub:menu-command',
   setLocale: 'workbench-app:project-hub:set-locale',
 } as const
+
+/** IDE 状态的持久身份；由主进程登记，窗口只请求当前项目。 */
+export interface WorkbenchProject {
+  id: string
+  name: string
+  rootPath: string
+  createdAt: number
+  lastOpenedAt: Nullable<number>
+  pinned: boolean
+}
 
 export interface WorkbenchOpenedProject {
   /** 项目根目录绝对路径。 */
@@ -79,28 +88,21 @@ export interface WorkbenchProjectDropResult {
 }
 
 export type WorkbenchProjectCreateFailureReason =
-  | 'invalid-name'
-  | 'location-missing'
-  | 'already-exists'
-  | 'io-error'
+  'invalid-name' | 'location-missing' | 'already-exists' | 'io-error'
 
 export type WorkbenchProjectCreateResult =
   | { ok: true; project: WorkbenchOpenedProject }
   | { ok: false; reason: WorkbenchProjectCreateFailureReason }
 
 export type WorkbenchProjectCloneFailureReason =
-  | 'canceled'
-  | 'invalid-remote'
-  | 'already-exists'
-  | 'clone-failed'
+  'canceled' | 'invalid-remote' | 'already-exists' | 'clone-failed'
 
 export type WorkbenchProjectCloneResult =
   | { ok: true; project: WorkbenchOpenedProject }
   | { ok: false; reason: WorkbenchProjectCloneFailureReason }
 
 export type WorkbenchPickLocationResult =
-  | { ok: true; path: string }
-  | { ok: false; reason: 'canceled' }
+  { ok: true; path: string } | { ok: false; reason: 'canceled' }
 
 export type WorkbenchProjectHubMenuCommand =
   /** ⌘W / Ctrl+W：关掉编辑区当前的标签；没有标签时什么也不做。 */
@@ -113,6 +115,8 @@ export type WorkbenchProjectHubMenuCommand =
 
 /** preload 通过 contextBridge 暴露给 renderer 的项目枢纽桥面。 */
 export interface WorkbenchProjectHubBridge {
+  /** 首次把现有本地项目身份转交给主进程；后续只返回当前窗口的登记记录。 */
+  resolveRegistration: (legacyProjects: readonly WorkbenchProject[]) => Promise<WorkbenchProject>
   getState: () => Promise<WorkbenchProjectHubState>
   openProjectDialog: () => Promise<WorkbenchProjectOpenResult>
   openProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
@@ -132,8 +136,7 @@ export interface WorkbenchProjectHubBridge {
   pickNewProjectLocation: () => Promise<WorkbenchPickLocationResult>
   createProject: (locationPath: string, name: string) => Promise<WorkbenchProjectCreateResult>
   removeRecentProject: (path: string) => Promise<WorkbenchProjectHubState>
-  closeProject: () => Promise<WorkbenchProjectHubState>
-  /** 清理当前项目并回到起手页；与关闭项目不同，不退出应用。 */
+  /** 清理当前项目并回到起手页，不退出应用。 */
   returnToEntry: () => Promise<WorkbenchProjectHubState>
   onStateChanged: (listener: (state: WorkbenchProjectHubState) => void) => () => void
   onMenuCommand: (listener: (command: WorkbenchProjectHubMenuCommand) => void) => () => void

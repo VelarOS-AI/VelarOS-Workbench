@@ -100,17 +100,11 @@ export class WorkbenchWindowManager {
   }
 
   public getFocusedWindow(): Nullable<BrowserWindow> {
-    const focused = BrowserWindow.getFocusedWindow()
-    if (focused && this.records.has(focused.webContents.id)) return focused
-
-    return this.records.values().next().value?.window ?? null
+    return this.getFocusedRecord()?.window ?? null
   }
 
   public getFocusedState(): WorkbenchProjectHubState {
-    const focused = this.getFocusedWindow()
-    return focused
-      ? (this.records.get(focused.webContents.id)?.hub.getState() ?? emptyProjectHubState())
-      : emptyProjectHubState()
+    return this.getFocusedRecord()?.hub.getState() ?? emptyProjectHubState()
   }
 
   /** 打开着这个项目的窗口的 WebContents：项目路径全局去重，最多一个。 */
@@ -153,9 +147,7 @@ export class WorkbenchWindowManager {
     return this.openProjectPath(targetWindow?.webContents ?? null, picked)
   }
 
-  public async switchProjectViaDialog(
-    sender: WebContents
-  ): Promise<WorkbenchProjectOpenResult> {
+  public async switchProjectViaDialog(sender: WebContents): Promise<WorkbenchProjectOpenResult> {
     const picked = await pickDirectory(
       this.getWindowForWebContents(sender),
       workbenchMainText('projects.pickSwitch')
@@ -168,20 +160,20 @@ export class WorkbenchWindowManager {
   public async openProjectInNewWindowViaDialog(
     targetWindow: Nullable<BrowserWindow>
   ): Promise<WorkbenchProjectOpenResult> {
-    const picked = await pickDirectory(targetWindow, workbenchMainText('projects.pickOpenInNewWindow'))
+    const picked = await pickDirectory(
+      targetWindow,
+      workbenchMainText('projects.pickOpenInNewWindow')
+    )
     if (!picked) return { ok: false, reason: 'canceled' }
 
     return this.openProjectPathInNewWindow(picked)
   }
 
-  public openProjectPath(
-    sender: Nullable<WebContents>,
-    path: string
-  ): WorkbenchProjectOpenResult {
+  public openProjectPath(sender: Nullable<WebContents>, path: string): WorkbenchProjectOpenResult {
     const projectPath = resolve(path)
     const failure = validateProjectDirectory(projectPath)
     if (failure) {
-      this.getHub(sender)?.refreshState()
+      this.getRecord(sender)?.hub.refreshState()
       return { ok: false, reason: failure }
     }
 
@@ -265,18 +257,14 @@ export class WorkbenchWindowManager {
     const projectPath = join(parent, normalizedRemote.projectName)
     if (existsSync(projectPath)) return { ok: false, reason: 'already-exists' }
 
-    const result = await execa(
-      'git',
-      ['clone', '--', normalizedRemote.remoteUrl, projectPath],
-      {
-        env: {
-          ...process.env,
-          GIT_TERMINAL_PROMPT: '0',
-        },
-        reject: false,
-        timeout: 120_000,
-      }
-    )
+    const result = await execa('git', ['clone', '--', normalizedRemote.remoteUrl, projectPath], {
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0',
+      },
+      reject: false,
+      timeout: 120_000,
+    })
     if (result.failed) {
       await rm(projectPath, { recursive: true, force: true }).catch(() => undefined)
       console.error('[workbench-app] failed to clone project', {
@@ -287,9 +275,7 @@ export class WorkbenchWindowManager {
     }
 
     const opened = this.openProjectPathInNewWindow(projectPath)
-    return opened.ok
-      ? { ok: true, project: opened.project }
-      : { ok: false, reason: 'clone-failed' }
+    return opened.ok ? { ok: true, project: opened.project } : { ok: false, reason: 'clone-failed' }
   }
 
   public validateProjectPath(path: string): WorkbenchProjectOpenResult {
@@ -318,9 +304,7 @@ export class WorkbenchWindowManager {
     if (!created.ok) return created
 
     const opened = this.openProjectPath(sender, created.project.path)
-    return opened.ok
-      ? { ok: true, project: opened.project }
-      : { ok: false, reason: 'io-error' }
+    return opened.ok ? { ok: true, project: opened.project } : { ok: false, reason: 'io-error' }
   }
 
   public removeRecentProject(sender: WebContents, path: string): WorkbenchProjectHubState {
@@ -330,10 +314,6 @@ export class WorkbenchWindowManager {
     const state = hub.removeRecentProject(path)
     this.refreshRecentProjectsExcept(hub)
     return state
-  }
-
-  public async closeProject(sender: WebContents): Promise<WorkbenchProjectHubState> {
-    return this.returnToEntry(sender)
   }
 
   /** 退出项目或账户都只释放当前项目并返回起手页；只有用户关闭最后一个窗口才退出应用。 */
@@ -349,17 +329,17 @@ export class WorkbenchWindowManager {
     return state
   }
 
-  public async openDroppedPaths(
+  public openDroppedPaths(
     sender: WebContents,
     paths: readonly string[]
-  ): Promise<WorkbenchProjectDropResult> {
+  ): WorkbenchProjectDropResult {
     return this.openResolvedExternalPaths(sender, paths)
   }
 
-  public async openExternalPaths(
+  public openExternalPaths(
     paths: readonly string[],
     targetWindow: Nullable<BrowserWindow> = this.getFocusedWindow()
-  ): Promise<WorkbenchProjectDropResult> {
+  ): WorkbenchProjectDropResult {
     return this.openResolvedExternalPaths(targetWindow?.webContents ?? null, paths)
   }
 
@@ -367,10 +347,10 @@ export class WorkbenchWindowManager {
     return this.getHubForWebContents(sender)?.acknowledgeFileOpen(id) ?? emptyProjectHubState()
   }
 
-  private async openResolvedExternalPaths(
+  private openResolvedExternalPaths(
     sender: Nullable<WebContents>,
     paths: readonly string[]
-  ): Promise<WorkbenchProjectDropResult> {
+  ): WorkbenchProjectDropResult {
     const opened: WorkbenchOpenedProject[] = []
     const openedFiles: WorkbenchProjectDropResult['openedFiles'] = []
     const rejected: WorkbenchProjectDropResult['rejected'] = []
@@ -451,12 +431,16 @@ export class WorkbenchWindowManager {
     window.webContents.send(WorkbenchProjectHubChannels.menuCommand, command)
   }
 
-  private getHub(sender: Nullable<WebContents>): Nullable<WorkbenchProjectHub> {
-    return sender ? this.getHubForWebContents(sender) : null
-  }
-
   private getRecord(sender: Nullable<WebContents>): Nullable<WorkbenchWindowRecord> {
     return sender ? (this.records.get(sender.id) ?? null) : null
+  }
+
+  private getFocusedRecord(): Nullable<WorkbenchWindowRecord> {
+    return (
+      this.getRecord(BrowserWindow.getFocusedWindow()?.webContents ?? null) ??
+      this.records.values().next().value ??
+      null
+    )
   }
 
   private findProjectRecord(projectPath: string): Nullable<WorkbenchWindowRecord> {
@@ -467,16 +451,16 @@ export class WorkbenchWindowManager {
   }
 
   private findContainingProjectRecord(filePath: string): Nullable<WorkbenchWindowRecord> {
-    const candidates = [...this.records.values()].filter((record) => {
+    let containing: Nullable<WorkbenchWindowRecord> = null
+    let longestRoot = 0
+    for (const record of this.records.values()) {
       const projectPath = record.hub.getState().currentProject?.path
-      return projectPath ? isPathInside(projectPath, filePath) : false
-    })
-    candidates.sort((left, right) => {
-      const leftPath = left.hub.getState().currentProject?.path ?? ''
-      const rightPath = right.hub.getState().currentProject?.path ?? ''
-      return rightPath.length - leftPath.length
-    })
-    return candidates[0] ?? null
+      if (projectPath && projectPath.length > longestRoot && isPathInside(projectPath, filePath)) {
+        containing = record
+        longestRoot = projectPath.length
+      }
+    }
+    return containing
   }
 
   private focusWindow(window: BrowserWindow): void {
@@ -545,7 +529,8 @@ function normalizeGitRemote(
     projectName.length > 80 ||
     projectName.startsWith('.') ||
     InvalidClonedProjectNamePattern.test(projectName)
-  ) return null
+  )
+    return null
 
   return { projectName, remoteUrl: normalized }
 }
@@ -569,7 +554,8 @@ const WorkbenchProjectRootMarkers = [
 function findNearestProjectRoot(filePath: string): string {
   let candidate = dirname(filePath)
   while (true) {
-    if (WorkbenchProjectRootMarkers.some((marker) => existsSync(join(candidate, marker)))) return candidate
+    if (WorkbenchProjectRootMarkers.some((marker) => existsSync(join(candidate, marker))))
+      return candidate
     const parent = dirname(candidate)
     if (parent === candidate) return dirname(filePath)
     candidate = parent

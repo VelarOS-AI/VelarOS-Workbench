@@ -1,11 +1,9 @@
-import { createContext, type ReactNode, useContext } from 'react'
+import { type ReactNode } from 'react'
 
 import { WorkbenchHostProvider } from '../host/WorkbenchHostProvider'
 import { WorkbenchCommentStoreProvider } from '../models/workbenchCommentStore'
 
 import type { WorkbenchRuntime } from './WorkbenchRuntime'
-
-const WorkbenchRuntimeContext = createContext<Nullable<WorkbenchRuntime>>(null)
 
 export function WorkbenchRuntimeProvider({
   children,
@@ -15,19 +13,10 @@ export function WorkbenchRuntimeProvider({
   runtime: WorkbenchRuntime
 }): React.JSX.Element {
   return (
-    <WorkbenchRuntimeContext.Provider value={runtime}>
-      <WorkbenchHostProvider runtime={runtime.host}>
-        <WorkbenchCommentStoreProvider store={runtime.comments}>
-          {children}
-        </WorkbenchCommentStoreProvider>
-      </WorkbenchHostProvider>
-    </WorkbenchRuntimeContext.Provider>
+    <WorkbenchHostProvider runtime={runtime.host}>
+      <WorkbenchCommentStoreProvider store={runtime.comments}>
+        {children}
+      </WorkbenchCommentStoreProvider>
+    </WorkbenchHostProvider>
   )
-}
-
-/** 仅在已安装 `WorkbenchRuntimeProvider` 的子树中使用。 */
-export function useWorkbenchRuntime(): WorkbenchRuntime {
-  const runtime = useContext(WorkbenchRuntimeContext)
-  if (!runtime) throw new Error('Workbench runtime is not installed')
-  return runtime
 }
