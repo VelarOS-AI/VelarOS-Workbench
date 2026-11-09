@@ -42,6 +42,7 @@ test('queued scripts survive IPC, complete across turns and retain output', () =
     ({
       runId: 'run',
       turnId: 'turn',
+      request: { sequence: 1 },
       executions: [
         {
           executionId: 'exec',
@@ -108,6 +109,7 @@ test('late native program events reuse adopted cards without phantom cancellatio
       ({
         runId: 'run',
         turnId: 'turn',
+        request: { sequence: 1 },
         executions: [
           {
             executionId: 'early',
@@ -154,6 +156,107 @@ test('late native program events reuse adopted cards without phantom cancellatio
     expect(board.cardOf('early')).toBe(id)
     expect(board.pendingTurns()).toEqual([])
   }
+})
+
+test('old pending turns cannot replace the latest observation registration', () => {
+  const events: ConversationScriptProjection[] = []
+  const board = new ConversationScriptBoard((event) => events.push(event))
+  const trace = (
+    turnId: string,
+    sequence: number,
+    registration: ActTurnTrace['observation']['registration'] = null,
+    output?: string
+  ) =>
+    ({
+      sessionId: 'session',
+      runId: 'run',
+      turnId,
+      request: { sequence },
+      executions: [],
+      observation: {
+        registration,
+        run: output
+          ? {
+              executionId: `observation:${turnId}`,
+              status: 'succeeded',
+              failure: null,
+              durationMs: 1,
+              source: 'observe()',
+              sourceTruncated: false,
+            }
+          : null,
+      },
+      invocations: output
+        ? [
+            {
+              id: `call:${turnId}`,
+              executionId: `observation:${turnId}`,
+              chars: output.length,
+              body: output,
+              truncated: false,
+              summary: {
+                moduleId: 'project',
+                operation: 'read',
+                status: 'succeeded',
+                effect: 'none',
+                input: '',
+                output,
+                inputTruncated: false,
+                outputTruncated: false,
+              },
+            },
+          ]
+        : [],
+    }) as unknown as ActTurnTrace
+  const first: ActTurnTrace = {
+    ...trace('turn-z', 10, {
+      status: 'updated',
+      failure: null,
+      source: 'observe A',
+      sourceTruncated: false,
+    }),
+    executions: [
+      {
+        executionId: 'pending-execute',
+        position: 0,
+        status: 'queued',
+        failure: null,
+        durationMs: null,
+        source: 'await pending()',
+        sourceTruncated: false,
+      },
+    ],
+  }
+  board.trace(first)
+  board.trace(
+    trace(
+      'turn-a',
+      20,
+      {
+        status: 'updated',
+        failure: null,
+        source: 'observe B',
+        sourceTruncated: false,
+      },
+      'A@B'
+    )
+  )
+  const third = trace('turn-c', 30, null, 'B@C')
+  board.trace(third)
+  board.trace({
+    ...first,
+    executions: [{ ...first.executions[0]!, status: 'running' }],
+  })
+  board.trace(third)
+  board.trace(trace('turn-d', 40, null, 'B@D'))
+  const latestObservation = (turnId: string) =>
+    events.findLast((event) => event.kind === 'observe' && event.turnId === turnId)
+  expect(latestObservation('turn-z')?.calls[0]?.output).toBe('A@B')
+  expect(latestObservation('turn-a')?.calls[0]?.output).toBe('B@D')
+  expect(
+    events.findLast((event) => event.id === board.cardOf('pending-execute'))?.status
+  ).toBe('running')
+  expect(board.pendingTurns()).toContain('turn-z')
 })
 
 test('full trace output is shortened for display without discarding completion', () => {

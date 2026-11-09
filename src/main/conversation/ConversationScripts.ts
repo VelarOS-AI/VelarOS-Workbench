@@ -40,8 +40,8 @@ export class ConversationScriptBoard {
   private readonly programPositions = new Map<string, number>()
   /** 每个回合的 observe 卡片 id：一份响应最多登记一次观察。 */
   private readonly observations = new Map<string, string>()
-  /** 登记上的最近一张观察卡：之后回合的观察运行都记在它上面；这次运行里还没登记过时没有。 */
-  private watching?: string
+  /** 最近一次成功登记及其持久请求序号；清除也保留序号，旧回合重读不能恢复旧观察。 */
+  private watching?: { sequence: number; card: string | undefined }
   /**
    * 每个回合的观察运行记在哪张卡上：第一次读到这一回合时定下。同一回合的追踪会重读（执行期间定时重读、
    * 下一回合开始时、收尾时），那时 watching 可能已换成这一回合新登记的卡，运行结果不能跟着记过去。
@@ -201,7 +201,7 @@ export class ConversationScriptBoard {
    */
   private observe(trace: ActTurnTrace): void {
     const { registration, run } = trace.observation
-    if (!this.runTargets.has(trace.turnId)) this.runTargets.set(trace.turnId, this.watching)
+    if (!this.runTargets.has(trace.turnId)) this.runTargets.set(trace.turnId, this.watching?.card)
     const target = this.runTargets.get(trace.turnId)
     if (run && target) {
       const calls = trace.invocations
@@ -232,7 +232,11 @@ export class ConversationScriptBoard {
         ...clipSource(card.body || registration.source),
       })
     if (rejected) return
-    this.watching = registration.status === 'cleared' ? undefined : id
+    if (!this.watching || trace.request.sequence >= this.watching.sequence)
+      this.watching = {
+        sequence: trace.request.sequence,
+        card: registration.status === 'cleared' ? undefined : id,
+      }
   }
 
   /** 登记一张空卡；由调用方在内容就绪后发出。 */
