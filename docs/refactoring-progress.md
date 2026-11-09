@@ -92,6 +92,15 @@ ADR 0028 已读，产品装配方案：
 | c1c8c9d | source map 无源区间截断前一段映射 |
 | fdd3431 | 空白行不参与缩进检测 |
 | 6181979 | incremental blame 支持真实 40/64 位对象名 |
+| 3667cea / 1b075f0 | 发布说明的文本/列表形状与无关格式差量回收 |
+| 5be420e | 打包清单显式携带项目 LICENSE |
+| ba755f9 | catalog 替换空窗后的跨进程签名平台并集恢复 |
+| afaeecb | 历史选择、来源切换与迟到缓存写入的 owner |
+| 45bd3a7 | 删除等待期间新增草稿保留为已删文件冲突 |
+| 94568f5 | CodeMirror 重命名/格式化/保存等待归原文件 |
+| 7a23605 | 删除仅测试消费的旧 graph neighborhood helper |
+| d3242bb | raw observer 到场时获知当前观察缺失 |
+| 7e33207 | 双后端提交准备、peer、journal 删除与关闭统一 owner |
 
 统一底座接入批：配套 0.9.1 基础/扩展显式装配、产品不可变执行凭据、foundation-v1 数据代际、
 无执行空闲控制、active-only tell 与错误回执、schema2 来源和正式候选拒绝门；来源 commit、
@@ -124,8 +133,8 @@ Terminal 准备取消、Debug 晚交清理失败、真实 LSP 协议/共享 disp
 
 后续 Git 顺序、argv、退役字段，跨包 TS 磁盘版本与数据配置缓存，renderer 调试确认及启动接纳均已继续收口。
 仍未完成的明确项：语言 worker 硬终止时跨线程子进程 owner、Markdown 计算取消，
-代码型配置及依赖模块完整热重载；renderer 历史读取失效、删除期间的新草稿；跨后端会话删除与 journal 准入事务，
-观察卡跨回合身份及其余覆盖表空白。保存/关窗期间新草稿已由下述批次收口。
+代码型配置及依赖模块完整热重载；观察卡跨回合身份、编辑器冷 lazy 导航准入，正式 typed lint 的旧 AST 自动修复，
+source map/Windows helper 资源边界及其余覆盖表空白。历史读取、删除期间草稿与跨后端删除事务已由后述批次收口。
 worker 必须有真实资源所有权方案，不能靠加大 8s 预算或 best-effort PID 通知宣称解决。
 正式资产已交付：Platform v0.7.3 双包 0.9.2 已经 Release/tag→commit/asset digest/实际下载 SHA
 核验并安装，Bun 锁只变更双包 spec、integrity 与 required peer。0.9.2 的 idle trace/traceBranches 是新增只读口，
@@ -179,3 +188,31 @@ node/web 类型、产品边界门、4 node / 9 web / 6 测试文件 scoped lint 
 没有复制 hook、增加测试专用生产口或 DOM 框架；完整 React / 原生窗口交互未测。没有全量回归、压力测试或重复生产构建。
 覆盖新增 Runtime 本体及 DebugSession 全算法、17 组非语言/对话 shared 桥、主文件/命令/归属账本、Windows 更新 helper 全文；
 准确文件与仍仅接缝/未读的 renderer 大组件、部分 shared 语言/对话协议、发行与工程脚本继续见 ignored 模块覆盖表。
+
+再一轮已验证并分批提交：history 的空选择、inactive/空 records、source 切换及卸载都撤销旧请求代际，
+回执只写捕获的 cache owner；文件树删除后只关当前 clean 标签，后来出现的正文或格式草稿保留并进入既有 deleted 恢复保存流。
+CodeMirror 的文件 owner 覆盖复用 view、卸载和 A→B→A，rename/format 在任何编辑或跨文件交接前复核原文档，
+save 在格式化等待后仍调用原文件回调。没有把丢弃前端回执称为已取消后端，也未宣称跨文件写入事务原子化。
+原 graph neighborhood helper 只有旧测试调用，随其专属断言退役；真实 compiler graph 解析、patch 和 UI 投影保留。
+raw observer 注册后立即获知当前 watcher 缺失，首轮创建失败和加入既有 unavailable 根都不再误报已观察。
+
+双后端会话现由 Dispatcher 同步登记准备再执行：普通发送与 peer 的 UI/journal 准备共用 receipt，保留真实
+streamId/sequence/emittedAt；caller 取消只管准备，后端同步交接后解除该绑定。取消、重复删除、项目关闭和应用关闭
+都等待准备、执行、持久流 finish；同一删除共用 Promise，两后端及产品 journal 都尝试收束后统一交付失败。
+Ipc 不再持另一张 admission 表，也不在 runtime 删除开闸后另删 journal；peer 改用同一 Dispatcher，settled 在其实际 finish 后发。
+统计仅在取得准备 receipt 后登记，统计异常不能丢掉 receipt；准备失败不会残留 Reporter 的待结算 run-start。
+
+发行侧保留签名 schema2 catalog 的不可变事务资产，替换公开 metadata 前先持久化完整平台并集。
+新进程按名称 digest、签名、source/tag/version/channel/note 及唯一远端字节验证后恢复；不凭孤立二进制猜身份，
+不把事务副本当 completion 或伪造合并后的旧签名。canonical 尚在而事务并集更大也为 partial。
+最初新用例遗漏传 staged 而误走既有完成态复用门，改用实际 stage 读取后仅重跑该故障，其余五个绿项复用。
+新增平台在删旧 catalog 后上传失败、丢弃本机 metadata、fresh read 再完成的故障通过，旧平台及 assetId 保留。
+发布说明标题严格为文本、变更严格为列表；打包 YAML 显式加入 LICENSE，已解析核验，未制作新安装包。
+
+本轮必要验证：raw watcher 1、发布说明 2、publisher 6、tab-close 7、Vim 既有接线断言 2、真实 graph 消费 1、
+Dispatcher 故障/路由 3、peer 6 均通过。受影响 node/web 类型及 scoped lint 已绿；6 node / 3 测试的两处纯样式问题
+仅复查一个 source，随后 Ipc 统计增量只复查该 source 与 node 类型。另 1 node / 7 web / 3 测试 lint 已通过。
+脚本遵循仓库 ESLint 忽略规则，以真实故障用例验证，不冒称脚本 lint 通过。历史/CodeMirror 的完整 DOM 异步交互未测，
+仅以真实消费链、类型/lint和既有接线断言交付；没有新 DOM 框架、hook 镜像、全量回归、压力矩阵或生产 build。
+CodeMirror 基线 3424 行以及 EditorPanel/EditorGroupsPanel/FilePanel 已全文补审；发行两大脚本、打包、Node 资源准备与
+部分工程 runner 已全文，剩余缺口仍按细表推进，尚未把全仓标为完成。
