@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 
 import { URI } from 'vscode-uri'
 
-import { optionalWhen } from '@velaros-ai/velaros/core'
+import { Log, optionalWhen } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type { WorkbenchLanguageServiceDescriptor } from '@shared/workbenchLanguageServices'
@@ -624,9 +624,13 @@ export class ExternalLspClient {
   private readonly diagnosticWaiters = new Map<string, DiagnosticWaiter[]>()
   private serverCapabilities: Record<string, unknown> = {}
   private initializePromise: Nullable<Promise<void>> = null
-  private processTermination: Nullable<Promise<boolean>> = null
+  private processTermination: Nullable<{
+    child: ChildProcessWithoutNullStreams
+    completed: Promise<void>
+  }> = null
   private stderr = ''
   private disposed = false
+  private disposal: Promise<void> | null = null
 
   public constructor(
     private readonly runtimeRoot: string,
@@ -994,28 +998,43 @@ export class ExternalLspClient {
     })
   }
 
-  public async dispose(): Promise<void> {
-    if (this.disposed) {
-      await this.processTermination
-      return
-    }
+  public dispose(): Promise<void> {
+    if (this.disposal) return this.disposal
     this.disposed = true
-    const child = this.process
-    if (!child) {
-      await this.processTermination
-      return
-    }
+    this.disposal = this.disposeProcess()
+    return this.disposal
+  }
 
-    try {
-      await this.request('shutdown', null)
-      this.notify('exit', null)
-    } catch {
-      // 统一由下面的退出确认处理；这里不能在 Windows 上只发信号就返回。
+  private async disposeProcess(): Promise<void> {
+    const retiring = this.processTermination
+    if (retiring) await retiring.completed.catch(() => undefined)
+    const child = this.process ?? retiring?.child
+    if (!child) return
+    if (child.exitCode === null && child.signalCode === null) {
+      if (this.process === child) {
+        try {
+          await this.request('shutdown', null)
+          this.notify('exit', null)
+        } catch {
+          // 握手失败仍须确认退出；保留进程所有权直到真实收束。
+        }
+      }
+      if (!(await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)))
+        await this.terminateProcess(child)
     }
+    if (this.process === child) this.process = null
+    if (this.processTermination === retiring) this.processTermination = null
+  }
+
+  private async terminateProcess(child: ChildProcessWithoutNullStreams): Promise<void> {
+    const terminated = await terminateExternalLspProcessTree(child.pid)
     if (!(await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)))
-      await terminateExternalLspProcessTree(child.pid)
-    await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)
-    this.process = null
+      throw new AppError(
+        'UNAVAILABLE',
+        `${this.descriptor.label}: language server did not exit`,
+        undefined,
+        { pid: child.pid, terminationConfirmed: terminated }
+      )
   }
 
   private async initialize(): Promise<void> {
@@ -1039,7 +1058,7 @@ export class ExternalLspClient {
   }
 
   private async startAndInitialize(): Promise<void> {
-    await this.processTermination
+    await this.processTermination?.completed
     this.processTermination = null
     if (this.disposed)
       throw new AppError(
@@ -1525,7 +1544,15 @@ export class ExternalLspClient {
     this.outbound.length = 0
     this.outboundLength = 0
     this.outboundPaused = false
-    if (child) this.processTermination = terminateExternalLspProcessTree(child.pid)
+    if (child) {
+      const completed = this.terminateProcess(child)
+      this.processTermination = { child, completed }
+      void completed.catch((terminationError: unknown) =>
+        Log.tag('WorkbenchLanguageService').warn('external_lsp_termination_failed', {
+          error: terminationError,
+        })
+      )
+    }
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timeout)
       pending.reject(error)

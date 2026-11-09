@@ -7,12 +7,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { describe, test } from 'bun:test'
+import { describe, mock, test } from 'bun:test'
 
 import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileWatcher'
 import { isSameOrChildPath } from '../src/renderer/src/models/shared/workbenchUtils'
 import { type SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts/system'
-import type { WorkbenchWatchStatus } from '../src/shared/workbenchWatch'
+import {
+  WorkbenchWatchChannels,
+  type WorkbenchWatchStatus,
+} from '../src/shared/workbenchWatch'
 
 /**
  * 文件监听不会悄悄停掉：出错后按退避间隔重启，恢复时补发一次整个根目录的变更；起不来就把「不可用」
@@ -67,6 +70,116 @@ async function withRoot(run: (root: string) => Promise<void>): Promise<void> {
 }
 
 void describe('Workbench file watcher recovery', () => {
+  void test('project release and window destruction both reclaim subscriptions that finish late', async () => {
+    await withRoot(async (root) => {
+      const handlers = new Map<string, (...args: unknown[]) => unknown>()
+      void mock.module('electron', () => ({
+        ipcMain: {
+          handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
+            handlers.set(channel, handler)
+          },
+          removeHandler: (channel: string) => handlers.delete(channel),
+        },
+      }))
+      const { registerWorkbenchWatchIpc } = await import(
+        '../src/main/workspace/watch/WorkbenchWatchIpc'
+      )
+      const fake = createFakeWatch()
+      const watcher = new WorkbenchFileWatcher({ watch: fake.watch })
+      const subscribe = watcher.subscribe.bind(watcher)
+      let gate = Promise.withResolvers<void>()
+      watcher.subscribe = async (...args) => {
+        await gate.promise
+        return subscribe(...args)
+      }
+      const sender = Object.assign(new EventEmitter(), {
+        id: 73,
+        destroyed: false,
+        isDestroyed(): boolean {
+          return this.destroyed
+        },
+        send(): void {},
+      })
+      const registration = registerWorkbenchWatchIpc(watcher)
+      const start = handlers.get(WorkbenchWatchChannels.start)
+      assert.ok(start)
+      const pending: Array<Promise<unknown>> = []
+      const begin = (): Promise<{ ok: boolean; code?: string }> => {
+        const request = Promise.resolve(start({ sender }, { workspaceRoot: root })) as Promise<{
+          ok: boolean
+          code?: string
+        }>
+        pending.push(request)
+        return request
+      }
+      try {
+        const projectClosed = begin()
+        registration.closeSubscriptionsForSender(sender.id)
+        gate.resolve()
+        assert.deepEqual(await projectClosed, {
+          ok: false,
+          code: 'CLOSED',
+          message: 'File watch owner is no longer active.',
+        })
+        assert.equal(fake.watchers[0]?.closed, true)
+        assert.equal(sender.isDestroyed(), false)
+
+        gate = Promise.withResolvers<void>()
+        const windowClosed = begin()
+        sender.destroyed = true
+        sender.emit('destroyed')
+        gate.resolve()
+        assert.equal((await windowClosed).code, 'CLOSED')
+        assert.equal(fake.watchers.length, 2)
+        assert.ok(fake.watchers.every((watch) => watch.closed))
+      } finally {
+        gate.resolve()
+        await Promise.allSettled(pending)
+        registration.dispose()
+      }
+    })
+  })
+
+  void test('disposing the watcher rejects pending subscriptions and raw observations before watching starts', async () => {
+    await withRoot(async (root) => {
+      const fake = createFakeWatch()
+      const watcher = new WorkbenchFileWatcher({ watch: fake.watch })
+      const resolver = watcher as unknown as { resolveRoot: (input: string) => Promise<string> }
+      const resolveRoot = resolver.resolveRoot.bind(watcher)
+      const rootsResolved = Promise.withResolvers<void>()
+      const gate = Promise.withResolvers<void>()
+      let resolvedCount = 0
+      // 卡在真实根解析之后：两个入口都已进入 await，尚未走共同的监听准入。
+      resolver.resolveRoot = async (input) => {
+        const rootPath = await resolveRoot(input)
+        resolvedCount += 1
+        if (resolvedCount === 2) rootsResolved.resolve()
+        await gate.promise
+        return rootPath
+      }
+      const subscription = watcher.subscribe(root, () => undefined)
+      const observation = watcher.observeRawPaths(root, {
+        onPath: () => undefined,
+        onError: () => undefined,
+      })
+      try {
+        await rootsResolved.promise
+        watcher.dispose()
+        const rejected = Promise.all([
+          assert.rejects(subscription, { code: 'CLOSED' }),
+          assert.rejects(observation, { code: 'CLOSED' }),
+        ])
+        gate.resolve()
+        await rejected
+        assert.equal(fake.watchers.length, 0)
+      } finally {
+        gate.resolve()
+        await Promise.allSettled([subscription, observation])
+        watcher.dispose()
+      }
+    })
+  })
+
   void test('a watcher error restarts watching and refreshes the whole root', async () => {
     await withRoot(async (root) => {
       const fake = createFakeWatch()

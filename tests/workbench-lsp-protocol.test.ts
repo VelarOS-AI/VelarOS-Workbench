@@ -75,7 +75,9 @@ void describe('external LSP protocol boundaries', () => {
       assert.equal(folders.length, 1)
       assert.equal(folders[0]?.uri.startsWith('file://'), true)
     } finally {
-      await client.dispose()
+      const disposal = client.dispose()
+      assert.equal(client.dispose(), disposal)
+      await disposal
       await rm(projectRoot, { recursive: true, force: true })
     }
   })

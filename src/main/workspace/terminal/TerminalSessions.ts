@@ -120,6 +120,12 @@ export function clampTerminalDimension(
 export class TerminalSessions {
   /** sessionId -> 会话实体；存活的伪终端都在这里登记。 */
   private readonly terminalSessions = new Map<string, WorkbenchTerminalSession>()
+  private readonly pendingStarts = new Map<
+    AbortController,
+    { ownerId: Nullable<number>; completed: Promise<WorkbenchTerminalStartResult> }
+  >()
+  private readonly closingOwners = new Map<number, Promise<void>>()
+  private closing?: Promise<void>
 
   constructor(
     private readonly pathResolver: PathResolver,
@@ -127,14 +133,36 @@ export class TerminalSessions {
     private readonly ptyFactory: WorkbenchPtyFactory = nodePtyFactory
   ) {}
 
-  public async startTerminalSession(
+  public startTerminalSession(
     request: WorkbenchTerminalStartRequest,
     onOutput: (event: WorkbenchTerminalOutputEvent) => void,
     ownerId: Nullable<number> = null
   ): Promise<WorkbenchTerminalStartResult> {
+    if (this.closing || (ownerId !== null && this.closingOwners.has(ownerId)))
+      return Promise.reject(new AppError('CLOSED', workbenchMainText('terminal.sessionEnded')))
+    const controller = new AbortController()
+    const completed = Promise.resolve().then(() =>
+      this.createTerminalSession(request, onOutput, ownerId, controller.signal)
+    )
+    this.pendingStarts.set(controller, { ownerId, completed })
+    void completed
+      .finally(() => this.pendingStarts.delete(controller))
+      .catch(() => undefined)
+    return completed
+  }
+
+  private async createTerminalSession(
+    request: WorkbenchTerminalStartRequest,
+    onOutput: (event: WorkbenchTerminalOutputEvent) => void,
+    ownerId: Nullable<number>,
+    signal: AbortSignal
+  ): Promise<WorkbenchTerminalStartResult> {
+    signal.throwIfAborted()
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    signal.throwIfAborted()
     const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
     const cwdStats = await stat(cwdPath.realPath)
+    signal.throwIfAborted()
     if (!cwdStats.isDirectory()) {
       throw new AppError('VALIDATION', workbenchMainText('terminal.cwdNotFolder'))
     }
@@ -344,15 +372,41 @@ export class TerminalSessions {
   }
 
   /** 关闭所有持久终端会话；进程退出前调用。 */
-  public async closeAllSessions(): Promise<void> {
-    await this.closeSessions([...this.terminalSessions.entries()])
+  public closeAllSessions(): Promise<void> {
+    if (this.closing) return this.closing
+    const completion = Promise.withResolvers<void>()
+    this.closing = completion.promise
+    void this.closeOwnedSessions().then(completion.resolve, completion.reject)
+    return completion.promise
   }
 
   /** 关闭一个项目窗口拥有的全部终端 / 运行卡，其他项目窗口不受影响。 */
-  public async closeSessionsForOwner(ownerId: number): Promise<void> {
-    await this.closeSessions(
-      [...this.terminalSessions.entries()].filter(([, session]) => session.ownerId === ownerId)
+  public closeSessionsForOwner(ownerId: number): Promise<void> {
+    if (this.closing) return this.closing
+    const current = this.closingOwners.get(ownerId)
+    if (current) return current
+    const completion = Promise.withResolvers<void>()
+    this.closingOwners.set(ownerId, completion.promise)
+    void this.closeOwnedSessions(ownerId)
+      .then(completion.resolve, completion.reject)
+      .finally(() => this.closingOwners.delete(ownerId))
+    return completion.promise
+  }
+
+  private async closeOwnedSessions(ownerId?: number): Promise<void> {
+    const pending = [...this.pendingStarts].filter(
+      ([, start]) => ownerId === undefined || start.ownerId === ownerId
     )
+    for (const [controller] of pending)
+      controller.abort(new AppError('CANCELLED', workbenchMainText('terminal.sessionEnded')))
+    // 被撤销的准备只能在 spawn 前失败；已有进程同时收束，请求错误仍由启动调用者接收。
+    const closed = this.closeSessions(
+      [...this.terminalSessions.entries()].filter(
+        ([, session]) => ownerId === undefined || session.ownerId === ownerId
+      )
+    )
+    await Promise.allSettled([closed, ...pending.map(([, start]) => start.completed)])
+    await closed
   }
 
   /** 等会话的进程退出；强杀的延迟过后再多等一会儿，还没退也返回。 */

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { getEventListeners } from 'node:events'
+import { writeFileSync } from 'node:fs'
 import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -32,6 +33,46 @@ class RecordingCommandHelper extends CommandHelper {
 }
 
 void describe('Workbench command cancellation', () => {
+  void test('cancellation waits for descendant cleanup when the shell exits first', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-command-tree-')))
+    const marker = join(projectRoot, 'child.pid')
+    const stopShell = join(projectRoot, 'stop-shell')
+    let descendant: number | undefined
+    const signals: NodeJS.Signals[] = []
+    class EarlyExitShell extends CommandHelper {
+      public override shouldDetachForegroundProcess(): boolean { return true }
+      public override getForceKillDelayMs(): number { return 150 }
+      public override getShellSpec() {
+        const child = `process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(${JSON.stringify(marker)},String(process.pid));setInterval(()=>{},1000)`
+        return { file: 'node', args: ['-e', `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(child)}],{stdio:'ignore',detached:true}).unref();setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(stopShell)}))process.exit(0)},5)`] }
+      }
+      public override terminateForegroundProcess(_pid: number | undefined, signal: NodeJS.Signals = 'SIGTERM'): void {
+        signals.push(signal)
+        // 单独结束 shell，留下真实子进程；模拟 POSIX 子孙关闭 stdio 后继续运行的边界。
+        if (signal === 'SIGTERM') writeFileSync(stopShell, 'exit')
+        else process.kill(descendant!, signal)
+      }
+    }
+    const controller = new AbortController()
+    const running = new CommandRunner(new PathResolver(), new EarlyExitShell()).runCommand(
+      { projectRoot, command: 'echo fixture', timeoutMs: 5_000 }, undefined, controller.signal
+    )
+    try {
+      descendant = Number(await waitForFile(marker, 3_000))
+      assert(Number.isInteger(descendant) && descendant > 1)
+      controller.abort()
+      const result = await running
+      assert.equal(result.success, false)
+      assert.deepEqual(signals, ['SIGTERM', 'SIGKILL'])
+      await waitForProcessExit(descendant, 1_000)
+    } finally {
+      controller.abort()
+      if (descendant && isProcessAlive(descendant)) process.kill(descendant, 'SIGKILL')
+      await running.catch(() => undefined)
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('an abort terminates the live child process, escalating when it ignores SIGTERM', async () => {
     if (process.platform === 'win32') return
 

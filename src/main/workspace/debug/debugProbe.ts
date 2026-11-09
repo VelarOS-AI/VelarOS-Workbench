@@ -194,7 +194,7 @@ try {
   await waitFor(() => mine.paused().length === 1 && theirs.paused().length === 1, '两个窗口的程序都必须停在断点上')
   const minePid = readNumber(mine.output(), 'PROBE_PIDS')
   const mineChildPid = readNumber(mine.output(), 'PROBE_CHILD')
-  debug.closeSessionsForOwner(101)
+  await debug.closeSessionsForOwner(101)
   await terminal.closeSessionsForOwner(101)
   await waitFor(() => mine.ended() !== undefined, '窗口关掉后它的调试会话必须结束')
   await waitFor(
@@ -213,11 +213,11 @@ try {
 
   // 应用退出：全部断开，终端那边把进程收掉。
   const theirPid = readNumber(theirs.output(), 'PROBE_PIDS')
-  debug.closeAllSessions()
+  await debug.closeAllSessions()
   await terminal.closeAllSessions()
   await waitFor(() => theirs.ended() !== undefined && !isProcessAlive(theirPid), '应用退出时调试的程序必须结束')
 } finally {
-  debug.closeAllSessions()
+  await debug.closeAllSessions()
   await terminal.closeAllSessions()
   rmSync(projectRoot, { recursive: true, force: true })
 }

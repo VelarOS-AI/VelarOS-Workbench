@@ -72,7 +72,21 @@ export function registerWorkbenchFsIpc(
   parts: WorkbenchAppParts,
   windowManager: WorkbenchWindowManager,
   userWrites?: WorkbenchUserWriteSink
-): void {
+): { cancelCommandsForSender(senderId: number): Promise<void>; cancelCommands(): Promise<void> } {
+  const commands = new Map<number, Map<AbortController, Promise<unknown>>>()
+  const closingCommandOwners = new Set<number>()
+  let commandsClosed = false
+  const cancelCommandsForSender = async (senderId: number): Promise<void> => {
+    const active = commands.get(senderId)
+    if (!active) return
+    closingCommandOwners.add(senderId)
+    try {
+      for (const controller of active.keys()) controller.abort()
+      await Promise.allSettled(active.values())
+    } finally {
+      closingCommandOwners.delete(senderId)
+    }
+  }
   /** 写成功之后才报：没写成的不算动过。路径相对项目根。 */
   const recordUserWrites = <T>(
     result: T,
@@ -335,21 +349,49 @@ export function registerWorkbenchFsIpc(
       if (!parsed) return invalidRequest()
 
       const sender = event.sender
+      if (sender.isDestroyed()) throw new AppError('CLOSED', '项目窗口已关闭。')
+      const senderId = sender.id
+      if (commandsClosed || closingCommandOwners.has(senderId))
+        throw new AppError('CLOSED', '项目命令正在关闭。')
+      const controller = new AbortController()
+      const cancel = (): void => { controller.abort() }
+      sender.once('destroyed', cancel)
+      sender.once('render-process-gone', cancel)
+      const active = commands.get(senderId) ?? new Map<AbortController, Promise<unknown>>()
+      commands.set(senderId, active)
       // 命令面板里的命令是用户自己输入、自己点运行（或按快捷键重跑自己的上一条）的：用户就是确认者，
       // 这里没有也不需要再弹确认卡。Velar Agent 程序由会话的 Node 执行宿主按权限设置确认（执行范围由项目沙箱
       // 补问，见 WorkbenchConversationSession），不经这条通道。
-      return parts.commands.runCommand(
+      const pending = parts.commands.runCommand(
         parsed,
         (outputEvent) => {
           if (!sender.isDestroyed()) {
-            sender.send(WorkbenchFsChannels.runCommandOutput, outputEvent)
+            try {
+              sender.send(WorkbenchFsChannels.runCommandOutput, outputEvent)
+            } catch (error) {
+              controller.abort(error)
+            }
           }
         },
-        undefined,
+        controller.signal,
         true
       )
+      active.set(controller, pending)
+      return pending.finally(() => {
+        sender.removeListener('destroyed', cancel)
+        sender.removeListener('render-process-gone', cancel)
+        active.delete(controller)
+        if (active.size === 0 && commands.get(senderId) === active) commands.delete(senderId)
+      })
     })
   )
+  return {
+    cancelCommandsForSender,
+    cancelCommands: async () => {
+      commandsClosed = true
+      await Promise.all([...commands.keys()].map(cancelCommandsForSender))
+    },
+  }
 }
 
 function parseListDirectoryRequest(input: unknown): Nullable<WorkbenchListDirectoryRequest> {

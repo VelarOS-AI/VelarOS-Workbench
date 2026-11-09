@@ -123,6 +123,38 @@ async function settle(ms = 30): Promise<void> {
 }
 
 void describe('terminal sessions on a pseudo-terminal', () => {
+  void test('closing an owner during startup prevents its pending terminal from spawning', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-')))
+    const entered = Promise.withResolvers<void>()
+    const prepared = Promise.withResolvers<void>()
+    const pathResolver = new PathResolver()
+    pathResolver.resolveProjectRoot = async () => {
+      entered.resolve()
+      await prepared.promise
+      return projectRoot
+    }
+    const { factory, spawned } = createFakeFactory()
+    const terminal = new TerminalSessions(pathResolver, new CommandHelper(), factory)
+    const started = terminal.startTerminalSession({ projectRoot }, () => undefined, 7)
+    const cancelled = assert.rejects(started, { code: 'CANCELLED' })
+    try {
+      await entered.promise
+      const closed = terminal.closeSessionsForOwner(7)
+      assert.equal(terminal.closeSessionsForOwner(7), closed)
+      await assert.rejects(
+        terminal.startTerminalSession({ projectRoot }, () => undefined, 7),
+        { code: 'CLOSED' }
+      )
+      prepared.resolve()
+      await Promise.all([cancelled, closed])
+      assert.equal(spawned.length, 0)
+    } finally {
+      prepared.resolve()
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('spawns an interactive shell with a terminal environment and batches its output', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-')))
     const { factory, spawned } = createFakeFactory()

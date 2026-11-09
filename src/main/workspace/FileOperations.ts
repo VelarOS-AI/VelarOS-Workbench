@@ -533,7 +533,30 @@ class FileOperations {
     this.assertOutsideGitInternals(projectRoot, [restore.entryPath], restore.deletedPath)
 
     return this.runWorkbenchMutation(async () => {
-      const existing = await lstat(restore.entryPath).catch(() => null)
+      const parent = await this.pathResolver
+        .resolveInsideProject(projectRoot, dirname(restore.entryPath))
+        .catch((error: unknown) => {
+          if (error instanceof AppError && error.code === 'NOT_FOUND')
+            throw new AppError(
+              'CONFLICT',
+              workbenchMainText('files.undoDeleteParentMissing', { path: restore.deletedPath })
+            )
+          throw error
+        })
+      const entryPath = this.pathResolver.resolveChildPath(
+        projectRoot,
+        parent.realPath,
+        basename(restore.entryPath)
+      )
+      this.assertOutsideGitInternals(
+        projectRoot,
+        [parent.requestedPath, parent.realPath, entryPath],
+        restore.deletedPath
+      )
+      const existing = await lstat(entryPath).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+        throw error
+      })
       if (existing) {
         throw new AppError(
           'CONFLICT',
@@ -541,10 +564,9 @@ class FileOperations {
         )
       }
 
-      const parentPath = dirname(restore.entryPath)
-      const parentStats = await stat(parentPath).catch(() => null)
-      const parentLinkStats = await lstat(parentPath).catch(() => null)
-      if (!parentStats?.isDirectory() || !parentLinkStats) {
+      const parentStats = await stat(parent.realPath)
+      const parentLinkStats = await lstat(parent.requestedPath)
+      if (!parentStats.isDirectory()) {
         throw new AppError(
           'CONFLICT',
           workbenchMainText('files.undoDeleteParentMissing', { path: restore.deletedPath })
@@ -554,7 +576,7 @@ class FileOperations {
         throw new AppError('VALIDATION', workbenchMainText('files.undoDeleteIntoLinkedFolder'))
       }
 
-      await this.deleteUndo.restore(restore)
+      await this.deleteUndo.restore({ ...restore, entryPath })
       const entry = await this.entryHelper.toDirectoryEntry(
         projectRoot,
         resolve(projectRoot, restore.deletedPath),

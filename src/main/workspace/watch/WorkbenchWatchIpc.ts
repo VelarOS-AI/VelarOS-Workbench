@@ -28,7 +28,10 @@ export function registerWorkbenchWatchIpc(
   service: WorkbenchFileWatcher
 ): WorkbenchWatchIpcRegistration {
   const owned = new Map<string, OwnedSubscription>()
+  const owners = new Map<number, symbol>()
   const closeSubscriptionsForSender = (senderId: number): void => {
+    // 先撤销等待中的所有权：subscribe 的异步根解析还可能尚未返回。
+    owners.delete(senderId)
     for (const [subscriptionId, subscription] of owned) {
       if (subscription.senderId !== senderId) continue
       subscription.unsubscribe()
@@ -42,6 +45,10 @@ export function registerWorkbenchWatchIpc(
       if (!parsed) return invalidRequest()
 
       const sender = event.sender
+      const senderId = sender.id
+      const owner = owners.get(senderId) ?? Symbol('watch-owner')
+      owners.set(senderId, owner)
+      installSenderCleanup(sender, closeSubscriptionsForSender)
       const result = await service.subscribe(
         parsed.workspaceRoot,
         (changedEvent) => {
@@ -62,11 +69,14 @@ export function registerWorkbenchWatchIpc(
           sender.send(WorkbenchWatchChannels.status, payload)
         }
       )
+      if (sender.isDestroyed() || owners.get(senderId) !== owner) {
+        service.unsubscribe(result.subscriptionId)
+        throw new AppError('CLOSED', 'File watch owner is no longer active.')
+      }
       owned.set(result.subscriptionId, {
-        senderId: sender.id,
+        senderId,
         unsubscribe: () => service.unsubscribe(result.subscriptionId),
       })
-      installSenderCleanup(sender, closeSubscriptionsForSender)
       return result
     })
   )
@@ -89,6 +99,7 @@ export function registerWorkbenchWatchIpc(
   return {
     closeSubscriptionsForSender,
     dispose: () => {
+      owners.clear()
       ipcMain.removeHandler(WorkbenchWatchChannels.start)
       ipcMain.removeHandler(WorkbenchWatchChannels.stop)
       for (const subscription of owned.values()) subscription.unsubscribe()

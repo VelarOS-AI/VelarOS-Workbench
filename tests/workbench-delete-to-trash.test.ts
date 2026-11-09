@@ -5,8 +5,11 @@ import {
   readdir,
   readFile,
   realpath,
+  rename,
   rm,
   stat,
+  symlink,
+  unlink,
   utimes,
   writeFile,
 } from 'node:fs/promises'
@@ -231,6 +234,46 @@ void describe('Workbench delete to trash', () => {
       await rm(join(projectRoot, 'notes.md'))
       await parts.files.restoreDeletedEntry({ projectRoot, restoreId: deleted.restoreId })
       assert.equal(await readFile(join(projectRoot, 'notes.md'), 'utf8'), 'old notes')
+    })
+  })
+
+  void test('undo rejects an ancestor redirected outside the project and retains the copy for retry', async () => {
+    await withSandbox(async (sandbox) => {
+      const parts = createWorkbenchAppParts(sandbox.dataRoot, {
+        moveToTrash: sandbox.trash.moveToTrash,
+      })
+      const ancestor = join(sandbox.projectRoot, 'ancestor')
+      const originalAncestor = join(sandbox.projectRoot, 'original-ancestor')
+      const outside = join(sandbox.dataRoot, 'outside')
+      await mkdir(join(ancestor, 'nested'), { recursive: true })
+      await mkdir(join(outside, 'nested'), { recursive: true })
+      await writeFile(join(ancestor, 'nested', 'notes.md'), 'kept notes', 'utf8')
+      const deleted = await parts.files.deleteEntry({
+        projectRoot: sandbox.projectRoot,
+        path: 'ancestor/nested/notes.md',
+      })
+      assert.ok(deleted.restoreId)
+
+      await rename(ancestor, originalAncestor)
+      await symlink(outside, ancestor, process.platform === 'win32' ? 'junction' : 'dir')
+      await assert.rejects(
+        parts.files.restoreDeletedEntry({
+          projectRoot: sandbox.projectRoot,
+          restoreId: deleted.restoreId,
+        }),
+        (error: unknown) => error instanceof AppError && error.code === 'PERMISSION'
+      )
+      await assert.rejects(stat(join(outside, 'nested', 'notes.md')), { code: 'ENOENT' })
+      assert.equal((await listCopies(sandbox.undoRoot)).length, 1)
+
+      await unlink(ancestor)
+      await rename(originalAncestor, ancestor)
+      await parts.files.restoreDeletedEntry({
+        projectRoot: sandbox.projectRoot,
+        restoreId: deleted.restoreId,
+      })
+      assert.equal(await readFile(join(ancestor, 'nested', 'notes.md'), 'utf8'), 'kept notes')
+      assert.deepEqual(await listCopies(sandbox.undoRoot), [])
     })
   })
 

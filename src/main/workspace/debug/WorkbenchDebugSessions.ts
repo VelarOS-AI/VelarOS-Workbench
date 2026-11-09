@@ -49,8 +49,17 @@ interface OwnedDebugSession {
   ownerId: Nullable<number>
 }
 
+interface PendingDebugStart {
+  ownerId: Nullable<number>
+  completed: Promise<WorkbenchDebuggerStartResult>
+  cleanup?: Promise<void>
+}
+
 class WorkbenchDebugSessions {
   private readonly sessions = new Map<string, OwnedDebugSession>()
+  private readonly pendingStarts = new Map<AbortController, PendingDebugStart>()
+  private readonly closingOwners = new Map<number, Promise<void>>()
+  private closing?: Promise<void>
 
   public constructor(
     private readonly pathResolver: PathResolver,
@@ -58,16 +67,42 @@ class WorkbenchDebugSessions {
     private readonly attachTimeoutMs: number = DefaultAttachTimeoutMs
   ) {}
 
-  public async startDebugSession(
+  public startDebugSession(
     request: WorkbenchDebuggerStartRequest,
     handlers: WorkbenchDebugSessionHandlers,
     ownerId: Nullable<number> = null
   ): Promise<WorkbenchDebuggerStartResult> {
+    if (this.closing || (ownerId !== null && this.closingOwners.has(ownerId)))
+      return Promise.reject(new AppError('CLOSED', workbenchMainText('debug.sessionEnded')))
+    const controller = new AbortController()
+    const start: PendingDebugStart = {
+      ownerId,
+      completed: Promise.resolve().then(() =>
+        this.createDebugSession(request, handlers, ownerId, controller.signal, start)
+      ),
+    }
+    this.pendingStarts.set(controller, start)
+    void start.completed
+      .finally(() => this.pendingStarts.delete(controller))
+      .catch(() => undefined)
+    return start.completed
+  }
+
+  private async createDebugSession(
+    request: WorkbenchDebuggerStartRequest,
+    handlers: WorkbenchDebugSessionHandlers,
+    ownerId: Nullable<number>,
+    signal: AbortSignal,
+    start: PendingDebugStart
+  ): Promise<WorkbenchDebuggerStartResult> {
+    signal.throwIfAborted()
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    signal.throwIfAborted()
     const cwd = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
     if (!(await stat(cwd.realPath)).isDirectory())
       throw new AppError('VALIDATION', workbenchMainText('terminal.cwdNotFolder'))
 
+    signal.throwIfAborted()
     const port = await findFreeLoopbackPort()
     const command = await buildWorkbenchDebugCommand(request.target, {
       projectRoot,
@@ -75,6 +110,7 @@ class WorkbenchDebugSessions {
       port,
       pathResolver: this.pathResolver,
     })
+    signal.throwIfAborted()
     const process = await this.launcher({
       projectRoot,
       cwd: cwd.realPath,
@@ -86,31 +122,45 @@ class WorkbenchDebugSessions {
       onOutput: handlers.terminalOutput,
     })
 
-    const sessionId = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const session = new WorkbenchDebugSession({
-      sessionId,
-      projectRoot,
-      process,
-      port,
-      pathResolver: this.pathResolver,
-      breakpoints: request.breakpoints,
-      pauseOnUncaughtExceptions: request.pauseOnUncaughtExceptions,
-      skipInitialPause: request.target.kind === 'inspect-command',
-      attachTimeoutMs: this.attachTimeoutMs,
-      emit: handlers.emit,
-      onEnded: () => {
-        if (this.sessions.get(sessionId)?.session === session) this.sessions.delete(sessionId)
-      },
-    })
-    // 程序一起来就退了（命令不存在）：会话在构造时已经收口，不再登记。
-    if (!session.hasEnded) this.sessions.set(sessionId, { session, ownerId })
+    try {
+      signal.throwIfAborted()
+      const sessionId = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const session = new WorkbenchDebugSession({
+        sessionId,
+        projectRoot,
+        process,
+        port,
+        pathResolver: this.pathResolver,
+        breakpoints: request.breakpoints,
+        pauseOnUncaughtExceptions: request.pauseOnUncaughtExceptions,
+        skipInitialPause: request.target.kind === 'inspect-command',
+        attachTimeoutMs: this.attachTimeoutMs,
+        emit: handlers.emit,
+        onEnded: () => {
+          if (this.sessions.get(sessionId)?.session.process === process)
+            this.sessions.delete(sessionId)
+        },
+      })
+      signal.throwIfAborted()
+      // 程序一起来就退了（命令不存在）：会话在构造时已经收口，不再登记。
+      if (!session.hasEnded) this.sessions.set(sessionId, { session, ownerId })
 
-    return {
-      sessionId,
-      terminalSessionId: process.terminalSessionId,
-      command,
-      cwd: process.cwd,
-      shell: process.shell,
+      return {
+        sessionId,
+        terminalSessionId: process.terminalSessionId,
+        command,
+        cwd: process.cwd,
+        shell: process.shell,
+      }
+    } catch (error) {
+      // launcher 已交回资源但窗口不再接纳：启动与关闭双方都等待真实停止结果。
+      start.cleanup = Promise.resolve().then(() => process.stop())
+      try {
+        await start.cleanup
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Failed to release unaccepted debug process')
+      }
+      throw error
     }
   }
 
@@ -172,15 +222,48 @@ class WorkbenchDebugSessions {
    * 一个项目窗口关掉或切走项目：断开它名下的调试会话。被调试的进程跑在这个窗口的终端会话里，由终端那边
    * 一起结束。
    */
-  public closeSessionsForOwner(ownerId: number): void {
-    for (const owned of [...this.sessions.values()]) {
-      if (owned.ownerId === ownerId) owned.session.dispose()
-    }
+  public closeSessionsForOwner(ownerId: number): Promise<void> {
+    if (this.closing) return this.closing
+    const current = this.closingOwners.get(ownerId)
+    if (current) return current
+    const completion = Promise.withResolvers<void>()
+    this.closingOwners.set(ownerId, completion.promise)
+    void this.closeOwnedSessions(ownerId)
+      .then(completion.resolve, completion.reject)
+      .finally(() => this.closingOwners.delete(ownerId))
+    return completion.promise
   }
 
   /** 应用退出前：断开全部调试会话（进程随终端会话结束）。 */
-  public closeAllSessions(): void {
-    for (const owned of [...this.sessions.values()]) owned.session.dispose()
+  public closeAllSessions(): Promise<void> {
+    if (this.closing) return this.closing
+    const completion = Promise.withResolvers<void>()
+    this.closing = completion.promise
+    void this.closeOwnedSessions().then(completion.resolve, completion.reject)
+    return completion.promise
+  }
+
+  private async closeOwnedSessions(ownerId?: number): Promise<void> {
+    const pending = [...this.pendingStarts].filter(
+      ([, start]) => ownerId === undefined || start.ownerId === ownerId
+    )
+    for (const [controller] of pending)
+      controller.abort(new AppError('CANCELLED', workbenchMainText('debug.sessionEnded')))
+    const errors: unknown[] = []
+    for (const owned of [...this.sessions.values()]) {
+      if (ownerId !== undefined && owned.ownerId !== ownerId) continue
+      try {
+        owned.session.dispose()
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+    await Promise.allSettled(pending.map(([, start]) => start.completed))
+    const cleanup = await Promise.allSettled(
+      pending.flatMap(([, start]) => (start.cleanup ? [start.cleanup] : []))
+    )
+    for (const outcome of cleanup) if (outcome.status === 'rejected') errors.push(outcome.reason)
+    if (errors.length > 0) throw new AggregateError(errors, 'Failed to close debug sessions')
   }
 
   private liveSession(sessionId: string, ownerId: Nullable<number>): WorkbenchDebugSession {

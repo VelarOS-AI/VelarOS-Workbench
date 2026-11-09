@@ -420,8 +420,10 @@ if (hasSingleInstanceLock)
         sessionPeers?.releaseProject(projectRoot)
         watchIpc.closeSubscriptionsForSender(ownerId)
         // 先断开这个窗口的调试会话，再结束它的终端会话（被调试的程序跑在里面）。
-        providers.parts.debug.closeSessionsForOwner(ownerId)
+        const debugClosing = providers.parts.debug.closeSessionsForOwner(ownerId)
         await Promise.all([
+          debugClosing,
+          fsIpc.cancelCommandsForSender(ownerId),
           providers.parts.terminal.closeSessionsForOwner(ownerId),
           providers.language.invalidateProject({ projectRoot }),
           // 窗口关掉或切走项目：这个项目里还在跑的对话一并停下，浏览器页面一并离站。
@@ -450,7 +452,7 @@ if (hasSingleInstanceLock)
       browser: browserService,
       windows: windowManager,
     })
-    registerWorkbenchFsIpc(
+    const fsIpc = registerWorkbenchFsIpc(
       providers.fileSystem,
       providers.parts,
       windowManager,
@@ -487,8 +489,9 @@ if (hasSingleInstanceLock)
       disposeWorkspaceIpc()
       disposeProductAnalyticsRuntime()
       disposeDebugIpc()
-      providers.parts.debug.closeAllSessions()
       void Promise.allSettled([
+        fsIpc.cancelCommands(),
+        providers.parts.debug.closeAllSessions(),
         providers.parts.terminal.closeAllSessions(),
         providers.language.dispose(),
         providers.workspace.dispose(),
@@ -501,9 +504,10 @@ if (hasSingleInstanceLock)
             result.status === 'rejected'
               ? [
                   {
-                    operation: ['terminal', 'language', 'workspace', 'conversation', 'analytics'][
-                      index
-                    ],
+                    operation: [
+                      'commands', 'debug', 'terminal', 'language',
+                      'workspace', 'conversation', 'analytics',
+                    ][index],
                     error: result.reason,
                   },
                 ]

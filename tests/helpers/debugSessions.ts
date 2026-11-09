@@ -227,7 +227,7 @@ export async function createDebugTestProject(
       (await waitForEvent(['paused', 'ended'], timeoutMs)) as
         DebuggerEventOf<'paused'> | DebuggerEventOf<'ended'>,
     dispose: async () => {
-      sessions.closeAllSessions()
+      await sessions.closeAllSessions()
       const errors: unknown[] = []
       for (const item of launched) {
         // 退出事件已确认的子进程不再按旧进程组号发送信号，避免 macOS 对已回收组返回 EPERM。

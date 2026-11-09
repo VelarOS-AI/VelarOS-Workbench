@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,11 +39,41 @@ async function registerCommandPanelIpc(): Promise<(request: unknown) => Promise<
   )
   const handler = ipcHandlers.get(WorkbenchFsChannels.runCommand)
   assert.ok(handler)
-  const sender = { isDestroyed: () => false, send: () => undefined }
+  const sender = Object.assign(new EventEmitter(), {
+    id: 1, isDestroyed: () => false, send: () => undefined,
+  })
   return async (request) => handler({ sender }, request)
 }
 
 void describe('Workbench command panel IPC', () => {
+  void test('owner release and renderer loss cancel pending commands and wait for cleanup', async () => {
+    const { registerWorkbenchFsIpc } = await import('../src/main/workspace/WorkbenchFsIpc')
+    for (const reason of ['project', 'render-process-gone'] as const) {
+      const work = Promise.withResolvers<unknown>()
+      let commandSignal: AbortSignal | undefined
+      const owner = registerWorkbenchFsIpc({} as never, {
+        commands: { runCommand: (_request: unknown, _output: unknown, signal: AbortSignal) => {
+          commandSignal = signal
+          return work.promise
+        } },
+      } as never, {} as never)
+      const sender = Object.assign(new EventEmitter(), { id: 22, isDestroyed: () => false, send: () => undefined })
+      const pending = ipcHandlers.get(WorkbenchFsChannels.runCommand)!({ sender }, { projectRoot: '/project', command: 'build' })
+      if (reason === 'render-process-gone') sender.emit(reason)
+      const closing = owner.cancelCommandsForSender(sender.id)
+      assert.equal(commandSignal?.aborted, true)
+      let closed = false
+      void closing.then(() => { closed = true })
+      await Promise.resolve()
+      assert.equal(closed, false)
+      work.resolve({ success: false })
+      await closing
+      await pending
+      assert.equal(sender.listenerCount('destroyed'), 0)
+      assert.equal(sender.listenerCount('render-process-gone'), 0)
+    }
+  })
+
   void test('runs a dangerous command the user typed without refusing it', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'workbench-command-panel-')))
     try {

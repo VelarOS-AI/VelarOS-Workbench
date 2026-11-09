@@ -85,6 +85,7 @@ class CommandRunner {
       let settled = false
       let terminationRequested = false
       let forceKillHandle: TimerLease | undefined
+      let groupTermination: Promise<void> | undefined
 
       const child = spawn(shellSpec.file, shellSpec.args, {
         cwd: cwdPath.realPath,
@@ -106,10 +107,16 @@ class CommandRunner {
         abortRequested = reason === 'abort'
         this.commandHelper.terminateForegroundProcess(child.pid, 'SIGTERM')
 
-        forceKillHandle = timers.after(this.commandHelper.getForceKillDelayMs(), () => {
-          if (isChildRunning()) {
-            this.commandHelper.terminateForegroundProcess(child.pid, 'SIGKILL')
-          }
+        groupTermination = new Promise<void>((done) => {
+          forceKillHandle = timers.after(this.commandHelper.getForceKillDelayMs(), () => {
+            try {
+              // shell 已退出时，同组子孙仍可能忽略 SIGTERM；关闭事件不能撤掉它们的强杀。
+              if (detached || isChildRunning())
+                this.commandHelper.terminateForegroundProcess(child.pid, 'SIGKILL')
+            } finally {
+              done()
+            }
+          })
         })
       }
 
@@ -150,9 +157,10 @@ class CommandRunner {
         )
       })
 
-      child.on('close', (exitCode, signal) => {
+      child.on('close', async (exitCode, signal) => {
         if (settled) return
         settled = true
+        if (detached && groupTermination) await groupTermination
         cleanup()
 
         for (const stream of ['stdout', 'stderr'] as const) append(stream, decoders[stream].end())

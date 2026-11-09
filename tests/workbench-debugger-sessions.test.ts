@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
@@ -6,6 +8,9 @@ import { describe, setDefaultTimeout, test } from 'bun:test'
 import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 
 import { resolveWorkbenchNodeExecutable } from '../src/main/conversation/WorkbenchNodeRuntime'
+import type { WorkbenchDebugProcess } from '../src/main/workspace/debug/WorkbenchDebugLaunch'
+import { WorkbenchDebugSessions } from '../src/main/workspace/debug/WorkbenchDebugSessions'
+import { PathResolver } from '../src/main/workspace/PathResolver'
 
 import {
   createDebugTestProject,
@@ -31,6 +36,67 @@ async function waitFor(condition: () => boolean, what: string, timeoutMs = 10_00
 }
 
 void describe('starting a debug session', () => {
+  void test('closing an owner waits for a late debug process and reports failed cleanup', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-debug-late-')))
+    const entered = Promise.withResolvers<void>()
+    const acquired = Promise.withResolvers<WorkbenchDebugProcess>()
+    const stopping = Promise.withResolvers<void>()
+    const stopped = Promise.withResolvers<void>()
+    const cleanupFailure = new Error('late process did not stop')
+    const process: WorkbenchDebugProcess = {
+      terminalSessionId: 'late-process',
+      shell: 'node',
+      cwd: projectRoot,
+      onExit: () => undefined,
+      stop: () => {
+        stopping.resolve()
+        return stopped.promise
+      },
+    }
+    const sessions = new WorkbenchDebugSessions(new PathResolver(), async () => {
+      entered.resolve()
+      return acquired.promise
+    })
+    const started = sessions.startDebugSession(
+      {
+        projectRoot,
+        target: { kind: 'inspect-command', command: 'node' },
+        breakpoints: [],
+        pauseOnUncaughtExceptions: false,
+      },
+      { emit: () => undefined, terminalOutput: () => undefined },
+      7
+    )
+    const rejectedStart = assert.rejects(
+      started,
+      (error: unknown) => error instanceof AggregateError && error.errors.includes(cleanupFailure)
+    )
+    try {
+      await entered.promise
+      const closed = sessions.closeSessionsForOwner(7)
+      assert.equal(sessions.closeSessionsForOwner(7), closed)
+      let closeSettled = false
+      void closed.then(
+        () => (closeSettled = true),
+        () => (closeSettled = true)
+      )
+      const rejectedClose = assert.rejects(
+        closed,
+        (error: unknown) => error instanceof AggregateError && error.errors.includes(cleanupFailure)
+      )
+      acquired.resolve(process)
+      await stopping.promise
+      assert.equal(closeSettled, false)
+      stopped.reject(cleanupFailure)
+      await Promise.all([rejectedStart, rejectedClose])
+    } finally {
+      acquired.resolve(process)
+      stopped.resolve()
+      await sessions.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('debug fixtures ignore inherited Node options but keep explicit launch options', async () => {
     const inherited = process.env.NODE_OPTIONS
     const project = await createDebugTestProject({ 'main.cjs': 'debugger\n' })
@@ -438,7 +504,7 @@ void describe('controlling a running debug session', () => {
       )
       await assert.rejects(project.sessions.stopDebugSession({ sessionId }, foreign), denied)
       // 别的窗口关掉也不影响它：还停在原处，自己的窗口照常读得到变量。
-      project.sessions.closeSessionsForOwner(foreign)
+      await project.sessions.closeSessionsForOwner(foreign)
       assert.equal(
         (
           await project.sessions.evaluate(
@@ -455,7 +521,7 @@ void describe('controlling a running debug session', () => {
 
       // 自己的窗口关掉：调试器断开，之后的命令都说会话已经结束。（进程由那个窗口的终端会话结束；这里的
       // 测试进程没有终端，由 dispose 收掉。）
-      project.sessions.closeSessionsForOwner(7)
+      await project.sessions.closeSessionsForOwner(7)
       await assert.rejects(
         project.sessions.controlDebugSession({ sessionId, action: 'continue' }, 7),
         /调试会话已结束/u

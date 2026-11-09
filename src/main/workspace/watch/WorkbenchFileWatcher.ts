@@ -143,6 +143,7 @@ function normalizeRelativePath(rootPath: string, filename: string): Nullable<str
 export class WorkbenchFileWatcher implements WorkbenchRawPathSource {
   private readonly roots = new Map<string, RootWatch>()
   private readonly subscriptions = new Map<string, Subscription>()
+  private disposed = false
   private readonly debounceMs: number
   private readonly now: () => number
   private readonly onFilesChanged: (event: SystemWorkspaceFilesChangedEvent) => void
@@ -206,12 +207,14 @@ export class WorkbenchFileWatcher implements WorkbenchRawPathSource {
   }
 
   public dispose(): void {
+    this.disposed = true
     for (const rootWatch of this.roots.values()) this.closeRootWatch(rootWatch)
     this.roots.clear()
     this.subscriptions.clear()
   }
 
   private ensureRootWatch(rootPath: string): RootWatch {
+    if (this.disposed) throw new AppError('CLOSED', 'File watcher is closed.')
     const existing = this.roots.get(rootPath)
     if (existing) return existing
 
