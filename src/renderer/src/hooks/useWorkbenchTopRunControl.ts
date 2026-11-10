@@ -53,10 +53,10 @@ interface UseWorkbenchTopRunControlOptions {
   /** 就地停止并重启一张已运行的卡。 */
   onRestartRunSession: (sessionId: string) => void
   /** 持久化启动命令；传入空串即清除配置，回退到自动探测。 */
-  onConfigureCommand: (command: string) => void
-  onSelectRunCommand: (command: WorkbenchRunCommand) => void
+  onConfigureCommand: (command: string) => boolean
+  onSelectRunCommand: (command: WorkbenchRunCommand) => boolean
   /** 把 ▶ 指到一份运行配置上。 */
-  onSelectConfiguration: (configurationId: string) => void
+  onSelectConfiguration: (configurationId: string) => boolean
   /** 打开「编辑运行配置」对话框。 */
   onEditConfigurations: () => void
 }
@@ -79,11 +79,11 @@ export interface WorkbenchTopRunControl {
   /** 停止并重新运行当前生效命令最近的一张运行卡。 */
   restartActiveCommand: () => void
   /** 保存/覆盖手动配置的启动命令；空串清除回退自动探测。 */
-  configureCommand: (command: string) => void
+  configureCommand: (command: string) => boolean
   /** 选择已知菜单项，保存它的真实启动目标；不把显示文本重解释成 shell。 */
-  selectCommand: (key: string) => void
+  selectCommand: (key: string) => boolean
   /** 把 ▶ 指到一份运行配置上（记在项目设置里）。 */
-  selectConfiguration: (configurationId: string) => void
+  selectConfiguration: (configurationId: string) => boolean
   /** 直接跑一份运行配置，▶ 指着什么不变。 */
   runConfiguration: (configurationId: string) => void
   /** ▶ 指着的是一个 Node 程序：旁边多一个「调试」。 */
@@ -246,18 +246,20 @@ export function useWorkbenchTopRunControl({
     }
   }, [activeCommandRunningSession])
 
-  const configureCommand = useCallback((command: string): void => {
-    onConfigureCommandLatest.current(command.trim())
-  }, [])
+  const configureCommand = useCallback(
+    (command: string): boolean => onConfigureCommandLatest.current(command.trim()),
+    []
+  )
 
-  const selectCommand = useCallback((key: string): void => {
+  const selectCommand = useCallback((key: string): boolean => {
     const option = options.find((candidate) => candidate.value === key)
-    if (option) onSelectRunCommand(option.run)
+    return option ? onSelectRunCommand(option.run) : false
   }, [onSelectRunCommand, options])
 
-  const selectConfiguration = useCallback((configurationId: string): void => {
-    onSelectConfigurationLatest.current(configurationId)
-  }, [])
+  const selectConfiguration = useCallback(
+    (configurationId: string): boolean => onSelectConfigurationLatest.current(configurationId),
+    []
+  )
 
   const runConfiguration = useCallback(
     (configurationId: string): void => {

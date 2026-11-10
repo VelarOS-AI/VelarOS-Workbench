@@ -222,24 +222,21 @@ function WorkbenchRunAction({
 
   function handleConfigSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-    topRun.configureCommand(draftCommand)
-    setMenuOpen(false)
+    if (topRun.configureCommand(draftCommand)) setMenuOpen(false)
   }
 
   function handlePickOption(key: string): void {
-    topRun.selectCommand(key)
-    setMenuOpen(false)
+    if (topRun.selectCommand(key)) setMenuOpen(false)
   }
 
   function handleResetAuto(): void {
-    topRun.configureCommand('')
+    if (!topRun.configureCommand('')) return
     setDraftCommand('')
     setMenuOpen(false)
   }
 
   function handlePickConfiguration(configurationId: string): void {
-    topRun.selectConfiguration(configurationId)
-    setMenuOpen(false)
+    if (topRun.selectConfiguration(configurationId)) setMenuOpen(false)
   }
 
   function handleRunConfiguration(configurationId: string): void {

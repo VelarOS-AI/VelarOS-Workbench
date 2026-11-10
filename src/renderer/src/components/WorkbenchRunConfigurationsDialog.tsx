@@ -48,7 +48,7 @@ export interface WorkbenchRunConfigurationsDialogProps {
   /** 打开时先选中哪一份（▶ 此刻指着的那份）；不给、或它不在列表里，选第一份。 */
   initialConfigurationId?: Nullable<string>
   onOpenChange: (open: boolean) => void
-  onSave: (configurations: WorkbenchNamedRunConfiguration[]) => void
+  onSave: (configurations: WorkbenchNamedRunConfiguration[]) => boolean
 }
 
 export function WorkbenchRunConfigurationsDialog({
@@ -134,13 +134,13 @@ export function WorkbenchRunConfigurationsDialog({
       return
     }
 
-    onSave(
+    const saved = onSave(
       drafts.flatMap((draft) => {
         const configuration = buildWorkbenchRunConfigurationFromDraft(draft)
         return configuration ? [configuration] : []
       })
     )
-    onOpenChange(false)
+    if (saved) onOpenChange(false)
   }
 
   return (

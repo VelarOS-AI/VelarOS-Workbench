@@ -7,17 +7,19 @@ import {
   WORKBENCH_RUN_CONFIGURATIONS_CHANGED_EVENT,
   type WorkbenchNamedRunConfiguration,
 } from '../models/commands/workbenchNamedRunConfigurations'
+import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 
 export interface WorkbenchNamedRunConfigurationsController {
   configurations: WorkbenchNamedRunConfiguration[]
   /** 整份换掉当前项目的运行配置（「编辑运行配置」对话框点保存时）。 */
-  saveConfigurations: (configurations: readonly WorkbenchNamedRunConfiguration[]) => void
+  saveConfigurations: (configurations: readonly WorkbenchNamedRunConfiguration[]) => boolean
 }
 
 /** 当前项目里用户建的运行配置：从应用存储读，存了就跟着变。 */
 export function useWorkbenchNamedRunConfigurations(
   projectId: LooseOptional<string>
 ): WorkbenchNamedRunConfigurationsController {
+  const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const [configurations, setConfigurations] = useState<WorkbenchNamedRunConfiguration[]>(() =>
     readWorkbenchNamedRunConfigurations(projectId)
   )
@@ -39,12 +41,19 @@ export function useWorkbenchNamedRunConfigurations(
   }, [projectId])
 
   const saveConfigurations = useCallback(
-    (next: readonly WorkbenchNamedRunConfiguration[]): void => {
-      if (!projectId) return
+    (next: readonly WorkbenchNamedRunConfiguration[]): boolean => {
+      if (!projectId) return false
 
-      setConfigurations(saveWorkbenchNamedRunConfigurations(projectId, next))
+      const saved = saveWorkbenchNamedRunConfigurations(projectId, next)
+      if (saved.ok) return true
+
+      messageLatest.current.error({
+        title: tLatest.current('workbench.runConfigurationsDialogTitle'),
+        description: saved.error.message,
+      })
+      return false
     },
-    [projectId]
+    [messageLatest, projectId, tLatest]
   )
 
   return { configurations, saveConfigurations }

@@ -537,7 +537,6 @@ const workbenchProjectRunSettingsStore = createLocalStorageJsonStore<
   log,
   readErrorLevel: 'warn',
   readErrorMessage: '工作台项目运行命令读取失败',
-  writeErrorMessage: '工作台项目运行命令写入失败',
 })
 
 function readProjectRunSettingsStore(
@@ -560,23 +559,30 @@ export function saveWorkbenchProjectRunSettings(
   settings: WorkbenchProjectRunSettings,
   storage: StorageLike | undefined = undefined,
   target: Window = window
-): void {
-  const normalized = normalizeWorkbenchProjectRunSettings(settings)
-  const store = readProjectRunSettingsStore(storage)
+): ResultType<WorkbenchProjectRunSettings> {
+  try {
+    const resolved = storage ?? globalThis.localStorage
+    if (!resolved) throw new Error('Workbench local storage is unavailable in this host')
+    const raw = resolved.getItem(PROJECT_RUN_SETTINGS_STORAGE_KEY)
+    const stored: unknown = raw === null ? {} : JSON.parse(raw)
+    if (!isRecord(stored)) throw new TypeError('Workbench project run settings must be an object')
 
-  workbenchProjectRunSettingsStore.write(
-    {
-      ...store,
-      [projectRoot]: normalized,
-    },
-    storage
-  )
-  target.dispatchEvent(
-    new CustomEvent(WORKBENCH_PROJECT_RUN_SETTINGS_CHANGED_EVENT, {
-      detail: {
-        projectRoot,
-        settings: normalized,
-      },
-    })
-  )
+    const normalized = normalizeWorkbenchProjectRunSettings(settings)
+    resolved.setItem(
+      PROJECT_RUN_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ ...stored, [projectRoot]: normalized })
+    )
+    target.dispatchEvent(
+      new CustomEvent(WORKBENCH_PROJECT_RUN_SETTINGS_CHANGED_EVENT, {
+        detail: {
+          projectRoot,
+          settings: normalized,
+        },
+      })
+    )
+    return Result.ok(normalized)
+  } catch (error) {
+    log.warn('工作台项目运行命令写入失败，保留原存储', { error })
+    return Result.fail(AppError.from(error))
+  }
 }

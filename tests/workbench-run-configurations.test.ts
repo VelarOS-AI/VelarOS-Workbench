@@ -4,6 +4,8 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { Result } from '@velaros-ai/velaros/core/result'
+
 import { findLastRunningWorkbenchRunSession } from '../src/renderer/src/hooks/useWorkbenchTopRunControl'
 import {
   buildWorkbenchRunConfigurationCommand,
@@ -27,7 +29,13 @@ import {
   uniqueWorkbenchRunConfigurationName,
   validateWorkbenchRunConfigurationDraft,
 } from '../src/renderer/src/models/commands/workbenchRunConfigurationDrafts'
-import { normalizeWorkbenchProjectRunSettings, readWorkbenchProjectRunSettings, saveWorkbenchProjectRunSettings } from '../src/renderer/src/models/workbenchPreferences'
+import {
+  normalizeWorkbenchProjectRunSettings,
+  PROJECT_RUN_SETTINGS_STORAGE_KEY,
+  readWorkbenchProjectRunSettings,
+  saveWorkbenchProjectRunSettings,
+  WORKBENCH_PROJECT_RUN_SETTINGS_CHANGED_EVENT,
+} from '../src/renderer/src/models/workbenchPreferences'
 import type { StorageLike } from '../src/renderer/src/support/localStorageJsonStore'
 import { readWorkbenchRunEnvironment } from '../src/shared/workbenchRunEnvironment'
 
@@ -140,7 +148,7 @@ void describe('named run configurations', () => {
     assert.deepEqual(readWorkbenchNamedRunConfigurations('project-a', storage), [])
 
     const saved = saveWorkbenchNamedRunConfigurations('project-a', [Dev], storage, null)
-    assert.deepEqual(saved, [Dev])
+    assert.deepEqual(Result.unwrap(saved), [Dev])
     assert.deepEqual(readWorkbenchNamedRunConfigurations('project-a', storage), [Dev])
     assert.deepEqual(readWorkbenchNamedRunConfigurations('project-b', storage), [])
     assert.deepEqual(readWorkbenchNamedRunConfigurations(null, storage), [])
@@ -187,9 +195,101 @@ void describe('named run configurations', () => {
     assert.deepEqual(readWorkbenchNamedRunConfigurations('project-a', storage), [])
 
     // 删光了就不留空壳。
-    saveWorkbenchNamedRunConfigurations('project-a', [Dev], storage, null)
-    saveWorkbenchNamedRunConfigurations('project-a', [], storage, null)
+    storage.values.delete(RUN_CONFIGURATIONS_STORAGE_KEY)
+    assert.equal(saveWorkbenchNamedRunConfigurations('project-a', [Dev], storage, null).ok, true)
+    assert.equal(saveWorkbenchNamedRunConfigurations('project-a', [], storage, null).ok, true)
     assert.equal(storage.values.get(RUN_CONFIGURATIONS_STORAGE_KEY), '{}')
+  })
+
+  void test('saves against the latest map and preserves other projects without normalizing them', () => {
+    const storage = createStorage({
+      [RUN_CONFIGURATIONS_STORAGE_KEY]: JSON.stringify({ 'project-a': [Dev], 'project-b': [Dev] }),
+    })
+    readWorkbenchNamedRunConfigurations('project-a', storage)
+    const otherProject = [{ ...Server, name: 'Changed elsewhere', metadata: { keep: true } }]
+    storage.values.set(
+      RUN_CONFIGURATIONS_STORAGE_KEY,
+      JSON.stringify({ 'project-a': [Dev], 'project-b': otherProject })
+    )
+
+    assert.equal(saveWorkbenchNamedRunConfigurations('project-a', [Server], storage, null).ok, true)
+    assert.deepEqual(
+      JSON.parse(storage.values.get(RUN_CONFIGURATIONS_STORAGE_KEY)!),
+      { 'project-a': [Server], 'project-b': otherProject }
+    )
+    assert.equal(saveWorkbenchNamedRunConfigurations('project-a', [], storage, null).ok, true)
+    assert.equal(
+      storage.values.get(RUN_CONFIGURATIONS_STORAGE_KEY),
+      JSON.stringify({ 'project-b': otherProject })
+    )
+  })
+
+  void test('refuses unreadable configuration maps without writing or announcing success', () => {
+    for (const failure of ['read', 'empty', 'json', 'array', 'null', 'primitive'] as const) {
+      const raw = {
+        read: JSON.stringify({ 'project-b': [Server] }),
+        empty: '',
+        json: '{ broken json',
+        array: '[]',
+        null: 'null',
+        primitive: '7',
+      }[failure]
+      const storage = createStorage({ [RUN_CONFIGURATIONS_STORAGE_KEY]: raw })
+      let writes = 0
+      let events = 0
+      const saved = saveWorkbenchNamedRunConfigurations(
+        'project-a',
+        [Dev],
+        {
+          ...storage,
+          getItem: (key) => {
+            if (failure === 'read') throw new Error('storage read failed')
+            return storage.getItem(key)
+          },
+          setItem: (key, value) => {
+            writes += 1
+            storage.setItem(key, value)
+          },
+        },
+        {
+          dispatchEvent: () => {
+            events += 1
+            return true
+          },
+        }
+      )
+
+      assert.equal(saved.ok, false, failure)
+      assert.equal(writes, 0, failure)
+      assert.equal(events, 0, failure)
+      assert.equal(storage.values.get(RUN_CONFIGURATIONS_STORAGE_KEY), raw, failure)
+    }
+  })
+
+  void test('reports a write failure without announcing saved configurations', () => {
+    const raw = JSON.stringify({ 'project-a': [Dev], 'project-b': [Server] })
+    const storage = createStorage({ [RUN_CONFIGURATIONS_STORAGE_KEY]: raw })
+    let events = 0
+    const saved = saveWorkbenchNamedRunConfigurations(
+      'project-a',
+      [],
+      {
+        ...storage,
+        setItem: () => {
+          throw new Error('storage write failed')
+        },
+      },
+      {
+        dispatchEvent: () => {
+          events += 1
+          return true
+        },
+      }
+    )
+
+    assert.equal(saved.ok, false)
+    assert.equal(events, 0)
+    assert.equal(storage.values.get(RUN_CONFIGURATIONS_STORAGE_KEY), raw)
   })
 
   void test('tells the window when the configurations of a project were saved', () => {
@@ -393,12 +493,97 @@ void describe('named run configurations', () => {
     const storage = createStorage()
     const run = buildWorkbenchPackageScriptRunCommand({ packageJsonPath: 'packages/a %quoted/package.json', packageManager: 'npm', scriptName: 'dev "quoted" $(echo marker)' })
     const settings = { command: run.command, configurationId: '', launch: { ...run.launch, env: { LITERAL: '"$HOME" %PATH%' } } }
-    saveWorkbenchProjectRunSettings('/workspace', settings, storage, { dispatchEvent: () => true } as unknown as Window)
+    const saved = saveWorkbenchProjectRunSettings('/workspace', settings, storage, {
+      dispatchEvent: () => true,
+    } as unknown as Window)
+    assert.equal(saved.ok, true)
     const restored = readWorkbenchProjectRunSettings('/workspace', storage)
     assert.deepEqual(restored, settings)
     assert.notEqual(restored.launch?.process, settings.launch.process)
     assert.deepEqual(normalizeWorkbenchProjectRunSettings({ command: run.command, configurationId: '' }), { command: run.command, configurationId: '' })
     assert.deepEqual(normalizeWorkbenchProjectRunSettings({ ...settings, launch: { process: { kind: 'package-manager', program: 'npm', argv: [7] } } } as never), { command: '', configurationId: '' })
+  })
+
+  void test('saves startup selection against the latest table and announces the persisted value', () => {
+    const storage = createStorage({
+      [PROJECT_RUN_SETTINGS_STORAGE_KEY]: JSON.stringify({
+        '/workspace': { command: 'bun run dev', configurationId: '' },
+        '/other': { command: 'bun run test', configurationId: '' },
+      }),
+    })
+    readWorkbenchProjectRunSettings('/workspace', storage)
+    const otherProject = { command: 'Changed elsewhere', metadata: { keep: true } }
+    storage.values.set(
+      PROJECT_RUN_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        '/workspace': { command: 'bun run dev', configurationId: '' },
+        '/other': otherProject,
+      })
+    )
+    const settings = { command: '', configurationId: Dev.id }
+    const expected = JSON.stringify({ '/workspace': settings, '/other': otherProject })
+    const events: string[] = []
+    const saved = saveWorkbenchProjectRunSettings('/workspace', settings, storage, {
+      dispatchEvent: (event: Event) => {
+        assert.equal(storage.values.get(PROJECT_RUN_SETTINGS_STORAGE_KEY), expected)
+        assert.deepEqual((event as CustomEvent<unknown>).detail, { projectRoot: '/workspace', settings })
+        events.push(event.type)
+        return true
+      },
+    } as unknown as Window)
+
+    assert.deepEqual(Result.unwrap(saved), settings)
+    assert.deepEqual(readWorkbenchProjectRunSettings('/workspace', storage), settings)
+    assert.deepEqual(events, [WORKBENCH_PROJECT_RUN_SETTINGS_CHANGED_EVENT])
+    assert.equal(storage.values.get(PROJECT_RUN_SETTINGS_STORAGE_KEY), expected)
+  })
+
+  void test('rejects failed startup settings reads and writes without changing storage or broadcasting', () => {
+    for (const failure of ['read', 'empty', 'json', 'array', 'null', 'primitive', 'write'] as const) {
+      const previous = JSON.stringify({
+        '/workspace': { command: '', configurationId: Dev.id },
+        '/other': { command: 'bun run test', configurationId: '' },
+      })
+      const raw = {
+        read: previous,
+        empty: '',
+        json: '{ broken json',
+        array: '[]',
+        null: 'null',
+        primitive: '7',
+        write: previous,
+      }[failure]
+      const storage = createStorage({ [PROJECT_RUN_SETTINGS_STORAGE_KEY]: raw })
+      let writes = 0
+      let events = 0
+      const saved = saveWorkbenchProjectRunSettings(
+        '/workspace',
+        { command: 'replacement', configurationId: '' },
+        {
+          ...storage,
+          getItem: (key) => {
+            if (failure === 'read') throw new Error('storage read failed')
+            return storage.getItem(key)
+          },
+          setItem: (key, value) => {
+            writes += 1
+            if (failure === 'write') throw new Error('storage write failed')
+            storage.setItem(key, value)
+          },
+        },
+        {
+          dispatchEvent: () => {
+            events += 1
+            return true
+          },
+        } as unknown as Window
+      )
+
+      assert.equal(saved.ok, false, failure)
+      assert.equal(writes, failure === 'write' ? 1 : 0, failure)
+      assert.equal(events, 0, failure)
+      assert.equal(storage.values.get(PROJECT_RUN_SETTINGS_STORAGE_KEY), raw, failure)
+    }
   })
 
   void test('the run menu lists them first, runs them with their settings and opens the editor', () => {

@@ -9,7 +9,8 @@
  * 这个模块在工作区外壳包里（▶ 要读配置、跑配置），只放读写与运行用得到的；对话框里编辑草稿的那部分在
  * `workbenchRunConfigurationDrafts.ts`，随对话框按需加载。
  */
-import { isArray, isString, Log } from '@velaros-ai/velaros/core'
+import { AppError, isArray, isString, Log, Result } from '@velaros-ai/velaros/core'
+import type { Result as ResultType } from '@velaros-ai/velaros/core/result'
 import { isRecord } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
 import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
@@ -148,7 +149,6 @@ const workbenchRunConfigurationStore = createLocalStorageJsonStore<
   normalize: normalizeConfigurationMap,
   log,
   readErrorMessage: '读取 workbench 运行配置失败，当作没有配置',
-  writeErrorMessage: '写入 workbench 运行配置失败',
 })
 
 export function readWorkbenchNamedRunConfigurations(
@@ -160,22 +160,33 @@ export function readWorkbenchNamedRunConfigurations(
   return workbenchRunConfigurationStore.read(storage)[projectId] ?? []
 }
 
-/** 存下这个项目的全部配置（整份换掉），并通知同一窗口里用着它们的地方。 */
+/** 在最新原表上替换当前项目；读写失败时保留旧数据，只在落盘成功后通知窗口。 */
 export function saveWorkbenchNamedRunConfigurations(
   projectId: string,
   configurations: readonly WorkbenchNamedRunConfiguration[],
   storage?: StorageLike,
   target: LooseOptional<Pick<Window, 'dispatchEvent'>> = globalThis.window
-): WorkbenchNamedRunConfiguration[] {
-  const normalized = normalizeConfigurationList(configurations)
-  const map = workbenchRunConfigurationStore.read(storage)
-  if (normalized.length > 0) map[projectId] = normalized
-  else delete map[projectId]
-  workbenchRunConfigurationStore.write(map, storage)
-  target?.dispatchEvent(
-    new CustomEvent(WORKBENCH_RUN_CONFIGURATIONS_CHANGED_EVENT, { detail: { projectId } })
-  )
-  return normalized
+): ResultType<WorkbenchNamedRunConfiguration[]> {
+  try {
+    const resolved = storage ?? globalThis.localStorage
+    if (!resolved) throw new Error('Workbench local storage is unavailable in this host')
+    const raw = resolved.getItem(RUN_CONFIGURATIONS_STORAGE_KEY)
+    const stored: unknown = raw === null ? {} : JSON.parse(raw)
+    if (!isRecord(stored)) throw new TypeError('Workbench run configurations must be an object')
+
+    const normalized = normalizeConfigurationList(configurations)
+    const map = { ...stored }
+    if (normalized.length > 0) map[projectId] = normalized
+    else delete map[projectId]
+    resolved.setItem(RUN_CONFIGURATIONS_STORAGE_KEY, JSON.stringify(map))
+    target?.dispatchEvent(
+      new CustomEvent(WORKBENCH_RUN_CONFIGURATIONS_CHANGED_EVENT, { detail: { projectId } })
+    )
+    return Result.ok(normalized)
+  } catch (error) {
+    log.warn('写入 workbench 运行配置失败，保留原存储', { error })
+    return Result.fail(AppError.from(error))
+  }
 }
 
 /** `path` 相对 `directory` 怎么写（都是项目里的相对路径，`/` 分隔）。 */
