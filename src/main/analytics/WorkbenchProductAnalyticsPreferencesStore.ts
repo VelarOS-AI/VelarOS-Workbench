@@ -1,6 +1,8 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+import { isPlainObject } from '@velaros-ai/velaros/core'
+
 interface WorkbenchProductAnalyticsPreferencesFile {
   readonly version: 1
   readonly enabled: boolean
@@ -87,23 +89,32 @@ export class WorkbenchProductAnalyticsPreferencesStore {
 }
 
 function readPreferences(filePath: string): WorkbenchProductAnalyticsPreferences {
+  let source: string
   try {
-    const parsed = JSON.parse(
-      readFileSync(filePath, 'utf8')
-    ) as Partial<WorkbenchProductAnalyticsPreferencesFile>
-    if (parsed.version !== 1) return DefaultPreferences
-    return {
-      enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : true,
-      noticeRequired: typeof parsed.noticeRequired === 'boolean' ? parsed.noticeRequired : false,
-      noticeResolved: typeof parsed.noticeResolved === 'boolean' ? parsed.noticeResolved : false,
-      consentDecision:
-        parsed.consentDecision === 'allowed' || parsed.consentDecision === 'declined'
-          ? parsed.consentDecision
-          : 'unresolved',
-      consentReceiptRecorded:
-        typeof parsed.consentReceiptRecorded === 'boolean' ? parsed.consentReceiptRecorded : false,
-    }
-  } catch {
-    return DefaultPreferences
+    source = readFileSync(filePath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return DefaultPreferences
+    throw error
+  }
+  const parsed: unknown = JSON.parse(source)
+  if (
+    !isPlainObject(parsed) ||
+    parsed.version !== 1 ||
+    typeof parsed.enabled !== 'boolean' ||
+    typeof parsed.noticeRequired !== 'boolean' ||
+    typeof parsed.noticeResolved !== 'boolean' ||
+    typeof parsed.consentReceiptRecorded !== 'boolean' ||
+    (parsed.consentDecision !== 'unresolved' &&
+      parsed.consentDecision !== 'allowed' &&
+      parsed.consentDecision !== 'declined')
+  )
+    throw new Error('Product analytics preferences have an invalid or unsupported format.')
+
+  return {
+    enabled: parsed.enabled,
+    noticeRequired: parsed.noticeRequired,
+    noticeResolved: parsed.noticeResolved,
+    consentDecision: parsed.consentDecision,
+    consentReceiptRecorded: parsed.consentReceiptRecorded,
   }
 }

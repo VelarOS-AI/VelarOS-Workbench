@@ -164,7 +164,7 @@ export function WorkbenchSettingsDialog({
 }: WorkbenchSettingsDialogProps): Nullable<ReactElement> {
   const { t, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const hostRuntime = useWorkbenchHostRuntime()
-  const updateState = useWorkbenchUpdate()
+  const updateResult = useWorkbenchUpdate()
   const productAnalytics = useWorkbenchProductAnalytics()
   const modelConfig = useStandaloneWorkbenchModelConfig()
   const managedModelState = useStandaloneWorkbenchManagedModels()
@@ -920,6 +920,7 @@ export function WorkbenchSettingsDialog({
   }
 
   function renderAdvancedSection(): ReactElement {
+    const analyticsState = productAnalytics.state
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
         <SettingRow
@@ -935,14 +936,20 @@ export function WorkbenchSettingsDialog({
             >
               <ArrowSquareOutIcon size={16} />
             </IconButton>
-            <Switch
-              checked={productAnalytics.enabled}
-              onCheckedChange={(enabled) => {
-                void productAnalytics.setEnabled(enabled).catch((error: unknown) => {
-                  reportSettingSaveFailure('workbench.settingsProductAnalytics', error)
-                })
-              }}
-            />
+            {analyticsState?.ok ? (
+              <Switch
+                checked={analyticsState.data.enabled}
+                onCheckedChange={(enabled) => {
+                  void productAnalytics.setEnabled(enabled).catch((error: unknown) => {
+                    reportSettingSaveFailure('workbench.settingsProductAnalytics', error)
+                  })
+                }}
+              />
+            ) : analyticsState ? (
+              <span role="alert">{analyticsState.error.message}</span>
+            ) : (
+              <span>{t('common.loading')}</span>
+            )}
           </div>
         </SettingRow>
       </div>
@@ -950,6 +957,19 @@ export function WorkbenchSettingsDialog({
   }
 
   function renderUpdatesSection(): ReactElement {
+    if (!updateResult || !updateResult.ok)
+      return (
+        <div className={styles.workbenchSettingsSectionPanel}>
+          <SettingRow title={t('workbench.settingsAutomaticUpdates')}>
+            {updateResult ? (
+              <span role="alert">{updateResult.error.message}</span>
+            ) : (
+              <span>{t('common.loading')}</span>
+            )}
+          </SettingRow>
+        </div>
+      )
+    const updateState = updateResult.data
     const targetVersion = updateState.targetVersion ?? ''
     let status = t('workbench.settingsUpdateIdle')
     if (updateState.phase === 'checking') status = t('workbench.settingsCheckingForUpdates')

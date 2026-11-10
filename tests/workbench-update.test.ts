@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import type { CancellationToken } from 'builder-util-runtime'
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 import type { AppUpdater } from 'electron-updater'
 
 import type { WorkbenchCloudEndpointProvider } from '../src/main/updates/WorkbenchCloudEndpointResolver'
@@ -15,6 +15,7 @@ import {
 } from '../src/main/updates/WorkbenchReleaseSource'
 import { WorkbenchUpdatePreferencesStore } from '../src/main/updates/WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from '../src/main/updates/WorkbenchUpdateService'
+import { WorkbenchUpdateChannels } from '../src/shared/workbenchUpdate'
 
 const temporaryRoots: string[] = []
 
@@ -105,6 +106,64 @@ function releaseSource(): WorkbenchReleaseSource {
     fetchArtifact: async () => new Response(),
   }
 }
+
+describe('Workbench update preferences startup', () => {
+  test('unreadable update preferences reject installer requests without starting updates or replacing data', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'workbench-update-unavailable-'))
+    temporaryRoots.push(root)
+    const directory = join(root, 'storage')
+    const path = join(directory, 'update-preferences.json')
+    await mkdir(directory)
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    let initializationCalls = 0
+    const application = Object.assign(new EventEmitter(), {
+      getPath: (name: string) => { expect(name).toBe('userData'); return root },
+      getLocale: () => { initializationCalls += 1; throw new Error('Update initialization must not start') },
+    })
+    mock.module('electron', () => ({
+      ipcMain: {
+        handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler),
+        removeHandler: (channel: string) => handlers.delete(channel),
+      },
+      app: application,
+      BrowserWindow: { getAllWindows: () => { throw new Error('No update state may be broadcast') } },
+    }))
+    const { installWorkbenchUpdateRuntime } = await import('../src/main/updates/WorkbenchUpdateRuntime')
+    const invoke = (channel: string, value?: unknown): Promise<unknown> => Promise.resolve().then(() => {
+      const handler = handlers.get(channel)
+      expect(handler).toBeDefined()
+      return handler!({}, value)
+    })
+    const inspectUnavailable = async (): Promise<void> => {
+      installWorkbenchUpdateRuntime()
+      try {
+        await expect(invoke(WorkbenchUpdateChannels.getState)).rejects.toThrow()
+        await expect(invoke(WorkbenchUpdateChannels.setAutomaticDownloads, false)).rejects.toThrow()
+        await expect(invoke(WorkbenchUpdateChannels.setChannel, 'beta')).rejects.toThrow()
+        await expect(invoke(WorkbenchUpdateChannels.check)).rejects.toThrow()
+        expect(initializationCalls).toBe(0)
+      } finally {
+        expect(application.listenerCount('will-quit')).toBe(1)
+        application.emit('will-quit')
+      }
+    }
+    for (const source of [
+      '{"version":1,"automaticDownloads":false}\n',
+      '{"version":99,"automaticDownloads":false,"channel":"future","keep":true}\n',
+      '{"version":2,',
+      '{"version":2,"automaticDownloads":false,"channel":"future"}\n',
+    ]) {
+      await writeFile(path, source)
+      await inspectUnavailable()
+      expect(await readFile(path, 'utf8')).toBe(source)
+    }
+    await rm(path)
+    await mkdir(path)
+    await writeFile(join(path, 'keep.txt'), 'keep this directory')
+    await inspectUnavailable()
+    expect(await readFile(join(path, 'keep.txt'), 'utf8')).toBe('keep this directory')
+  })
+})
 
 describe('WorkbenchUpdateService', () => {
   test('defaults to automatic download and removes a paused download on cancel', async () => {

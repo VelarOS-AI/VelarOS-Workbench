@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
 import { Log } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { isWorkbenchUpdateChannel, WorkbenchUpdateChannels } from '../../shared/workbenchUpdate'
 import { resolveWorkbenchNodeExecutable } from '../conversation/WorkbenchNodeRuntime'
@@ -23,6 +24,23 @@ import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesSto
 import { WorkbenchUpdateService } from './WorkbenchUpdateService'
 
 export function installWorkbenchUpdateRuntime(): void {
+  const preferences = Result.wrapSync(() =>
+    new WorkbenchUpdatePreferencesStore(app.getPath('userData'))
+  )
+  const removeHandlers = (): void => {
+    for (const channel of Object.values(WorkbenchUpdateChannels))
+      if (channel !== WorkbenchUpdateChannels.changed) ipcMain.removeHandler(channel)
+  }
+  if (!preferences.ok) {
+    Log.tag('WorkbenchUpdate').error('Update preferences are unavailable', {
+      error: preferences.error,
+    })
+    for (const channel of Object.values(WorkbenchUpdateChannels))
+      if (channel !== WorkbenchUpdateChannels.changed)
+        ipcMain.handle(channel, () => Result.unwrap(preferences))
+    app.once('will-quit', removeHandlers)
+    return
+  }
   const market = resolveVelarOSOfficialWebsiteMarket({
     configuredMarket: process.env.VELAROS_MARKET,
     locale: app.getLocale(),
@@ -49,7 +67,7 @@ export function installWorkbenchUpdateRuntime(): void {
   const service = new WorkbenchUpdateService(
     new CloudWorkbenchReleaseSource(endpointResolver),
     windowsUpdater ?? (async () => (await import('electron-updater')).default.autoUpdater),
-    new WorkbenchUpdatePreferencesStore(app.getPath('userData')),
+    preferences.data,
     {
       currentVersion: app.getVersion(),
       isPackaged: app.isPackaged,
@@ -84,9 +102,7 @@ export function installWorkbenchUpdateRuntime(): void {
 
   app.once('will-quit', () => {
     void service.dispose()
-    for (const channel of Object.values(WorkbenchUpdateChannels)) {
-      if (channel !== WorkbenchUpdateChannels.changed) ipcMain.removeHandler(channel)
-    }
+    removeHandlers()
   })
   if (windowsUpdater) {
     void windowsUpdater.recovery

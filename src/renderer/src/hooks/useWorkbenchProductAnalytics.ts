@@ -1,27 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { Result } from '@velaros-ai/velaros/core/result'
+
 import type { WorkbenchProductAnalyticsState } from '@shared/workbenchProductAnalytics'
 
-const InitialState: WorkbenchProductAnalyticsState = {
-  revision: 0,
-  enabled: true,
-  noticeRequired: false,
-  noticeResolved: false,
-  consentDecision: 'unresolved',
-  consentReceiptRecorded: false,
-}
-
 export function useWorkbenchProductAnalytics(): {
-  readonly enabled: boolean
-  readonly noticeRequired: boolean
-  readonly noticeResolved: boolean
+  readonly state: Result<WorkbenchProductAnalyticsState> | null
   readonly setEnabled: (enabled: boolean) => Promise<void>
   readonly resolveNotice: (decision: 'allowed' | 'declined') => Promise<void>
   readonly openDetails: () => void
 } {
-  const [state, setState] = useState(InitialState)
+  const [state, setState] = useState<Result<WorkbenchProductAnalyticsState> | null>(null)
   const applyState = useCallback((next: WorkbenchProductAnalyticsState): void => {
-    setState((current) => (next.revision >= current.revision ? next : current))
+    setState((current) =>
+      current?.ok && next.revision < current.data.revision ? current : Result.ok(next)
+    )
   }, [])
 
   useEffect(() => {
@@ -31,7 +24,13 @@ export function useWorkbenchProductAnalytics(): {
       applyState(next)
     }
     const unsubscribe = window.velarosWorkbenchProductAnalytics.onChanged(apply)
-    void window.velarosWorkbenchProductAnalytics.getState().then(apply)
+    void window.velarosWorkbenchProductAnalytics.getState().then(apply, (error: unknown) => {
+      if (!active) return
+      // 实时状态已经到达时，旧初读的失败不能抹掉它。
+      setState((current) =>
+        current?.ok ? current : Result.fail<WorkbenchProductAnalyticsState>(error)
+      )
+    })
     return () => {
       active = false
       unsubscribe()
@@ -39,9 +38,7 @@ export function useWorkbenchProductAnalytics(): {
   }, [applyState])
 
   return {
-    enabled: state.enabled,
-    noticeRequired: state.noticeRequired,
-    noticeResolved: state.noticeResolved,
+    state,
     setEnabled: async (enabled) => {
       applyState(await window.velarosWorkbenchProductAnalytics.setEnabled(enabled))
     },

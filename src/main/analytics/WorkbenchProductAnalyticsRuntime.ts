@@ -1,5 +1,8 @@
 import { BrowserWindow, ipcMain, shell } from 'electron'
 
+import { Log } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
+
 import {
   WorkbenchProductAnalyticsChannels,
   type WorkbenchProductAnalyticsState,
@@ -13,7 +16,30 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
   readonly privacyDetailsUrl: string
   readonly reporter?: WorkbenchProductAnalyticsReporter
 }): () => void {
-  const preferences = new WorkbenchProductAnalyticsPreferencesStore(input.dataRootDir)
+  const startup = Result.wrapSync(() =>
+    new WorkbenchProductAnalyticsPreferencesStore(input.dataRootDir)
+  )
+  const removeHandlers = (): void => {
+    for (const channel of Object.values(WorkbenchProductAnalyticsChannels))
+      if (channel !== WorkbenchProductAnalyticsChannels.changed) ipcMain.removeHandler(channel)
+  }
+  ipcMain.handle(WorkbenchProductAnalyticsChannels.openDetails, () =>
+    shell.openExternal(input.privacyDetailsUrl)
+  )
+  if (!startup.ok) {
+    input.reporter?.setEnabled(false)
+    Log.tag('WorkbenchProductAnalytics').error('Product analytics preferences are unavailable', {
+      error: startup.error,
+    })
+    for (const channel of [
+      WorkbenchProductAnalyticsChannels.getState,
+      WorkbenchProductAnalyticsChannels.setEnabled,
+      WorkbenchProductAnalyticsChannels.resolveNotice,
+    ])
+      ipcMain.handle(channel, () => Result.unwrap(startup))
+    return removeHandlers
+  }
+  const preferences = startup.data
   let revision = 0
   let consentReceiptInFlight: Promise<void> | undefined
 
@@ -110,15 +136,8 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
     void synchronizeConsentReceipt()
     return getState()
   })
-  ipcMain.handle(WorkbenchProductAnalyticsChannels.openDetails, () =>
-    shell.openExternal(input.privacyDetailsUrl)
-  )
-
   return () => {
     clearInterval(consentReceiptRetryTimer)
-    ipcMain.removeHandler(WorkbenchProductAnalyticsChannels.getState)
-    ipcMain.removeHandler(WorkbenchProductAnalyticsChannels.setEnabled)
-    ipcMain.removeHandler(WorkbenchProductAnalyticsChannels.resolveNotice)
-    ipcMain.removeHandler(WorkbenchProductAnalyticsChannels.openDetails)
+    removeHandlers()
   }
 }

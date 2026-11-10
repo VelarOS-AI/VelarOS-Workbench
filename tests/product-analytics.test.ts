@@ -1,11 +1,12 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 import { WorkbenchProductAnalyticsPreferencesStore } from '../src/main/analytics/WorkbenchProductAnalyticsPreferencesStore'
 import { WorkbenchProductAnalyticsReporter } from '../src/main/analytics/WorkbenchProductAnalyticsReporter'
+import { WorkbenchProductAnalyticsChannels } from '../src/shared/workbenchProductAnalytics'
 
 const temporaryRoots: string[] = []
 
@@ -37,6 +38,87 @@ describe('WorkbenchProductAnalyticsReporter', () => {
       consentDecision: 'declined',
       consentReceiptRecorded: false,
     })
+  })
+
+  test('unreadable analytics preferences remain unavailable through the installer without replacing data', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-analytics-unavailable-'))
+    temporaryRoots.push(dataRoot)
+    const directory = join(dataRoot, 'storage')
+    const path = join(directory, 'product-analytics-preferences.json')
+    await mkdir(directory)
+    const handlers = new Map<string, (...args: unknown[]) => unknown>()
+    let broadcasts = 0
+    mock.module('electron', () => ({
+      ipcMain: {
+        handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler),
+        removeHandler: (channel: string) => handlers.delete(channel),
+      },
+      BrowserWindow: { getAllWindows: () => { broadcasts += 1; return [] } },
+      shell: { openExternal: async () => undefined },
+    }))
+    const { installWorkbenchProductAnalyticsRuntime } = await import('../src/main/analytics/WorkbenchProductAnalyticsRuntime')
+    let requests = 0
+    let now = 0
+    const reporter = await WorkbenchProductAnalyticsReporter.create({
+      dataRoot,
+      appVersion: '1.2.3',
+      isActive: () => true,
+      now: () => now,
+      fetchImpl: (async () => { requests += 1; return new Response(null, { status: 202 }) }) as typeof fetch,
+    })
+    expect(reporter).toBeDefined()
+    const invoke = (channel: string, value?: unknown): Promise<unknown> => Promise.resolve().then(() => {
+      const handler = handlers.get(channel)
+      expect(handler).toBeDefined()
+      return handler!({}, value)
+    })
+    const inspectUnavailable = async (): Promise<void> => {
+      const dispose = installWorkbenchProductAnalyticsRuntime({
+        dataRootDir: dataRoot,
+        privacyDetailsUrl: 'https://privacy.test/details',
+        reporter,
+      })
+      try {
+        await expect(invoke(WorkbenchProductAnalyticsChannels.getState)).rejects.toThrow()
+        await expect(invoke(WorkbenchProductAnalyticsChannels.setEnabled, false)).rejects.toThrow()
+        await expect(invoke(WorkbenchProductAnalyticsChannels.resolveNotice, 'declined')).rejects.toThrow()
+        await expect(invoke(WorkbenchProductAnalyticsChannels.openDetails)).resolves.toBeUndefined()
+        // As in app-ready, the reporter may subsequently start, but the failed
+        // composition must have stopped collection without inventing preferences.
+        reporter!.start()
+        reporter!.setConsentState({
+          noticeResolved: true,
+          reportingAllowed: true,
+          onNoticeRequired: () => { throw new Error('No consent notice owner is available') },
+        })
+        now += 60_000
+        await reporter!.flush(true)
+        expect(requests).toBe(0)
+        expect(broadcasts).toBe(0)
+      } finally {
+        dispose()
+      }
+    }
+    try {
+      for (const source of [
+        '{"version":99,"enabled":false,"futurePreference":"keep"}\n',
+        '{"version":1,',
+        '{"version":1,"enabled":false}\n',
+      ]) {
+        await writeFile(path, source)
+        await inspectUnavailable()
+        expect(await readFile(path, 'utf8')).toBe(source)
+      }
+      // A directory in place of the file is a real non-ENOENT read failure,
+      // without depending on machine-specific permission/ACL behavior.
+      await rm(path)
+      await mkdir(path)
+      await writeFile(join(path, 'keep.txt'), 'keep this directory')
+      await inspectUnavailable()
+      expect(await readFile(join(path, 'keep.txt'), 'utf8')).toBe('keep this directory')
+    } finally {
+      await reporter!.dispose()
+    }
   })
 
   test('counts only foreground use and waits ten minutes between upload attempts', async () => {

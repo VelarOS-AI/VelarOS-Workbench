@@ -18,13 +18,23 @@ export function WorkbenchProductAnalyticsNoticeDialog(): ReactElement | null {
   const { t } = useWorkbenchI18n()
   const analytics = useWorkbenchProductAnalytics()
   const [pending, setPending] = useState(false)
-  const open = analytics.enabled && analytics.noticeRequired && !analytics.noticeResolved
+  const [failure, setFailure] = useState<Nullable<string>>(null)
+  const state = analytics.state
+  const open =
+    state?.ok && state.data.enabled && state.data.noticeRequired && !state.data.noticeResolved
   if (!open) return null
 
   const resolve = (decision: 'allowed' | 'declined'): void => {
     if (pending) return
     setPending(true)
-    void analytics.resolveNotice(decision).catch(() => setPending(false))
+    setFailure(null)
+    void analytics.resolveNotice(decision).then(
+      () => setPending(false),
+      (error: unknown) => {
+        setPending(false)
+        setFailure(error instanceof Error ? error.message : String(error))
+      }
+    )
   }
 
   return (
@@ -42,6 +52,7 @@ export function WorkbenchProductAnalyticsNoticeDialog(): ReactElement | null {
             {t('workbench.productAnalyticsNoticeDescription')}
           </DialogDescription>
         </DialogHeader>
+        {failure && <p role="alert">{failure}</p>}
         <DialogFooter>
           <Button
             variant="outline"

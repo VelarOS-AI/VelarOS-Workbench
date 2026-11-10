@@ -3,10 +3,12 @@ import { useWorkbenchUpdate } from '@renderer/hooks/useWorkbenchUpdate'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { KeyboardEvent, MouseEvent, ReactElement } from 'react'
 
+import type { WorkbenchUpdatePhase } from '@shared/workbenchUpdate'
+
 import styles from '../styles/WorkbenchUpdateProgress.module.css'
 
 function updateLabel(
-  phase: ReturnType<typeof useWorkbenchUpdate>['phase'],
+  phase: WorkbenchUpdatePhase,
   percent: number,
   targetVersion: string,
   retryAttempt: number,
@@ -21,8 +23,10 @@ function updateLabel(
 }
 
 export function WorkbenchUpdateProgress(): Nullable<ReactElement> {
-  const state = useWorkbenchUpdate()
+  const result = useWorkbenchUpdate()
   const { t } = useWorkbenchI18n()
+  if (!result?.ok) return null
+  const state = result.data
   if (
     !['downloading', 'retrying', 'verifying', 'preparing', 'paused', 'downloaded'].includes(
       state.phase
