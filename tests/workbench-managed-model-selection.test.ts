@@ -17,6 +17,7 @@ import {
   subscribeStandaloneWorkbenchModelConfig,
   updateStandaloneWorkbenchModelConfig,
 } from '../src/renderer/src/runtime/standaloneWorkbenchModelConfig'
+import type { WorkbenchAccountState } from '../src/shared/workbenchAccount'
 import type {
   WorkbenchManagedModelAccessSnapshot,
   WorkbenchManagedModelProvider,
@@ -44,19 +45,48 @@ function snapshot(
 
 async function withModelBridge(
   listManagedProviders: () => Promise<WorkbenchManagedModelAccessSnapshot>,
-  run: () => Promise<void>
+  run: (events: {
+    accountChanged(state: WorkbenchAccountState): void
+    focus(): void
+    observers(): { account: number; focus: number; installed: number; removed: number }
+  }) => Promise<void>
 ): Promise<void> {
   const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const accounts = new Set<(state: WorkbenchAccountState) => void>()
+  const focus = new Set<() => void>()
+  let installed = 0
+  let removed = 0
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: {
       localStorage: { setItem: () => undefined },
       velarosWorkbenchModel: { listManagedProviders },
+      velarosWorkbenchAccount: {
+        onChanged: (listener: (state: WorkbenchAccountState) => void) => {
+          installed += 1
+          accounts.add(listener)
+          return () => { removed += 1; accounts.delete(listener) }
+        },
+      },
+      addEventListener: (event: string, listener: () => void) => {
+        expect(event).toBe('focus')
+        focus.add(listener)
+      },
+      removeEventListener: (event: string, listener: () => void) => {
+        expect(event).toBe('focus')
+        expect(focus.delete(listener)).toBe(true)
+      },
     },
   })
   try {
-    await run()
+    await run({
+      accountChanged: state => { for (const listener of [...accounts]) listener(state) },
+      focus: () => { for (const listener of [...focus]) listener() },
+      observers: () => ({ account: accounts.size, focus: focus.size, installed, removed }),
+    })
   } finally {
+    expect(accounts.size).toBe(0)
+    expect(focus.size).toBe(0)
     if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor)
     else Reflect.deleteProperty(globalThis, 'window')
   }
@@ -141,13 +171,15 @@ describe('Workbench managed model selection', () => {
     const changed = snapshot([managedProvider('velar-dev', true, 'velar-dev/new-model')])
     const pending = Promise.withResolvers<WorkbenchManagedModelAccessSnapshot>()
     let request = Promise.resolve(initial)
-    await withModelBridge(() => request, async () => {
-      await refreshStandaloneWorkbenchManagedModels()
-      const initialState = getStandaloneWorkbenchManagedModelState()
+    await withModelBridge(() => request, async events => {
       let notifications = 0
       const dispose = subscribeStandaloneWorkbenchManagedModels(() => { notifications += 1 })
       try {
+        await refreshStandaloneWorkbenchManagedModels()
+        const initialState = getStandaloneWorkbenchManagedModelState()
+        notifications = 0
         request = pending.promise
+        events.focus()
         const refresh = refreshStandaloneWorkbenchManagedModels()
         expect(getStandaloneWorkbenchManagedModelState()).toBe(initialState)
         expect(notifications).toBe(0)
@@ -160,6 +192,68 @@ describe('Workbench managed model selection', () => {
           .toMatchObject({ value: 'velar-dev', label: 'VelarOS-Dev', disabled: false })
       } finally {
         dispose()
+      }
+    })
+  })
+
+  test('one account observer retires every old caller and keeps a newer catalog request owned', async () => {
+    const old = snapshot([managedProvider('velar-dev', true, 'old-model')])
+    const winner = snapshot([managedProvider('velaros', true, 'new-model')])
+    const first = Promise.withResolvers<WorkbenchManagedModelAccessSnapshot>()
+    const second = Promise.withResolvers<WorkbenchManagedModelAccessSnapshot>()
+    const third = Promise.withResolvers<WorkbenchManagedModelAccessSnapshot>()
+    let response = first.promise
+    let calls = 0
+    await withModelBridge(() => { calls += 1; return response }, async events => {
+      const disposeSettings = subscribeStandaloneWorkbenchManagedModels(() => {})
+      const disposeChat = subscribeStandaloneWorkbenchManagedModels(() => {})
+      const settings = refreshStandaloneWorkbenchManagedModels()
+      const chat = refreshStandaloneWorkbenchManagedModels()
+      const oldOutcomes = Promise.allSettled([settings, chat])
+      const pending: Array<Promise<unknown>> = [oldOutcomes]
+      try {
+        expect(settings).toBe(chat)
+        expect(calls).toBe(1)
+        expect(events.observers()).toEqual({ account: 1, focus: 1, installed: 1, removed: 0 })
+        response = second.promise
+        events.accountChanged({ status: 'signed-in', account: { id: 'b', displayName: 'B', email: 'b@example.com' } })
+        const current = refreshStandaloneWorkbenchManagedModels()
+        pending.push(current)
+        expect(calls).toBe(2)
+        expect(current).not.toBe(settings)
+        disposeSettings()
+        disposeChat()
+        expect(events.observers().account).toBe(1)
+        first.resolve(old)
+        const outcomes = await oldOutcomes
+        for (const outcome of outcomes)
+          expect(outcome).toMatchObject({ status: 'rejected', reason: { code: 'CANCELLED' } })
+        expect(getStandaloneWorkbenchManagedModelState().status).toBe('loading')
+        expect(refreshStandaloneWorkbenchManagedModels()).toBe(current)
+        expect(events.observers().account).toBe(1)
+        second.resolve(winner)
+        expect(await current).toEqual(winner)
+        expect(getStandaloneWorkbenchManagedModelState().managedModels).toEqual(winner.managedModels)
+        expect(events.observers()).toEqual({ account: 0, focus: 0, installed: 1, removed: 1 })
+
+        response = third.promise
+        const direct = refreshStandaloneWorkbenchManagedModels()
+        const directOutcome = Promise.allSettled([direct])
+        pending.push(directOutcome)
+        expect(events.observers().account).toBe(1)
+        events.accountChanged({ status: 'signed-out' })
+        third.resolve(winner)
+        expect((await directOutcome)[0]).toMatchObject({ status: 'rejected', reason: { code: 'CANCELLED' } })
+        expect(getStandaloneWorkbenchManagedModelState().managedModels).toEqual([])
+        expect(calls).toBe(3)
+        expect(events.observers()).toEqual({ account: 0, focus: 0, installed: 2, removed: 2 })
+      } finally {
+        disposeSettings()
+        disposeChat()
+        first.resolve(old)
+        second.resolve(winner)
+        third.resolve(winner)
+        await Promise.allSettled(pending)
       }
     })
   })

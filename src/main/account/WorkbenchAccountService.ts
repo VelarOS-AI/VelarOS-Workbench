@@ -166,17 +166,32 @@ export class WorkbenchAccountService {
    * 就会得到空授权，Workbench 不会根据账号角色自行补出托管 provider。
    */
   public async getManagedModelAccess(): Promise<WorkbenchManagedModelAccessSnapshot> {
-    return parseWorkbenchManagedModelAccessSnapshot(await this.#authorizedJson('/v1/account/usage'))
+    const revision = this.#sessionRevision
+    const value = await this.#authorizedJson('/v1/account/usage')
+    this.#assertSessionRevision(revision)
+    return parseWorkbenchManagedModelAccessSnapshot(value)
   }
 
   public async listManagedProviderModels(
     providerId: WorkbenchManagedModelProviderId
   ): Promise<ProviderModelCatalog> {
+    const revision = this.#sessionRevision
     const access = await this.#requireManagedProvider(providerId)
+    this.#assertSessionRevision(revision)
     const response = await this.#authorizedFetch(`${managedModelEndpointPath(providerId)}/models`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     })
+    try {
+      this.#assertSessionRevision(revision)
+    } catch (error) {
+      try {
+        await response.body?.cancel()
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Failed to discard an outdated model catalog response')
+      }
+      throw error
+    }
     if (!response.ok) {
       throw new Error(
         workbenchMainText('account.modelCatalogRequestFailed', {
@@ -188,7 +203,9 @@ export class WorkbenchAccountService {
     const allowedModels = new Set(
       access.models.filter((model) => model.status === 'available').map((model) => model.id)
     )
-    const models = parseManagedProviderModelList(await response.json()).filter((model) =>
+    const value = await response.json()
+    this.#assertSessionRevision(revision)
+    const models = parseManagedProviderModelList(value).filter((model) =>
       allowedModels.has(model.id)
     )
     return {

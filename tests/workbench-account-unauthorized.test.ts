@@ -22,6 +22,63 @@ function session(token = 'old', family = 'family-a', account = 'a'): WorkbenchCl
   }
 }
 
+for (const operation of ['usage', 'models'] as const) {
+  test(`a successful ${operation} metadata body arriving after local logout cannot publish old grants`, async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), 'workbench-metadata-result-owner-'))
+    const store = new WorkbenchSharedAccountStore({ rootDir })
+    const readingBody = Promise.withResolvers<void>()
+    let body: ReadableStreamDefaultController<Uint8Array> | undefined
+    let bodyClosed = false
+    let pending: Promise<unknown> | undefined
+    const access = {
+      managedModels: [{
+        providerId: 'velar-dev',
+        displayName: 'Velar Dev',
+        enabled: true,
+        models: [{ id: 'old-model', status: 'available' }],
+      }],
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      await store.save(session())
+      const service = new WorkbenchAccountService(
+        store,
+        async () => {},
+        'https://cloud.example.com',
+        (async input => {
+          const url = String(input)
+          if (url.endsWith('/logout')) return Response.json({})
+          if (operation === 'models' && url.endsWith('/v1/account/usage'))
+            return Response.json(access)
+          assert.ok(url.endsWith(operation === 'usage' ? '/v1/account/usage' : '/v1/velar-dev/models'), url)
+          return new Response(new ReadableStream<Uint8Array>({
+            start: controller => { body = controller },
+            pull: () => { readingBody.resolve() },
+          }, { highWaterMark: 0 }), { status: 200 })
+        }) as typeof fetch
+      )
+      pending = operation === 'usage'
+        ? service.getManagedModelAccess()
+        : service.listManagedProviderModels('velar-dev')
+      const rejected = assert.rejects(pending)
+      await readingBody.promise
+      await service.signOut()
+      assert.ok(body)
+      body.enqueue(new TextEncoder().encode(JSON.stringify(operation === 'usage'
+        ? access
+        : { data: [{ id: 'old-model' }] })))
+      body.close()
+      bodyClosed = true
+      await rejected
+      assert.equal(await store.load(), null)
+    } finally {
+      if (!bodyClosed) body?.error(new Error('Metadata fixture is closing'))
+      await Promise.allSettled([pending])
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+}
+
 for (const rejectedPath of ['/v1/account/usage', '/v1/velar-dev/models']) {
   test(`concurrent catalogs share one renewal after 401 from ${rejectedPath}`, async () => {
     const rootDir = await mkdtemp(join(tmpdir(), 'workbench-catalog-401-'))

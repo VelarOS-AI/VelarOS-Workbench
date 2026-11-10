@@ -1,4 +1,6 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
+
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchManagedModelAccessSnapshot,
@@ -19,48 +21,98 @@ const InitialState: StandaloneWorkbenchManagedModelState = {
   status: 'loading',
   managedModels: [],
 }
+interface ManagedModelRequest {
+  readonly promise: Promise<WorkbenchManagedModelAccessSnapshot>
+}
+
 const listeners = new Set<() => void>()
 let currentState: StandaloneWorkbenchManagedModelState = InitialState
-let activeRequest: Promise<WorkbenchManagedModelAccessSnapshot> | null = null
-let hydrationStarted = false
+let activeRequest: ManagedModelRequest | null = null
+let stopWatching: (() => void) | null = null
 
 function publish(state: StandaloneWorkbenchManagedModelState): void {
   currentState = state
   for (const listener of listeners) listener()
 }
 
-export async function refreshStandaloneWorkbenchManagedModels(): Promise<
+function releaseWatchingIfIdle(): void {
+  if (listeners.size > 0 || activeRequest || !stopWatching) return
+  const stop = stopWatching
+  stopWatching = null
+  stop()
+}
+
+function refreshOnFocus(): void {
+  void refreshStandaloneWorkbenchManagedModels().catch(() => undefined)
+}
+
+function ensureWatching(): boolean {
+  if (stopWatching) return false
+  const target = window
+  const stopAccount = target.velarosWorkbenchAccount.onChanged(state => {
+    activeRequest = null
+    publish(state.status === 'signed-out'
+      ? { status: 'ready', managedModels: [], updatedAt: new Date().toISOString() }
+      : InitialState)
+    if (state.status === 'signed-in' && listeners.size > 0) refreshOnFocus()
+    releaseWatchingIfIdle()
+  })
+  stopWatching = () => {
+    stopAccount()
+    target.removeEventListener('focus', refreshOnFocus)
+  }
+  target.addEventListener('focus', refreshOnFocus)
+  return true
+}
+
+export function refreshStandaloneWorkbenchManagedModels(): Promise<
   WorkbenchManagedModelAccessSnapshot
 > {
-  if (activeRequest) return activeRequest
-  if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return { managedModels: [], updatedAt: new Date(0).toISOString() }
+  if (activeRequest) return activeRequest.promise
+  if (typeof window === 'undefined' || !window.velarosWorkbenchModel)
+    return Promise.resolve({ managedModels: [], updatedAt: new Date(0).toISOString() })
 
-  // 刷新期间继续展示最后一次成功快照，避免已打开的模型选择短暂消失。
-  if (currentState.status !== 'ready') publish(InitialState)
-  const request = window.velarosWorkbenchModel.listManagedProviders()
+  const result = Promise.withResolvers<WorkbenchManagedModelAccessSnapshot>()
+  const request: ManagedModelRequest = {
+    promise: result.promise
+      .then(snapshot => {
+        if (activeRequest !== request)
+          throw new AppError('CANCELLED', 'Managed model authorization changed.')
+        publish({
+          status: 'ready',
+          managedModels: snapshot.managedModels,
+          updatedAt: snapshot.updatedAt,
+        })
+        return snapshot
+      })
+      .catch((error: unknown) => {
+        if (activeRequest === request) {
+          publish({
+            status: 'error',
+            managedModels: [],
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+        throw error
+      })
+      .finally(() => {
+        if (activeRequest === request) activeRequest = null
+        releaseWatchingIfIdle()
+      }),
+  }
   activeRequest = request
   try {
-    const snapshot = await request
-    if (activeRequest === request) {
-      publish({
-        status: 'ready',
-        managedModels: snapshot.managedModels,
-        updatedAt: snapshot.updatedAt,
-      })
-    }
-    return snapshot
+    const newScope = ensureWatching()
+    // 同一账号的普通刷新保留成功快照；重新接入账号监听时不信任空档中的旧授权。
+    if ((newScope || currentState.status !== 'ready') && currentState !== InitialState)
+      publish(InitialState)
+    if (activeRequest !== request)
+      throw new AppError('CANCELLED', 'Managed model authorization changed.')
+    void window.velarosWorkbenchModel.listManagedProviders().then(result.resolve, result.reject)
   } catch (error) {
-    if (activeRequest === request) {
-      publish({
-        status: 'error',
-        managedModels: [],
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-    throw error
-  } finally {
-    if (activeRequest === request) activeRequest = null
+    result.reject(error)
   }
+  return request.promise
 }
 
 export function getStandaloneWorkbenchManagedModelState(): StandaloneWorkbenchManagedModelState {
@@ -86,37 +138,19 @@ export function isStandaloneWorkbenchModelProviderSelectable(providerId: string)
 }
 
 export function subscribeStandaloneWorkbenchManagedModels(listener: () => void): () => void {
+  const first = listeners.size === 0
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  if (first) refreshOnFocus()
+  return () => {
+    listeners.delete(listener)
+    releaseWatchingIfIdle()
+  }
 }
 
 export function useStandaloneWorkbenchManagedModels(): StandaloneWorkbenchManagedModelState {
-  useEffect(() => {
-    if (!hydrationStarted) {
-      hydrationStarted = true
-      void refreshStandaloneWorkbenchManagedModels().catch(() => undefined)
-    }
-    const disposeAccount = window.velarosWorkbenchAccount.onChanged((state) => {
-      if (state.status === 'signed-out') {
-        activeRequest = null
-        publish({ status: 'ready', managedModels: [], updatedAt: new Date().toISOString() })
-        return
-      }
-      void refreshStandaloneWorkbenchManagedModels().catch(() => undefined)
-    })
-    const refreshOnFocus = (): void => {
-      void refreshStandaloneWorkbenchManagedModels().catch(() => undefined)
-    }
-    window.addEventListener('focus', refreshOnFocus)
-    return () => {
-      disposeAccount()
-      window.removeEventListener('focus', refreshOnFocus)
-    }
-  }, [])
-
   return useSyncExternalStore(
     subscribeStandaloneWorkbenchManagedModels,
-    () => currentState,
+    () => stopWatching ? currentState : InitialState,
     () => InitialState
   )
 }
