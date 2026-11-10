@@ -10,6 +10,7 @@ import type { AppUpdater } from 'electron-updater'
 import type { WorkbenchCloudEndpointProvider } from '../src/main/updates/WorkbenchCloudEndpointResolver'
 import {
   CloudWorkbenchReleaseSource,
+  type ResolvedWorkbenchReleaseCatalog,
   validateWorkbenchReleaseCatalog,
   type WorkbenchReleaseSource,
 } from '../src/main/updates/WorkbenchReleaseSource'
@@ -218,6 +219,133 @@ describe('WorkbenchUpdateService', () => {
     expect(new WorkbenchUpdatePreferencesStore(dataRoot).channel).toBe('beta')
     expect(updater.allowPrerelease).toBe(true)
     await service.dispose()
+  })
+})
+
+describe('Workbench update channel ownership', () => {
+  function emptyRelease(channel: string): ResolvedWorkbenchReleaseCatalog {
+    return {
+      baseUrl: 'https://updates.test',
+      catalog: { product: 'workbench', channel, updatePolicy: 'optional', artifacts: [] },
+    }
+  }
+
+  async function channelService(getCurrentRelease: WorkbenchReleaseSource['getCurrentRelease']) {
+    const root = await mkdtemp(join(tmpdir(), 'workbench-update-channel-owner-'))
+    temporaryRoots.push(root)
+    const preferences = new WorkbenchUpdatePreferencesStore(root)
+    preferences.setAutomaticDownloads(false)
+    const service = new WorkbenchUpdateService(
+      { ...releaseSource(), getCurrentRelease },
+      new FakeUpdater() as unknown as AppUpdater,
+      preferences,
+      { currentVersion: '1.0.0', isPackaged: true, platform: 'darwin', arch: 'arm64' }
+    )
+    return { root, preferences, service }
+  }
+
+  test('same-tick channel choices check their own catalogs in admission order', async () => {
+    const firstCatalog = Promise.withResolvers<ResolvedWorkbenchReleaseCatalog>()
+    const entered = Promise.withResolvers<void>()
+    const channels: string[] = []
+    const { service, preferences } = await channelService(async ({ channel }) => {
+      channels.push(channel)
+      if (channels.length === 1) {
+        entered.resolve()
+        return firstCatalog.promise
+      }
+      return emptyRelease(channel)
+    })
+    const beta = service.setChannel('beta')
+    const canary = service.setChannel('canary')
+    const settled = Promise.allSettled([beta, canary])
+    try {
+      await entered.promise
+      expect(channels).toEqual(['beta'])
+      expect(preferences.channel).toBe('beta')
+      firstCatalog.resolve(emptyRelease('beta'))
+      expect(await beta).toMatchObject({ phase: 'idle', channel: 'beta' })
+      expect(await canary).toMatchObject({ phase: 'idle', channel: 'canary' })
+      expect(channels).toEqual(['beta', 'canary'])
+      expect(service.getState()).toMatchObject({ phase: 'idle', channel: 'canary' })
+      expect(preferences.channel).toBe('canary')
+    } finally {
+      firstCatalog.resolve(emptyRelease('beta'))
+      await settled
+      await service.dispose()
+    }
+  })
+
+  test('a failed channel choice preserves its error and does not skip a queued return to stable', async () => {
+    const firstCatalog = Promise.withResolvers<ResolvedWorkbenchReleaseCatalog>()
+    const entered = Promise.withResolvers<void>()
+    const failure = new Error('controlled beta catalog failure')
+    const channels: string[] = []
+    const { service, preferences } = await channelService(async ({ channel }) => {
+      channels.push(channel)
+      if (channels.length === 1) {
+        entered.resolve()
+        return firstCatalog.promise
+      }
+      return emptyRelease(channel)
+    })
+    const beta = service.setChannel('beta')
+    // stable is still the current preference at admission; it must be checked
+    // again at the queue head after beta has persisted its own selection.
+    const stable = service.setChannel('stable')
+    const settled = Promise.allSettled([beta, stable])
+    try {
+      await entered.promise
+      firstCatalog.reject(failure)
+      expect(await beta.catch((error: unknown) => error)).toBe(failure)
+      expect(await stable).toMatchObject({ phase: 'idle', channel: 'stable' })
+      expect(channels).toEqual(['beta', 'stable'])
+      expect(preferences.channel).toBe('stable')
+    } finally {
+      firstCatalog.resolve(emptyRelease('beta'))
+      await settled
+      await service.dispose()
+    }
+  })
+
+  test('disposal drains running and queued channel choices without persisting them', async () => {
+    const catalog = Promise.withResolvers<ResolvedWorkbenchReleaseCatalog>()
+    const channels: string[] = []
+    const { root, service, preferences } = await channelService(async ({ channel }) => {
+      channels.push(channel)
+      return catalog.promise
+    })
+    const path = join(root, 'storage', 'update-preferences.json')
+    const previousBytes = await readFile(path)
+    const checking = service.checkForUpdates()
+    const beta = service.setChannel('beta')
+    const canary = service.setChannel('canary')
+    const settled = Promise.allSettled([checking, beta, canary])
+    try {
+      // Let the first queued choice reach the existing check's real await.
+      await Promise.resolve()
+      const finished = mock(() => undefined)
+      const closing = service.dispose().then(finished)
+      await expect(service.setChannel('beta')).rejects.toThrow('disposed')
+      // Drain current microtasks while the catalog itself remains gated.
+      await new Promise<void>((accept) => setImmediate(accept))
+      expect(finished).not.toHaveBeenCalled()
+      expect(await readFile(path)).toEqual(previousBytes)
+
+      catalog.resolve(emptyRelease('stable'))
+      await checking
+      await expect(beta).rejects.toThrow('disposed')
+      await expect(canary).rejects.toThrow('disposed')
+      await closing
+      expect(finished).toHaveBeenCalledTimes(1)
+      expect(channels).toEqual(['stable'])
+      expect(preferences.channel).toBe('stable')
+      expect(await readFile(path)).toEqual(previousBytes)
+    } finally {
+      catalog.resolve(emptyRelease('stable'))
+      await settled
+      await service.dispose()
+    }
   })
 })
 

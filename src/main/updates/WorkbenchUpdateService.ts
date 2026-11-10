@@ -54,6 +54,7 @@ export class WorkbenchUpdateService {
   #state: WorkbenchUpdateState
   #feed: Nullable<WorkbenchReleaseFeedServer> = null
   #checkPromise: Nullable<Promise<WorkbenchUpdateState>> = null
+  #channelChangeTail: Promise<void> = Promise.resolve()
   #downloadPromise: Nullable<Promise<WorkbenchUpdateState>> = null
   #downloadCancellation: Nullable<CancellationToken> = null
   #downloadController: Nullable<AbortController> = null
@@ -64,6 +65,7 @@ export class WorkbenchUpdateService {
   #updater: WorkbenchUpdateInstaller | null = null
   #updaterPromise: Promise<AppUpdater> | null = null
   #disposed = false
+  #disposePromise: Nullable<Promise<void>> = null
 
   public constructor(
     private readonly releases: WorkbenchReleaseSource,
@@ -349,15 +351,36 @@ export class WorkbenchUpdateService {
     return this.getState()
   }
 
-  public async setChannel(channel: WorkbenchUpdateChannel): Promise<WorkbenchUpdateState> {
+  public setChannel(channel: WorkbenchUpdateChannel): Promise<WorkbenchUpdateState> {
+    if (this.#disposed) return Promise.reject(new Error('Workbench update service is disposed.'))
+    const operation = this.#channelChangeTail.then(() => this.#changeChannel(channel))
+    // 调用者保留本次原错误；队尾只负责让后续通道选择继续进入。
+    this.#channelChangeTail = operation.then(() => undefined, () => undefined)
+    return operation
+  }
+
+  #assertNotDisposed(): void {
+    if (this.#disposed) throw new Error('Workbench update service is disposed.')
+  }
+
+  async #changeChannel(channel: WorkbenchUpdateChannel): Promise<WorkbenchUpdateState> {
+    this.#assertNotDisposed()
     if (this.preferences.channel === channel) return this.getState()
-    if (this.#checkPromise) await this.#checkPromise.catch(() => undefined)
+    if (this.#checkPromise) {
+      await this.#checkPromise.catch(() => undefined)
+      this.#assertNotDisposed()
+    }
     this.#feed?.resume()
     this.#downloadController?.abort()
     this.#downloadCancellation?.cancel()
-    if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
+    if (this.#downloadPromise) {
+      await this.#downloadPromise.catch(() => undefined)
+      this.#assertNotDisposed()
+    }
     await this.#updater?.cancelPreparedUpdate?.()
+    this.#assertNotDisposed()
     await this.#replaceFeed(null)
+    this.#assertNotDisposed()
     try {
       this.preferences.setChannel(channel)
     } catch (error) {
@@ -374,8 +397,26 @@ export class WorkbenchUpdateService {
     this.updater.quitAndInstall(true, true)
   }
 
-  public async dispose(): Promise<void> {
+  public dispose(): Promise<void> {
+    if (this.#disposePromise) return this.#disposePromise
     this.#disposed = true
+    const channelChanges = this.#channelChangeTail
+    this.#disposePromise = Promise.resolve().then(async () => {
+      // 先撤当前 feed，不能让队中的检查等它，而关闭又只等队尾。
+      const results = await Promise.allSettled([this.#replaceFeed(null), channelChanges])
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : []
+      )
+      try {
+        // 队中已经开始的检查可能稍后才交来 feed；最终清理仍归本次关闭。
+        await this.#replaceFeed(null)
+      } catch (error) {
+        failures.push(error)
+      }
+      if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
+      this.#listeners.clear()
+      if (failures.length) throw new AggregateError(failures, 'Workbench update service did not close')
+    })
     this.#updater?.removeListener('update-available', this.#handleAvailable)
     this.#updater?.removeListener('update-not-available', this.#handleNotAvailable)
     this.#updater?.removeListener('download-progress', this.#handleProgress)
@@ -384,12 +425,15 @@ export class WorkbenchUpdateService {
     this.#downloadCancellation?.cancel()
     this.#downloadController?.abort()
     // 更新器仍可能为已发出的请求报告取消错误，等在途任务收束后再移除接收者。
-    void Promise.allSettled([this.#checkPromise, this.#downloadPromise]).then(() => {
+    void Promise.allSettled([
+      this.#checkPromise,
+      this.#downloadPromise,
+      channelChanges,
+      this.#disposePromise,
+    ]).then(() => {
       this.#updater?.removeListener('error', this.#handleError)
     })
-    await this.#replaceFeed(null)
-    if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
-    this.#listeners.clear()
+    return this.#disposePromise
   }
 
   async #performCheck(): Promise<WorkbenchUpdateState> {
