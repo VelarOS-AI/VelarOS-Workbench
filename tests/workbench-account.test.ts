@@ -258,6 +258,52 @@ void describe('Workbench shared VelarOS account', () => {
     }
   })
 
+  void test('does not dispatch managed chat after logout while its device identity is awaited', async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), 'workbench-managed-dispatch-owner-'))
+    const deviceEntered = Promise.withResolvers<void>()
+    const deviceReady = Promise.withResolvers<void>()
+    class PausedDeviceStore extends WorkbenchSharedAccountStore {
+      pauseNextDeviceId = false
+      public override async getDeviceId(): Promise<string> {
+        const deviceId = await super.getDeviceId()
+        if (this.pauseNextDeviceId) {
+          this.pauseNextDeviceId = false
+          deviceEntered.resolve()
+          await deviceReady.promise
+        }
+        return deviceId
+      }
+    }
+    const store = new PausedDeviceStore({ rootDir })
+    let request: Promise<unknown> | undefined
+    let chatRequests = 0
+    try {
+      await store.save(session('internal-account'))
+      const service = new WorkbenchAccountService(store, async () => {}, 'https://cloud.example.com', (async input => {
+        const url = String(input)
+        if (url.endsWith('/v1/account/usage')) {
+          store.pauseNextDeviceId = true
+          return Response.json(usageSnapshot([VelarDevAccess]))
+        }
+        if (url.endsWith('/logout')) return Response.json({})
+        chatRequests += 1
+        return Response.json({ id: 'unexpected-chat' })
+      }) as typeof fetch)
+      request = service.fetchManagedModel('velar-dev', `${service.getManagedModelBaseUrl('velar-dev')}/chat/completions`, { method: 'POST' })
+      const rejectedRequest = assert.rejects(request)
+      await deviceEntered.promise
+      await service.signOut()
+      deviceReady.resolve()
+      await rejectedRequest
+      assert.equal(chatRequests, 0)
+      assert.equal(await store.load(), null)
+    } finally {
+      deviceReady.resolve()
+      await Promise.allSettled([request])
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+
   void test('does not dispatch a managed model request without explicit authorization', async () => {
     const rootDir = await mkdtemp(join(tmpdir(), 'velaros-managed-denied-'))
     const store = new WorkbenchSharedAccountStore({ rootDir })

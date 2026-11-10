@@ -134,35 +134,67 @@ export class WorkbenchSharedAccountStore {
     })
   }
 
-  /** true 表示同机已没有其他产品绑定该会话。 */
-  public async disconnect(): Promise<boolean> {
+  /** 显式注销在共享事务中校验调用者许可；true 表示同机已无其他产品绑定该会话。 */
+  public async disconnect(assertCurrent?: () => void): Promise<boolean> {
     return this.#mutate((registry) => {
-      const accountId = registry.productBindings[this.#productId]
-      const productBindings = { ...registry.productBindings, [this.#productId]: null }
-      if (!accountId)
-        return {
-          registry: { ...registry, productBindings, updatedAt: new Date().toISOString() },
-          value: false,
-        }
-      const sharedElsewhere = Object.entries(productBindings).some(
-        ([productId, binding]) => productId !== this.#productId && binding === accountId
-      )
-      const sessions = { ...registry.sessions }
-      if (!sharedElsewhere) delete sessions[accountId]
-      return {
-        registry: {
-          ...registry,
-          sessions,
-          productBindings,
-          lastUsedAccountId:
-            registry.lastUsedAccountId === accountId && !sharedElsewhere
-              ? (Object.keys(sessions)[0] ?? null)
-              : registry.lastUsedAccountId,
-          updatedAt: new Date().toISOString(),
-        },
-        value: !sharedElsewhere,
-      }
+      assertCurrent?.()
+      return this.#disconnectProductBinding(registry)
     })
+  }
+
+  /** 过期判断只清理同一份凭据；在锁内交回已替换它的当前绑定。 */
+  public async disconnectExpiredSession(
+    expected: WorkbenchCloudSession,
+    assertCurrent: () => void
+  ): Promise<WorkbenchCloudSession | null> {
+    return this.#mutate((registry) => {
+      assertCurrent()
+      const accountId = registry.productBindings[this.#productId]
+      const current = accountId ? registry.sessions[accountId] ?? null : null
+      if (
+        !current ||
+        current.account.id !== expected.account.id ||
+        current.sessionFamilyId !== expected.sessionFamilyId ||
+        current.accessToken !== expected.accessToken ||
+        current.accessExpiresAt !== expected.accessExpiresAt ||
+        current.refreshToken !== expected.refreshToken ||
+        current.refreshExpiresAt !== expected.refreshExpiresAt ||
+        !(Date.parse(current.refreshExpiresAt) <= Date.now())
+      )
+        return { registry, value: current }
+      return { registry: this.#disconnectProductBinding(registry).registry, value: null }
+    })
+  }
+
+  #disconnectProductBinding(registry: SharedAccountRegistry): {
+    registry: SharedAccountRegistry
+    value: boolean
+  } {
+    const accountId = registry.productBindings[this.#productId]
+    const productBindings = { ...registry.productBindings, [this.#productId]: null }
+    if (!accountId)
+      return {
+        registry: { ...registry, productBindings, updatedAt: new Date().toISOString() },
+        value: false,
+      }
+    const sharedElsewhere = Object.entries(productBindings).some(
+      ([productId, binding]) => productId !== this.#productId && binding === accountId
+    )
+    const sessions = { ...registry.sessions }
+    if (!sharedElsewhere) delete sessions[accountId]
+    return {
+      registry: {
+        ...registry,
+        sessions,
+        productBindings,
+        lastUsedAccountId:
+          registry.lastUsedAccountId === accountId && !sharedElsewhere
+            ? (Object.keys(sessions)[0] ?? null)
+            : registry.lastUsedAccountId,
+        updatedAt: new Date().toISOString(),
+      },
+      value: !sharedElsewhere,
+    }
   }
 
   async #mutate<T>(

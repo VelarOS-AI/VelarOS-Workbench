@@ -91,11 +91,22 @@ export class WorkbenchAccountService {
   }
 
   public async getState(): Promise<WorkbenchAccountState> {
-    const session = await this.store.load()
+    const revision = this.#sessionRevision
+    let session = await this.store.load()
+    this.#assertSessionRevision(revision)
     if (!session || this.#isRejectedSession(session)) return { status: 'signed-out' }
     if (Date.parse(session.refreshExpiresAt) <= Date.now()) {
-      await this.store.disconnect()
-      return { status: 'signed-out' }
+      session = await this.store.disconnectExpiredSession(
+        session,
+        () => this.#assertSessionRevision(revision)
+      )
+      this.#assertSessionRevision(revision)
+      if (
+        !session ||
+        this.#isRejectedSession(session) ||
+        Date.parse(session.refreshExpiresAt) <= Date.now()
+      )
+        return { status: 'signed-out' }
     }
     return { status: 'signed-in', account: session.account }
   }
@@ -124,13 +135,16 @@ export class WorkbenchAccountService {
   public async signOut(): Promise<WorkbenchAccountState> {
     this.#signInOperation?.controller.abort(new Error(workbenchMainText('account.signInRequired')))
     this.#signInOperation = null
-    this.#sessionRevision += 1
+    const revision = ++this.#sessionRevision
     this.#pendingRefresh = null
     this.#rejectedSession = null
     const session = await this.store.load()
-    const releaseRemote = await this.store.disconnect()
+    this.#assertSessionRevision(revision)
+    const releaseRemote = await this.store.disconnect(() => this.#assertSessionRevision(revision))
+    this.#assertSessionRevision(revision)
     if (session && releaseRemote) {
       const deviceId = await this.store.getDeviceId()
+      this.#assertSessionRevision(revision)
       await this.#request('/v1/auth/session/logout', {
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
@@ -139,6 +153,7 @@ export class WorkbenchAccountService {
         body: { refreshToken: session.refreshToken },
       }).catch(() => undefined)
     }
+    this.#assertSessionRevision(revision)
     return { status: 'signed-out' }
   }
 
@@ -205,12 +220,16 @@ export class WorkbenchAccountService {
       throw new Error(workbenchMainText('account.untrustedModelEndpoint', { provider: providerId }))
     }
 
+    const revision = this.#sessionRevision
     await this.#requireManagedProvider(providerId)
+    this.#assertSessionRevision(revision)
     const session = await this.#requireActiveSession()
+    this.#assertSessionRevision(revision)
     const headers = new Headers(input instanceof Request ? input.headers : undefined)
     new Headers(init?.headers).forEach((value, key) => headers.set(key, value))
     headers.set('Authorization', `Bearer ${session.accessToken}`)
     headers.set(DeviceIdHeader, await this.store.getDeviceId())
+    this.#assertSessionRevision(revision)
     if (!headers.has('Idempotency-Key')) headers.set('Idempotency-Key', randomUUID())
 
     const requestInput = input instanceof Request ? new Request(target, input) : target
@@ -371,9 +390,16 @@ export class WorkbenchAccountService {
 
   async #requireActiveSession(): Promise<WorkbenchCloudSession> {
     const revision = this.#sessionRevision
-    const session = await this.store.load()
+    let session = await this.store.load()
     this.#assertSessionRevision(revision)
     if (session && this.#isRejectedSession(session)) throw new CloudAccountRequestError(401)
+    if (session && Date.parse(session.refreshExpiresAt) <= Date.now()) {
+      session = await this.store.disconnectExpiredSession(
+        session,
+        () => this.#assertSessionRevision(revision)
+      )
+      this.#assertSessionRevision(revision)
+    }
     const pending = this.#pendingRefresh
     if (
       pending &&
@@ -384,9 +410,9 @@ export class WorkbenchAccountService {
     )
       this.#pendingRefresh = null
     if (!session || Date.parse(session.refreshExpiresAt) <= Date.now()) {
-      if (session) await this.store.disconnect()
       throw new Error(workbenchMainText('account.signInRequired'))
     }
+    if (this.#isRejectedSession(session)) throw new CloudAccountRequestError(401)
     if (Date.parse(session.accessExpiresAt) - Date.now() > 60_000) return session
     return this.#startRefresh(session, revision)
   }

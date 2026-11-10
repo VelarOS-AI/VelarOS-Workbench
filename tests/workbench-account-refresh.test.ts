@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, rmdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -20,6 +20,16 @@ function session(id = 'a', token = 'old', fresh = false): WorkbenchCloudSession 
     accessExpiresAt: new Date(Date.now() + (fresh ? 3600_000 : 1000)).toISOString(),
     refreshExpiresAt: new Date(Date.now() + 86400_000).toISOString(),
   }
+}
+
+function googleStartResponse(): Response {
+  return Response.json({
+    authorizationUrl: 'https://accounts.google.com/authorize',
+    attemptId: 'attempt-new',
+    exchangeToken: 'exchange-new',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    pollAfterMs: 0,
+  })
 }
 
 async function fixture() {
@@ -186,6 +196,146 @@ test('logout cancels an outstanding Google sign-in and rejects its late session 
     await rejected
     assert.equal(await store.load(), null)
   } finally {
+    await rm(rootDir, { recursive: true, force: true })
+  }
+})
+
+test('a late logout receipt cannot report signed-out after a newer Google sign-in', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'workbench-late-logout-'))
+  const store = new WorkbenchSharedAccountStore({ rootDir })
+  const logoutEntered = Promise.withResolvers<void>()
+  const logoutResponse = Promise.withResolvers<Response>()
+  const winner = session('b', 'winner', true)
+  let logout: Promise<unknown> | undefined
+  let login: Promise<unknown> | undefined
+  try {
+    await store.save(session('a', 'old', true))
+    const service = new WorkbenchAccountService(store, async () => {}, 'https://cloud.example.com', (async input => {
+      const url = String(input)
+      if (url.endsWith('/logout')) {
+        logoutEntered.resolve()
+        return logoutResponse.promise
+      }
+      if (url.endsWith('/desktop/start')) return googleStartResponse()
+      assert.ok(url.endsWith('/desktop/session'), url)
+      return Response.json({ status: 'complete', session: winner })
+    }) as typeof fetch)
+    logout = service.signOut()
+    const rejectedLogout = assert.rejects(logout)
+    await logoutEntered.promise
+    const signingIn = service.signIn()
+    login = signingIn
+    assert.deepEqual(await signingIn, { status: 'signed-in', account: winner.account })
+    logoutResponse.resolve(Response.json({}))
+    await rejectedLogout
+    assert.deepEqual(await store.load(), winner)
+    assert.equal((await service.getState()).status, 'signed-in')
+  } finally {
+    logoutResponse.resolve(Response.json({}))
+    await Promise.allSettled([logout, login])
+    await rm(rootDir, { recursive: true, force: true })
+  }
+})
+
+test('a logout waiting for the shared mutation lock cannot disconnect a newer sign-in owner', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'workbench-logout-lock-'))
+  const lockPath = join(rootDir, '.account-sessions.lock')
+  const disconnectEntered = Promise.withResolvers<void>()
+  const startEntered = Promise.withResolvers<void>()
+  const startResponse = Promise.withResolvers<Response>()
+  let ownsFixtureLock = false
+  class WaitingStore extends WorkbenchSharedAccountStore {
+    public override async disconnect(assertCurrent?: () => void): Promise<boolean> {
+      await mkdir(lockPath)
+      ownsFixtureLock = true
+      disconnectEntered.resolve()
+      return super.disconnect(assertCurrent)
+    }
+  }
+  const store = new WaitingStore({ rootDir })
+  const previous = session('a', 'old', true)
+  const winner = session('b', 'winner', true)
+  let logout: Promise<unknown> | undefined
+  let login: Promise<unknown> | undefined
+  let remoteLogouts = 0
+  try {
+    await store.save(previous)
+    const service = new WorkbenchAccountService(store, async () => {}, 'https://cloud.example.com', (async input => {
+      const url = String(input)
+      if (url.endsWith('/desktop/start')) {
+        startEntered.resolve()
+        return startResponse.promise
+      }
+      if (url.endsWith('/logout')) {
+        remoteLogouts += 1
+        return Response.json({})
+      }
+      assert.ok(url.endsWith('/desktop/session'), url)
+      return Response.json({ status: 'complete', session: winner })
+    }) as typeof fetch)
+    logout = service.signOut()
+    const rejectedLogout = assert.rejects(logout)
+    await disconnectEntered.promise
+    const signingIn = service.signIn()
+    login = signingIn
+    await rmdir(lockPath)
+    ownsFixtureLock = false
+    await rejectedLogout
+    await startEntered.promise
+    // The new login has not saved yet: an obsolete logout must not remove the old binding either.
+    assert.deepEqual(await store.load(), previous)
+    startResponse.resolve(googleStartResponse())
+    assert.deepEqual(await signingIn, { status: 'signed-in', account: winner.account })
+    assert.deepEqual(await store.load(), winner)
+    assert.equal(remoteLogouts, 0)
+  } finally {
+    if (ownsFixtureLock) await rmdir(lockPath)
+    startResponse.resolve(googleStartResponse())
+    await Promise.allSettled([logout, login])
+    await rm(rootDir, { recursive: true, force: true })
+  }
+})
+
+test('expired-session cleanup preserves a newer shared login and only disconnects the current expired binding', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'workbench-expiry-winner-'))
+  const loaded = Promise.withResolvers<void>()
+  const continueLoad = Promise.withResolvers<void>()
+  class PausedStore extends WorkbenchSharedAccountStore {
+    pauseNextLoad = true
+    public override async load(): Promise<WorkbenchCloudSession | null> {
+      const current = await super.load()
+      if (this.pauseNextLoad) {
+        this.pauseNextLoad = false
+        loaded.resolve()
+        await continueLoad.promise
+      }
+      return current
+    }
+  }
+  const store = new PausedStore({ rootDir })
+  const desktop = new WorkbenchSharedAccountStore({ rootDir, productId: 'velaros.desktop' })
+  const expired = { ...session(), refreshExpiresAt: new Date(0).toISOString() }
+  const winner = { ...session('a', 'winner', true), sessionFamilyId: 'family-new-login' }
+  let reading: Promise<unknown> | undefined
+  try {
+    await store.save(expired)
+    const service = new WorkbenchAccountService(store, async () => {})
+    const state = service.getState()
+    reading = state
+    await loaded.promise
+    await desktop.save(winner)
+    continueLoad.resolve()
+    assert.deepEqual(await state, { status: 'signed-in', account: winner.account })
+    assert.deepEqual(await store.load(), winner)
+    assert.deepEqual(await desktop.load(), winner)
+
+    await store.save(expired)
+    assert.deepEqual(await service.getState(), { status: 'signed-out' })
+    assert.equal(await store.load(), null)
+    assert.deepEqual(await desktop.load(), expired)
+  } finally {
+    continueLoad.resolve()
+    await Promise.allSettled([reading])
     await rm(rootDir, { recursive: true, force: true })
   }
 })
