@@ -420,6 +420,7 @@ void describe('terminal sessions on a pseudo-terminal', () => {
         /超出工程范围/u
       )
     } finally {
+      for (const pty of spawned) pty.exit(0)
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
     }
@@ -462,6 +463,36 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       assert.deepEqual(signalled, ['SIGTERM:4242,5001,5002', 'SIGKILL:4242,5001,5002'])
       assert.deepEqual(pty.signals, ['SIGTERM'])
     } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('owner close times out without an exit receipt and keeps the terminal available for cleanup', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'terminal-unconfirmed-exit-')))
+    const { factory, spawned } = createFakeFactory()
+    const helper = new CommandHelper()
+    helper.getForceKillDelayMs = () => 10
+    const terminal = new TerminalSessions(new PathResolver(), helper, factory)
+    try {
+      const started = await terminal.startTerminalSession({ projectRoot }, () => undefined, 7)
+      const pty = spawned[0]!
+      await assert.rejects(terminal.closeSessionsForOwner(7), (error: unknown) => {
+        assert.ok(error instanceof AggregateError)
+        const cleanup = error.errors[0] as AggregateError
+        assert.ok(cleanup instanceof AggregateError)
+        assert.equal(cleanup.errors[0].code, 'TIMEOUT')
+        return true
+      })
+      assert.deepEqual(pty.signals, ['SIGTERM', 'SIGKILL'])
+      terminal.writeTerminalInput({ sessionId: started.sessionId, input: 'still owned' }, 7)
+      assert.deepEqual(pty.written, ['still owned'])
+      const retried = terminal.closeSessionsForOwner(7)
+      pty.exit(143, 15)
+      await retried
+      assert.throws(() => terminal.writeTerminalInput({ sessionId: started.sessionId, input: 'late' }, 7))
+    } finally {
+      for (const pty of spawned) pty.exit(0)
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
     }
@@ -530,7 +561,8 @@ void describe('terminal sessions on a pseudo-terminal', () => {
           assert.ok(logs.some(([, detail]) => (detail as { signal?: string }).signal === 'SIGKILL'))
       } finally {
         for (const pty of spawned) pty.exit(1)
-        await terminal.closeAllSessions()
+        if (mode === 'close') await assert.rejects(terminal.closeAllSessions(), AggregateError)
+        else await terminal.closeAllSessions()
         console.error = originalError
         process.off('unhandledRejection', onUnhandled)
         await rm(projectRoot, { recursive: true, force: true })
@@ -581,6 +613,7 @@ void describe('terminal sessions on a pseudo-terminal', () => {
         cwd: null,
       })
     } finally {
+      for (const pty of spawned) pty.exit(0)
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
       await rm(outside, { recursive: true, force: true })
@@ -629,6 +662,7 @@ void describe('terminal sessions on a pseudo-terminal', () => {
         /不属于当前项目窗口/u
       )
     } finally {
+      for (const pty of spawned) pty.exit(0)
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
     }

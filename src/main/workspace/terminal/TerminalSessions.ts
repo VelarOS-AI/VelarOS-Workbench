@@ -421,7 +421,9 @@ export class TerminalSessions {
       })
       errors.push(error)
     }
-    const exited = request.waitForExit ? this.waitForExit(session) : null
+    const exited = request.waitForExit
+      ? this.waitForExit(session).catch((error: unknown) => errors.push(error))
+      : null
     errors.push(...(await this.signalSessionProcesses(request.sessionId, session, tree, 'SIGTERM')))
     // 独立于会话计时器，shell 先退出也继续清理子孙；方法内部接住并记录所有错误。
     const forceKill = setTimeout(() => {
@@ -429,6 +431,8 @@ export class TerminalSessions {
     }, this.commandHelper.getForceKillDelayMs())
     forceKill.unref()
     if (exited) await exited
+    if (errors.length === 1 && errors[0] instanceof AppError && errors[0].code === 'TIMEOUT')
+      throw errors[0]
     if (errors.length > 0)
       throw new AggregateError(errors, `Failed to stop terminal ${request.sessionId}`)
   }
@@ -529,16 +533,19 @@ export class TerminalSessions {
     if (errors.length > 0) throw new AggregateError(errors, 'Failed to close terminal sessions')
   }
 
-  /** 等会话的进程退出；强杀的延迟过后再多等一会儿，还没退也返回。 */
+  /** 等实际退出回执；原有强杀及余量耗尽仍未退出时，保留会话并报告超时。 */
   private waitForExit(session: WorkbenchTerminalSession): Promise<void> {
     if (session.exited) return Promise.resolve()
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const finish = (): void => {
         clearTimeout(timeout)
         session.exitWaiters.delete(finish)
         resolve()
       }
-      const timeout = setTimeout(finish, this.commandHelper.getForceKillDelayMs() + ExitWaitGraceMs)
+      const timeout = setTimeout(() => {
+        session.exitWaiters.delete(finish)
+        reject(new AppError('TIMEOUT', 'Terminal process did not report exit before the shutdown deadline.'))
+      }, this.commandHelper.getForceKillDelayMs() + ExitWaitGraceMs)
       timeout.unref()
       session.exitWaiters.add(finish)
     })
@@ -588,8 +595,7 @@ export class TerminalSessions {
   }
 
   /**
-   * 先 SIGTERM 让 shell 自行收尾，等待短超时后若还没退出再 SIGKILL，再兜底一秒后强制结算——
-   * 给 shell 留下处理 trap 的窗口，也不让退出流程被一个僵掉的进程卡住。
+   * 先 SIGTERM，原期限内升级 SIGKILL；仍没有退出回执时报告失败，实体留给原 owner 重试。
    */
   private async closeSessions(sessions: Array<[string, WorkbenchTerminalSession]>): Promise<void> {
     if (isEmpty(sessions)) return
@@ -599,7 +605,7 @@ export class TerminalSessions {
         try {
           if (!session.exited) await this.stopTerminalSession({ sessionId, waitForExit: true })
         } finally {
-          this.dropSession(sessionId, session)
+          if (session.exited) this.dropSession(sessionId, session)
         }
       })
     )
