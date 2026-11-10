@@ -1,3 +1,6 @@
+import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import {
   access,
   appendFile,
@@ -10,9 +13,6 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises'
-import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { createReadStream } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -72,8 +72,8 @@ function readDistributionIdentity(value, releasePlatform) {
   }
 }
 
-function artifactDistributionDescriptor(name, platform, distribution) {
-  distribution = readDistributionIdentity(distribution, platform)
+function artifactDistributionDescriptor(name, platform, requestedDistribution) {
+  const distribution = readDistributionIdentity(requestedDistribution, platform)
   const lower = name.toLowerCase()
   if (!lower.startsWith('latest')) {
     const archMarkers =
@@ -122,10 +122,6 @@ function artifactDistributionDescriptor(name, platform, distribution) {
   }
 }
 
-export async function readWorkbenchVersion(repoRoot) {
-  return (await readReleaseVersions(repoRoot)).version
-}
-
 export async function validateReleaseTag(repoRoot, tag) {
   const versions = await readReleaseVersions(repoRoot)
   if (tag !== versions.releaseTag) {
@@ -140,13 +136,13 @@ export async function stageReleaseArtifacts({
   releaseDir,
   stageDir,
   platform,
-  distribution,
+  distribution: requestedDistribution,
   version,
   sourceSha,
   releaseTag = `v${version}`,
 }) {
   validatePlatform(platform)
-  distribution = readDistributionIdentity(distribution, platform)
+  const distribution = readDistributionIdentity(requestedDistribution, platform)
   if (!version || !sourceSha) {
     throw new Error('Workbench release staging requires version and sourceSha.')
   }
