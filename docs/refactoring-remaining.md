@@ -24,7 +24,7 @@
 | 生成命令字面参数 | `aa15f43` 已贯通 shared、terminal/debug、生成器、菜单、保存、启动项与重启。10 项 renderer、10 项 backend、三次真实 PTY 启动及一次真实 npm-prefix 查询取消/关闭故障通过。 | 无已知待修；node/web 类型与全部改动源码/测试定向 lint 已绿。实际 Corepack 下载/版本矩阵未运行；用户手写 command/raw args 保留实际 shell 语义。 |
 | Tree 与 EditorConfig | `b9bb6c6` 已交付目录读取请求归属、失败 Promise 身份移除和错误分类；仅 NOT_FOUND 缓存缺失，其他失败不应用父规则，下一次自然请求可重试。 | 无已知待修；web 类型与两文件 lint 已绿，真实 DOM 乱序未实测。 |
 | observe 预览与 peer 引用 | `a5d3ffd` 已交付 observe/execute 有界摘要副本及 destroyed peer watcher 释放；实际 Board 八项断言、原 trace/共享身份及相关检查通过。 | 展示层和新 Core 0.9.4 接入均已收口；产品未重建动态上下文、历史或缓存。 |
-| Platform 固定归档 | 当前为正式 v0.7.6 / 0.9.5；独立归档/peer 核验、一次安装、三包锁与 node 类型通过。本产品不经过被修复的 packageEnvironment 包装，无产品源码修改。 | 无已知待修；0.9.4 的 web/lint、真实 Node/项目编辑证明及更早回执保持原身份，不重复执行或重标。 |
+| Platform / UI 正式接入 | `b863730` 固定 v0.7.8 / 0.9.7 与 UI 1.1.2；canonical URL、普通 mandatory 基础依赖、无开发映射、实际普通/frozen 安装及同一基础入口通过。现行 UI 投影保留真实稳定 agentId。 | 无已知待修；一次新 bundle、隔离真实欢迎页/IPC/退出通过，原 120 秒预算保留。类型与旧 Node/项目执行证明保持各自原身份，未重复完整矩阵。 |
 
 Tools Worker 额外短命 isolate 使用原 H 堆上限；H 不是两个 isolate 的聚合上限，潜在总量有限增加。
 冷配置加载可能在原请求期限内明确失败，不能承诺所有大型项目仍按旧热缓存时延成功。
