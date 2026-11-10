@@ -57,6 +57,19 @@ interface WorkbenchBrowserServiceOptions {
 
 type StateListener = (state: WorkbenchBrowserState) => void
 
+interface BrowserSessionRecord {
+  readonly ref: WorkbenchBrowserRef
+  page?: BrowserPageRecord
+}
+
+interface BrowserPageRecord {
+  webContents?: WebContents
+  /** 同一页面尚未结算的实际 open/present；换 guest 时移交整组准备。 */
+  readonly preparing: Set<Promise<unknown>>
+  /** 这一个页面的完整关闭票，不约束后来显式打开的新页面。 */
+  close?: Promise<void>
+}
+
 /**
  * Agent 浏览器（与 Desktop 的浏览器服务同一套，只有内置浏览器这一种）：每个聊天会话一个受控页面，界面在编辑区的
  * 浏览器标签里把 webview 交给运行时接管；模型经 velaros:browser / devtools / cdp 操作同一个页面。
@@ -67,7 +80,7 @@ type StateListener = (state: WorkbenchBrowserState) => void
 export class WorkbenchBrowserService {
   private readonly log = Log.tag('WorkbenchBrowserService')
   private readonly runtime: ElectronBrowserRuntimeApi
-  private readonly refs = new Map<string, WorkbenchBrowserRef>()
+  private readonly refs = new Map<string, BrowserSessionRecord>()
   private readonly sites = new Map<string, BrowserSiteContext>()
   private readonly listeners = new Set<StateListener>()
   /** 这一轮运行正拿着浏览器的会话：只给它们开后台页面。 */
@@ -77,18 +90,27 @@ export class WorkbenchBrowserService {
     this.runtime = options.createRuntime({
       // 页面自己导航（点链接、重定向、前进后退）：站点上下文跟着页面走。
       onSessionSiteChange: (runtimeId, url) => {
-        this.recordSite(runtimeId, url)
+        const page = this.refs.get(runtimeId)?.page
+        if (page && !page.close && page.preparing.size === 0) this.recordSite(runtimeId, url)
       },
       onSessionClosed: (runtimeId) => {
-        options.backgroundPages.close(runtimeId)
-        this.clearSite(runtimeId)
+        const record = this.refs.get(runtimeId)
+        const page = record?.page
+        if (!record || !page) return
+        // SDK 在 closeSession 的同步段撤登记；这不是它的完整关闭 Promise 已成功。
+        this.clearPageSite(runtimeId, page)
+        if (!page.close && record.page === page) record.page = undefined
       },
       // 编辑区没挂着这个会话的网页、这一轮运行又要用：开一个不显示的页面，运行时接管后加载站点。
       provideBackgroundPage: (runtimeId) => {
         const site = this.sites.get(runtimeId)
-        if (!site || !this.running.has(runtimeId)) return Promise.resolve(null)
+        const page = this.refs.get(runtimeId)?.page
+        if (!site || !page || page.close || !this.running.has(runtimeId))
+          return Promise.resolve(null)
+        const webContents = options.backgroundPages.open(runtimeId)
+        this.adoptPage(runtimeId, webContents)
         return Promise.resolve({
-          webContents: options.backgroundPages.open(runtimeId),
+          webContents,
           url: site.url,
         })
       },
@@ -111,8 +133,12 @@ export class WorkbenchBrowserService {
     if (!guest || guest.isDestroyed() || guest.hostWebContents?.id !== owner.id)
       throw new AppError('PERMISSION', workbenchMainText('browser.pageNotInWindow'))
     const runtimeId = this.runtimeId(ref)
-    await this.runtime.presentPage(runtimeId, this.requireSite(runtimeId), webContentsId)
-    this.options.backgroundPages.close(runtimeId)
+    const site = this.requireSite(runtimeId)
+    const page = this.adoptPage(runtimeId, guest)
+    await this.preparePage(runtimeId, page, () =>
+      this.runtime.presentPage(runtimeId, site, webContentsId)
+    )
+    if (this.refs.get(runtimeId)?.page === page) this.options.backgroundPages.close(runtimeId)
   }
 
   /** 编辑区收起页面（切走标签）：隐藏但不关，站点保留；运行要用时开后台页面。 */
@@ -129,6 +155,7 @@ export class WorkbenchBrowserService {
     url?: string
   ): Promise<void> {
     const runtimeId = this.runtimeId(ref)
+    this.assertPageOpen(runtimeId)
     await this.runtime.navigatePage(
       runtimeId,
       this.requireSite(runtimeId),
@@ -137,19 +164,32 @@ export class WorkbenchBrowserService {
   }
 
   /** 离开站点（标签关掉、会话删除时）：关掉页面会话和后台页面，清掉站点。 */
-  public async leaveSite(ref: WorkbenchBrowserRef): Promise<void> {
+  public leaveSite(ref: WorkbenchBrowserRef): Promise<void> {
     const runtimeId = this.runtimeId(ref)
-    await this.runtime.closeSession(runtimeId)
-    this.options.backgroundPages.close(runtimeId)
-    this.clearSite(runtimeId)
+    const page = this.refs.get(runtimeId)?.page
+    return page ? this.closePage(runtimeId, page) : Promise.resolve()
   }
 
   /** 窗口关掉或切走项目：这个项目里所有会话的浏览器一并离站。 */
   public async releaseProject(projectRoot: string): Promise<void> {
     const target = resolve(projectRoot)
-    const owned = [...this.refs.entries()].filter(([, ref]) => resolve(ref.projectRoot) === target)
-    await Promise.allSettled(owned.map(([, ref]) => this.leaveSite(ref)))
-    for (const [runtimeId] of owned) this.refs.delete(runtimeId)
+    const owned = [...this.refs.entries()]
+      .filter(([, record]) => resolve(record.ref.projectRoot) === target)
+      .map(([runtimeId, record]) => ({ runtimeId, record, page: record.page }))
+    const outcomes = await Promise.allSettled(
+      owned.map(({ runtimeId, page }) =>
+        page ? this.closePage(runtimeId, page) : Promise.resolve()
+      )
+    )
+    const failures: unknown[] = []
+    for (const [index, outcome] of outcomes.entries()) {
+      const { runtimeId, record, page } = owned[index]!
+      if (outcome.status === 'rejected') failures.push(outcome.reason)
+      else if (this.refs.get(runtimeId) === record && record.page === page)
+        this.refs.delete(runtimeId)
+    }
+    if (failures.length)
+      throw new AggregateError(failures, 'Failed to close project browser sessions')
   }
 
   /**
@@ -194,21 +234,32 @@ export class WorkbenchBrowserService {
   /** 模型用的空间端口：站点在每次调用时现读，模型进出站点后下一次调用就落在新站点上。取消信号是这一次调用的。 */
   private port(runtimeId: string, signal: AbortSignal): BrowserSpacePort {
     const runtime = this.runtime
+    const ref = this.refs.get(runtimeId)!.ref
     // 没进站点时以拒绝交出去：端口的方法约定返回 Promise。
     const withSite = <T>(run: (site: BrowserSiteContext) => Promise<T>): Promise<T> =>
-      Promise.resolve().then(() => run(this.requireSite(runtimeId)))
+      Promise.resolve().then(() => {
+        this.assertPageOpen(runtimeId)
+        return run(this.requireSite(runtimeId))
+      })
     return {
       isActive: () => this.sites.has(runtimeId),
       getContext: () => toNullable(this.sites.get(runtimeId)),
       enterSite: async (url) => {
-        const context = this.recordSite(runtimeId, requireWebAddress(url))
+        signal.throwIfAborted()
+        const address = requireWebAddress(url)
+        this.runtimeId(ref)
+        const page = this.adoptPage(runtimeId)
+        let context!: BrowserSiteContext
         // 界面收到通知才把页面挂出来（或由后台页面顶上）：这里等它挂上并加载到这个地址。
-        await runtime.openPage(runtimeId, context, signal)
+        await this.preparePage(runtimeId, page, () => {
+          context = this.recordSite(runtimeId, address)
+          return runtime.openPage(runtimeId, context, signal)
+        })
         return this.sites.get(runtimeId) ?? context
       },
       leaveSite: () => {
-        const ref = this.refs.get(runtimeId)
-        return ref ? this.leaveSite(ref) : Promise.resolve()
+        const record = this.refs.get(runtimeId)
+        return record ? this.leaveSite(record.ref) : Promise.resolve()
       },
       showPage: () => withSite((site) => runtime.showPage(runtimeId, site, signal)),
       inspectPage: (options) =>
@@ -304,8 +355,109 @@ export class WorkbenchBrowserService {
       .digest('hex')
       .slice(0, 32)}`
     if (!this.refs.has(id))
-      this.refs.set(id, { projectRoot: ref.projectRoot, sessionId: ref.sessionId })
+      this.refs.set(id, { ref: { projectRoot: ref.projectRoot, sessionId: ref.sessionId } })
     return id
+  }
+
+  /** 显式 open/present 或真实后台 WebContents 接纳页面；活页导航沿用原 owner。 */
+  private adoptPage(runtimeId: string, webContents?: WebContents): BrowserPageRecord {
+    const record = this.refs.get(runtimeId)!
+    const current = record.page
+    if (
+      current && !current.close
+      && (!webContents || !current.webContents || current.webContents === webContents)
+    ) {
+      if (webContents) current.webContents = webContents
+      return current
+    }
+    const page: BrowserPageRecord = {
+      webContents,
+      preparing: current && !current.close ? current.preparing : new Set(),
+    }
+    record.page = page
+    return page
+  }
+
+  /** 先登记实际准备票，再派发 SDK；同页 open 与 present 都必须留到结算。 */
+  private preparePage<T>(
+    runtimeId: string,
+    page: BrowserPageRecord,
+    prepare: () => Promise<T>
+  ): Promise<T> {
+    const completion = Promise.withResolvers<T>()
+    page.preparing.add(completion.promise)
+    const finish = (): void => {
+      page.preparing.delete(completion.promise)
+      const current = this.refs.get(runtimeId)?.page
+      if (
+        !current || current.preparing !== page.preparing || current.close || current.preparing.size
+      )
+        return
+      // 裸 callback 不带 page 身份；整组实际准备结束后再读公开当前页快照。
+      try {
+        const snapshot = this.runtime.getTurnContextSnapshot(runtimeId)
+        if (snapshot?.url) this.recordSite(runtimeId, snapshot.url)
+      } catch (error) {
+        this.log.warn('页面准备后刷新站点失败', { error })
+      }
+    }
+    try {
+      void prepare().then(
+        (value) => {
+          finish()
+          completion.resolve(value)
+        },
+        (error: unknown) => {
+          finish()
+          completion.reject(error)
+        }
+      )
+    } catch (error) {
+      finish()
+      completion.reject(error)
+    }
+    return completion.promise
+  }
+
+  private closePage(runtimeId: string, page: BrowserPageRecord): Promise<void> {
+    if (page.close) return page.close
+    if (this.refs.get(runtimeId)?.page !== page)
+      return Promise.reject(new AppError('CLOSED', 'Browser page was replaced before closing.'))
+    const completion = Promise.withResolvers<void>()
+    page.close = completion.promise
+    const preparing = [...page.preparing]
+    let closed: Promise<void>
+    try {
+      // onSessionClosed 在这个同步调用栈里撤下当前页，不能推迟到已换新页后才调用。
+      closed = this.runtime.closeSession(runtimeId)
+    } catch (error) {
+      closed = Promise.reject(error)
+    }
+    void Promise.allSettled([...preparing, closed]).then((outcomes) => {
+      const outcome = outcomes.at(-1)!
+      if (outcome.status === 'rejected') {
+        completion.reject(outcome.reason)
+        return
+      }
+      try {
+        this.clearPageSite(runtimeId, page)
+        completion.resolve()
+      } catch (error) {
+        completion.reject(error)
+      }
+    })
+    return completion.promise
+  }
+
+  private clearPageSite(runtimeId: string, page: BrowserPageRecord): void {
+    if (this.refs.get(runtimeId)?.page !== page) return
+    this.options.backgroundPages.close(runtimeId)
+    if (this.refs.get(runtimeId)?.page === page) this.clearSite(runtimeId)
+  }
+
+  private assertPageOpen(runtimeId: string): void {
+    if (this.refs.get(runtimeId)?.page?.close)
+      throw new AppError('CLOSED', 'Browser page has not completed closing.')
   }
 
   /** 记下会话的站点：地址跟着页面，工作区根按站点分格（同站点内导航不换根）。 */
@@ -331,9 +483,9 @@ export class WorkbenchBrowserService {
 
   /** 逐个通知；一个监听者出错不影响别的，也不影响浏览器本身。 */
   private notify(runtimeId: string): void {
-    const ref = this.refs.get(runtimeId)
-    if (!ref) return
-    const state = this.state(ref)
+    const record = this.refs.get(runtimeId)
+    if (!record) return
+    const state = this.state(record.ref)
     for (const listener of this.listeners) {
       try {
         listener(state)

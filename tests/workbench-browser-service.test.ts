@@ -12,9 +12,13 @@ import {
 import type { WorkbenchBrowserState } from '../src/shared/workbenchBrowser'
 
 type Call = [method: string, ...args: unknown[]]
+type RuntimeOverrides = Partial<Pick<
+  ElectronBrowserRuntimeApi,
+  'closeSession' | 'openPage' | 'presentPage' | 'getTurnContextSnapshot'
+>>
 
 /** 假的浏览器运行时：记下每次调用；需要返回值的方法按名字给。 */
-function createRig() {
+function createRig(overrides: RuntimeOverrides = {}) {
   const calls: Call[] = []
   const opened: string[] = []
   const closed: string[] = []
@@ -26,6 +30,20 @@ function createRig() {
       get: (_target, name: string) =>
         (...args: unknown[]) => {
           calls.push([name, ...args])
+          if (name === 'closeSession' && overrides.closeSession)
+            return overrides.closeSession(
+              ...(args as Parameters<ElectronBrowserRuntimeApi['closeSession']>)
+            )
+          if (name === 'openPage' && overrides.openPage)
+            return overrides.openPage(...(args as Parameters<ElectronBrowserRuntimeApi['openPage']>))
+          if (name === 'presentPage' && overrides.presentPage)
+            return overrides.presentPage(
+              ...(args as Parameters<ElectronBrowserRuntimeApi['presentPage']>)
+            )
+          if (name === 'getTurnContextSnapshot' && overrides.getTurnContextSnapshot)
+            return overrides.getTurnContextSnapshot(
+              ...(args as Parameters<ElectronBrowserRuntimeApi['getTurnContextSnapshot']>)
+            )
           if (name === 'getTurnContextSnapshot') return null
           if (name === 'dispose') return undefined
           return Promise.resolve({})
@@ -148,6 +166,115 @@ describe('Workbench agent browser service', () => {
     await rig.service.releaseProject('/work/app/')
     assert.equal(rig.service.state(ref).site, null)
     assert.deepEqual(rig.service.state(other).site, { url: 'https://b.test/' })
+  })
+
+  test('page close retains its result while explicit replacement pages stay usable', async () => {
+    const failure = new Error('protocol close failed')
+    const slow = Promise.withResolvers<void>()
+    const opening = Promise.withResolvers<void>()
+    const presenting = Promise.withResolvers<void>()
+    const oldClose = Promise.withResolvers<void>()
+    let failedId = ''
+    let failedAttempts = 0
+    let holdPreparation = false
+    let snapshotUrl: Nullable<string> = null
+    const rig = createRig({
+      closeSession: (id) => {
+        // 095 在 closeSession 的首个 await 之前同步撤下当前页。
+        rig.callbacks().onSessionClosed(id)
+        if (id !== failedId) return slow.promise
+        failedAttempts += 1
+        if (failedAttempts === 1) return Promise.reject(failure)
+        return failedAttempts === 2 ? oldClose.promise : Promise.resolve()
+      },
+      openPage: async (id, context) => {
+        if (holdPreparation) await opening.promise
+        if (context.url === 'https://newer.test/')
+          assert.ok(await rig.callbacks().provideBackgroundPage(id))
+      },
+      presentPage: async () => {
+        if (holdPreparation) await presenting.promise
+        return {
+          active: true, visible: true, driverKind: 'webview', url: 'https://new.test/',
+          title: null, canGoBack: false, canGoForward: false, viewport: null,
+        }
+      },
+      getTurnContextSnapshot: (id) => id === failedId && snapshotUrl ? {
+        url: snapshotUrl, title: null, loadState: 'loaded', lastNavigationError: null,
+        visible: true, viewport: null, pendingEvents: { dialog: 0, download: 0, permission: 0 },
+        recentErrorCount: 0, capturedAt: 0,
+      } : null,
+    })
+    const next = { ...ref, sessionId: 'session-2' }
+    const port = rig.service.conversation(ref).port(signal)
+    await port.enterSite('https://a.test/')
+    await rig.service.conversation(next).port(signal).enterSite('https://b.test/')
+    failedId = rig.calls.find(([method]) => method === 'openPage')![1] as string
+    const closing = rig.service.leaveSite(ref)
+    assert.equal(rig.service.leaveSite(ref), closing)
+    const failed = assert.rejects(closing, (error: unknown) => error === failure)
+    const release = rig.service.releaseProject(ref.projectRoot)
+    const released = assert.rejects(release, (error: unknown) => {
+      assert.ok(error instanceof AggregateError)
+      assert.deepEqual(error.errors, [failure])
+      return true
+    })
+    let settled = false
+    void release.then(() => { settled = true }, () => { settled = true })
+    await failed
+    assert.equal(settled, false, 'the other session still owns its unfinished close')
+    // 撤登记通知不是关闭成功；同 page 仍复用同一张失败票。
+    assert.equal(rig.service.state(ref).site, null)
+    await assert.rejects(rig.service.navigate(ref, 'reload'), { code: 'CLOSED' })
+    slow.resolve()
+    await released
+    await assert.rejects(rig.service.releaseProject(ref.projectRoot), (error: unknown) => {
+      assert.ok(error instanceof AggregateError)
+      assert.deepEqual(error.errors, [failure])
+      return true
+    })
+    assert.equal(rig.service.leaveSite(ref), closing)
+    assert.equal(failedAttempts, 1)
+    assert.equal(rig.calls.filter(([method]) => method === 'closeSession').length, 2)
+
+    // 显式新页不继承失败；它的 open 与 present 两项都须进入完整关闭票。
+    holdPreparation = true
+    const entered = port.enterSite('https://new.test/')
+    const attached = rig.service.attachPage(ref, 101, rig.window)
+    rig.callbacks().onSessionSiteChange(failedId, 'https://old.test/')
+    assert.deepEqual(rig.service.state(ref).site, { url: 'https://new.test/' })
+    const closingNew = rig.service.leaveSite(ref)
+    const fullyClosed = assert.doesNotReject(closingNew)
+    let newClosed = false
+    void closingNew.then(() => { newClosed = true }, () => { newClosed = true })
+    oldClose.resolve()
+    await Promise.resolve()
+    assert.equal(newClosed, false)
+    opening.resolve()
+    await entered
+    assert.equal(newClosed, false, 'present is still preparing after open has settled')
+
+    // 最后一个准备完成时换入真实新页：旧 present/close 续体不能再清它的站点或后台页面。
+    presenting.resolve()
+    holdPreparation = false
+    snapshotUrl = 'https://newer.test/loaded'
+    const backgroundCloses = rig.closed.length
+    const newest = port.enterSite('https://newer.test/')
+    await Promise.all([attached, fullyClosed, newest])
+    assert.equal(rig.closed.length, backgroundCloses)
+    assert.deepEqual(rig.service.state(ref).site, { url: snapshotUrl })
+    await rig.service.navigate(ref, 'reload')
+    await assert.rejects(closing, (error: unknown) => error === failure)
+
+    const cancelled = new AbortController()
+    const cancelledPort = rig.service.conversation(ref).port(cancelled.signal)
+    cancelled.abort()
+    const openCalls = rig.calls.filter(([method]) => method === 'openPage').length
+    await assert.rejects(cancelledPort.enterSite('https://cancelled.test/'))
+    assert.equal(rig.calls.filter(([method]) => method === 'openPage').length, openCalls)
+    assert.deepEqual(rig.service.state(ref).site, { url: snapshotUrl })
+    await rig.service.leaveSite(ref)
+    assert.equal(rig.calls.filter(([method]) => method === 'closeSession').length, 4)
   })
 
   test('refuses user scripts and describes the page every frame', async () => {
