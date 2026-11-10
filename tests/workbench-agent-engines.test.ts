@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 
-import { afterEach, beforeEach, describe, test } from 'bun:test'
+import { afterEach, beforeEach, describe, spyOn, test } from 'bun:test'
 
 import { createWorkbenchConversationDispatcher } from '../src/main/conversation/WorkbenchConversationDispatcher'
 import { WorkbenchConversationRecovery } from '../src/main/conversation/WorkbenchConversationRecovery'
@@ -15,8 +16,15 @@ import { WorkbenchSessionPeers } from '../src/main/conversation/WorkbenchSession
 import { ClaudeCodeEngine } from '../src/main/engines/ClaudeCodeEngine'
 import { CodexEngine } from '../src/main/engines/CodexEngine'
 import { WorkbenchEngineConversationRuntime } from '../src/main/engines/WorkbenchEngineConversationRuntime'
-import { withTimeout } from '../src/main/engines/WorkbenchEngineProcess'
+import {
+  EngineProcessCloseError,
+  spawnEngineProcess,
+  terminateEngineProcess,
+  waitForEngineProcessClose,
+  withTimeout,
+} from '../src/main/engines/WorkbenchEngineProcess'
 import { WorkbenchEngineSessionStore } from '../src/main/engines/WorkbenchEngineSessionStore'
+import { CommandHelper } from '../src/main/workspace/CommandHelper'
 import {
   ConversationInteractionNotice,
   type ConversationInteractionProjection,
@@ -40,6 +48,7 @@ const fs = require('fs')
 const readline = require('readline')
 const args = process.argv.slice(2)
 fs.appendFileSync(process.env.FAKE_ENGINE_LOG, JSON.stringify({ claude: args }) + '\n')
+fs.appendFileSync(process.env.FAKE_ENGINE_LOG, JSON.stringify({ claudeProcess: process.pid }) + '\n')
 if (args[0] === 'auth') {
   process.stdout.write(JSON.stringify({ loggedIn: process.env.FAKE_CLAUDE_LOGGED_IN !== '0' }))
   process.exit(0)
@@ -58,6 +67,7 @@ rl.on('line', (line) => {
   const message = JSON.parse(line)
   if (message.type === 'control_request' && message.request.subtype === 'initialize') {
     fs.appendFileSync(process.env.FAKE_ENGINE_LOG, JSON.stringify({ initialize: message.request }) + '\n')
+    if (process.env.FAKE_CLAUDE_HOLD_INITIALIZE) return
     out({ type: 'control_response', response: { subtype: 'success', request_id: message.request_id, response: {
       account: { tokenSource: 'claude.ai', apiProvider: 'firstParty' },
       models: [
@@ -131,12 +141,33 @@ async function turn(text) {
 /** 假的 Codex app-server：JSON-RPC 握手、开 thread、跑一个回合（命令审批、改文件、计划、正文）。 */
 const FakeCodex = String.raw`#!/usr/bin/env node
 const fs = require('fs')
+const path = require('path')
 const readline = require('readline')
 const log = (entry) => fs.appendFileSync(process.env.FAKE_ENGINE_LOG, JSON.stringify(entry) + '\n')
 const out = (message) => process.stdout.write(JSON.stringify(message) + '\n')
 if (process.argv[2] !== 'app-server') process.exit(2)
+log({ codexProcess: process.pid })
 const waiting = new Map()
 let nextId = 1000
+let threadSequence = 0
+let turnSequence = 0
+let held = false
+const turns = new Map()
+function gate(method, action) {
+  if (held || process.env.FAKE_CODEX_HOLD_METHOD !== method) return action()
+  held = true
+  log({ codexHeld: method })
+  const file = process.env.FAKE_CODEX_RELEASE_FILE
+  let released = false
+  const release = () => {
+    if (released || !fs.existsSync(file)) return
+    released = true
+    watcher.close()
+    action()
+  }
+  const watcher = fs.watch(path.dirname(file), release)
+  release()
+}
 const rl = readline.createInterface({ input: process.stdin })
 rl.on('close', () => process.exit(0))
 function request(method, params) {
@@ -153,28 +184,49 @@ rl.on('line', (line) => {
   }
   log({ codex: message.method, params: message.params })
   switch (message.method) {
-    case 'initialize': return out({ id: message.id, result: { userAgent: 'fake-codex' } })
+    case 'initialize': return gate(message.method, () => out(process.env.FAKE_CODEX_INITIALIZE_ERROR
+      ? { id: message.id, error: { code: -32000, message: 'Initialize rejected' } }
+      : { id: message.id, result: { userAgent: 'fake-codex' } }))
     case 'account/read': return out({ id: message.id, result: { account: { type: 'chatgpt', email: null, planType: 'pro' }, requiresOpenaiAuth: true } })
     case 'model/list': return out({ id: message.id, result: { data: [
       { id: 'gpt-x', model: 'gpt-x', displayName: 'GPT X', description: 'fast', isDefault: true, supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }] },
     ], nextCursor: null } })
-    case 'thread/start': return out({ id: message.id, result: { thread: { id: 'thread-1' } } })
-    case 'thread/resume': return out({ id: message.id, result: { thread: { id: message.params.threadId } } })
+    case 'thread/start': {
+      const threadId = 'thread-' + (++threadSequence)
+      return gate(message.method, () => out({ id: message.id, result: { thread: { id: threadId } } }))
+    }
+    case 'thread/resume': return gate(message.method, () => out({ id: message.id, result: { thread: { id: message.params.threadId } } }))
     case 'thread/goal/set':
     case 'thread/goal/clear':
-      return out(process.env.FAKE_CODEX_GOAL_ERROR
+      return gate(message.method, () => out(process.env.FAKE_CODEX_GOAL_ERROR
         ? { id: message.id, error: { code: -32000, message: 'Goal storage unavailable' } }
-        : { id: message.id, result: {} })
-    case 'turn/start':
-      out({ id: message.id, result: { turn: { id: 'turn-1', status: 'inProgress', items: [] } } })
-      return void turn(message.params)
+        : { id: message.id, result: {} }))
+    case 'turn/start': {
+      const turnId = 'turn-' + (++turnSequence)
+      const reply = () => out({ id: message.id, result: { turn: { id: turnId, status: 'inProgress', items: [] } } })
+      if (process.env.FAKE_CODEX_EVENTS_BEFORE_REPLY) {
+        gate(message.method, reply)
+        return void turn(message.params, turnId)
+      }
+      return gate(message.method, () => { reply(); void turn(message.params, turnId) })
+    }
+    case 'turn/interrupt': {
+      const { threadId, turnId } = message.params
+      out({ id: message.id, result: {} })
+      if (turns.get(threadId) === turnId) {
+        turns.delete(threadId)
+        out({ method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'interrupted', error: null } } })
+      }
+      return
+    }
   }
 })
-async function turn(params) {
+async function turn(params, turnId) {
   const threadId = params.threadId
-  const turnId = 'turn-1'
   const cwd = params.cwd
+  turns.set(threadId, turnId)
   out({ method: 'turn/started', params: { threadId, turn: { id: turnId } } })
+  if (params.input.some((item) => item.type === 'text' && item.text.includes('slow'))) return
   out({ method: 'item/reasoning/summaryTextDelta', params: { threadId, turnId, itemId: 'r1', delta: 'Thinking it over', summaryIndex: 0 } })
   out({ method: 'turn/plan/updated', params: { threadId, turnId, explanation: null, plan: [{ step: 'Run tests', status: 'inProgress' }] } })
   const command = { type: 'commandExecution', id: 'cmd-1', command: 'npm test', cwd, status: 'inProgress' }
@@ -192,6 +244,7 @@ async function turn(params) {
   out({ method: 'item/agentMessage/delta', params: { threadId, turnId, itemId: 'msg-1', delta: 'done.' } })
   out({ method: 'item/completed', params: { threadId, turnId, item: { type: 'agentMessage', id: 'msg-1', text: 'All done.' } } })
   out({ method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'completed', error: null } } })
+  turns.delete(threadId)
 }
 `
 
@@ -342,6 +395,14 @@ async function readLog(): Promise<Array<Record<string, unknown>>> {
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line) as Record<string, unknown>)
+}
+
+async function waitForEngineLog(predicate: (entry: Record<string, unknown>) => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if ((await readLog()).some(predicate)) return
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  assert.fail('The engine fixture did not reach its controlled wait')
 }
 
 describe('Claude Code engine', () => {
@@ -514,6 +575,257 @@ describe('Claude Code engine', () => {
 })
 
 describe('Codex engine', () => {
+  test('cancelling preparation drains its reply without starting a turn', async () => {
+    const release = join(rig.root, 'release-preparation')
+    rig.env.FAKE_CODEX_HOLD_METHOD = 'thread/start'
+    rig.env.FAKE_CODEX_RELEASE_FILE = release
+    const submitted = rig.runtime.submit(record().sink, request('codex', 'hello', 'never-ask'))
+    await waitForEngineLog((entry) => entry.codexHeld === 'thread/start')
+    let cancelled = false
+    const cancellation = rig.runtime.cancel(ref()).then((result) => {
+      cancelled = true
+      return result
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(cancelled, false)
+    await writeFile(release, 'release')
+    assert.deepEqual(await cancellation, { aborted: true })
+    await assert.rejects(submitted.accepted, /运行已停止/u)
+    await assert.rejects(submitted.completed, /运行已停止/u)
+    assert.equal((await readLog()).some((entry) => entry.codex === 'turn/start'), false)
+  })
+
+  test('an unconfirmed stop keeps its owner and mapping until a late turn can be interrupted', async () => {
+    const release = join(rig.root, 'release-turn')
+    rig.env.FAKE_CODEX_HOLD_METHOD = 'turn/start'
+    rig.env.FAKE_CODEX_RELEASE_FILE = release
+    const first = record()
+    const submitted = rig.runtime.submit(first.sink, request('codex', 'slow held', 'never-ask'))
+    await waitForEngineLog((entry) => entry.codexHeld === 'turn/start')
+    const deletion = rig.runtime.deleteSession(ref())
+    const other = { ...ref(), sessionId: 'chat-2' }
+    const second = record()
+    const otherRun = rig.runtime.submit(second.sink, {
+      ...request('codex', 'slow other', 'never-ask'),
+      ...other,
+    })
+    await otherRun.accepted
+    await assert.rejects(deletion, { code: 'TIMEOUT' })
+    assert.equal(await rig.sessions.get('codex', ref()), 'thread-1')
+    assert.throws(() => rig.runtime.submit(record().sink, request('codex', 'again', 'never-ask')))
+    assert.equal(first.states.some((state) => state.kind === 'aborted'), false)
+    assert.equal(second.states.some((state) => state.kind === 'aborted'), false)
+
+    await writeFile(release, 'release')
+    await submitted.accepted
+    await submitted.completed
+    assert.equal(first.states.at(-1)?.kind, 'aborted')
+    assert.equal(second.states.some((state) => state.kind === 'aborted'), false)
+    assert.equal((await readLog()).filter((entry) => entry.codexProcess !== undefined).length, 1)
+    assert.deepEqual(await rig.runtime.cancel(other), { aborted: true })
+    await otherRun.completed
+  }, 20_000)
+
+  test('a known turn completes before its delayed start acknowledgement', async () => {
+    const release = join(rig.root, 'release-acknowledgement')
+    rig.env.FAKE_CODEX_HOLD_METHOD = 'turn/start'
+    rig.env.FAKE_CODEX_RELEASE_FILE = release
+    rig.env.FAKE_CODEX_EVENTS_BEFORE_REPLY = '1'
+    const submitted = rig.runtime.submit(record().sink, request('codex', 'hello', 'never-ask'))
+    await submitted.accepted
+    await submitted.completed
+    await writeFile(release, 'release')
+    await run(record(), request('codex', 'next turn', 'never-ask'))
+  })
+
+  test('global close joins engine processes that are still initializing', async () => {
+    let enterEnvironment!: () => void
+    const entered = new Promise<void>((resolve) => { enterEnvironment = resolve })
+    let releaseEnvironment!: (env: NodeJS.ProcessEnv) => void
+    const environment = new Promise<NodeJS.ProcessEnv>((resolve) => { releaseEnvironment = resolve })
+    const beforeSpawn = new WorkbenchEngineConversationRuntime({
+      engines: [new CodexEngine({ getEnvironment: () => {
+        enterEnvironment()
+        return environment
+      } }, '0.0.0-test')],
+      sessions: rig.sessions,
+    })
+    const preparing = beforeSpawn.submit(record().sink, request('codex', 'hello', 'never-ask'))
+    await entered
+    const beforeSpawnClose = beforeSpawn.close()
+    releaseEnvironment({ ...process.env, ...rig.env })
+    await beforeSpawnClose
+    await assert.rejects(preparing.accepted, /运行已停止/u)
+    await assert.rejects(preparing.completed, /运行已停止/u)
+    assert.equal((await readLog()).some((entry) => entry.codexProcess !== undefined), false)
+
+    for (const id of ['codex', 'claude-code'] as const) {
+      rig.env.FAKE_CODEX_HOLD_METHOD = 'initialize'
+      rig.env.FAKE_CODEX_RELEASE_FILE = join(rig.root, 'never-release-initialize')
+      rig.env.FAKE_CLAUDE_HOLD_INITIALIZE = '1'
+      const environment = { getEnvironment: async () => ({ ...process.env, ...rig.env }) }
+      const runtime = new WorkbenchEngineConversationRuntime({
+        engines: [
+          id === 'codex'
+            ? new CodexEngine(environment, '0.0.0-test')
+            : new ClaudeCodeEngine(environment),
+        ],
+        sessions: rig.sessions,
+      })
+      const submitted = runtime.submit(record().sink, request(id, 'hello', 'never-ask'))
+      await waitForEngineLog((entry) =>
+        id === 'codex' ? entry.codexHeld === 'initialize' : entry.initialize !== undefined
+      )
+      const closing = runtime.close()
+      assert.equal(runtime.close(), closing)
+      await closing
+      await assert.rejects(submitted.accepted, /运行已停止/u)
+      await assert.rejects(submitted.completed, /运行已停止/u)
+      const key = id === 'codex' ? 'codexProcess' : 'claudeProcess'
+      const pid = (await readLog()).findLast((entry) => typeof entry[key] === 'number')?.[key]
+      assert.ok(typeof pid === 'number')
+      assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' })
+    }
+  })
+
+  test('a failed global close preserves the pending run until its actual completion', async () => {
+    let finish!: () => void
+    const stopped = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    let finishOtherClose!: () => void
+    const otherClose = new Promise<void>((resolve) => { finishOtherClose = resolve })
+    const runtime = new WorkbenchEngineConversationRuntime({
+      sessions: rig.sessions,
+      engines: [
+        {
+          id: 'codex',
+          label: 'controlled engine',
+          status: async () => ({ id: 'codex', available: true, models: [] }),
+          run: async (input) => {
+            input.accepted()
+            await stopped
+            return { status: 'aborted' }
+          },
+          close: async () => {
+            throw new Error('Process close failed')
+          },
+        },
+        {
+          id: 'claude-code',
+          label: 'other controlled engine',
+          status: async () => ({ id: 'claude-code', available: true, models: [] }),
+          run: async () => ({ status: 'completed' }),
+          close: async () => {
+            await otherClose
+            throw new Error('Other close failed')
+          },
+        },
+      ],
+    })
+    const recorded = record()
+    const submitted = runtime.submit(recorded.sink, request('codex', 'hello', 'never-ask'))
+    await submitted.accepted
+    let closeFinished = false
+    const closing = runtime.close()
+    void closing.catch(() => { closeFinished = true })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(closeFinished, false)
+    finishOtherClose()
+    await assert.rejects(closing, /Process close failed[\s\S]*Other close failed/u)
+    assert.equal(recorded.states.some((state) => state.kind === 'aborted'), false)
+    let cancelled = false
+    const cancellation = runtime.cancel(ref()).then((result) => {
+      cancelled = true
+      return result
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(cancelled, false)
+    finish()
+    assert.deepEqual(await cancellation, { aborted: true })
+    await submitted.completed
+  })
+
+  test('a concurrent preparation failure remains an error after cancellation and process close', async () => {
+    const release = join(rig.root, 'release-failed-initialize')
+    rig.env.FAKE_CODEX_HOLD_METHOD = 'initialize'
+    rig.env.FAKE_CODEX_RELEASE_FILE = release
+    rig.env.FAKE_CODEX_INITIALIZE_ERROR = '1'
+    const recorded = record()
+    const submitted = rig.runtime.submit(recorded.sink, request('codex', 'hello', 'never-ask'))
+    await waitForEngineLog((entry) => entry.codexHeld === 'initialize')
+    const cancellation = rig.runtime.cancel(ref())
+    await writeFile(release, 'release')
+    await assert.rejects(cancellation, /Initialize rejected/u)
+    await assert.rejects(submitted.accepted, /Initialize rejected/u)
+    await assert.rejects(submitted.completed, /Initialize rejected/u)
+    assert.equal(recorded.states.at(-1)?.kind, 'error')
+    const pid = (await readLog()).findLast((entry) => typeof entry.codexProcess === 'number')?.codexProcess
+    assert.ok(typeof pid === 'number')
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' })
+  })
+
+  test('an admitted failure rejects deletion and preserves the engine mapping despite cancellation', async () => {
+    let finish!: () => void
+    const failed = new Promise<void>((resolve) => { finish = resolve })
+    const runtime = new WorkbenchEngineConversationRuntime({
+      sessions: rig.sessions,
+      engines: [{
+        id: 'codex',
+        label: 'controlled failure',
+        status: async () => ({ id: 'codex', available: true, models: [] }),
+        run: async (input) => {
+          await input.sessionStarted('native-failure')
+          input.accepted()
+          await failed
+          throw new Error('Protocol failed after acceptance')
+        },
+        close: async () => {},
+      }],
+    })
+    const recorded = record()
+    const submitted = runtime.submit(recorded.sink, request('codex', 'hello', 'never-ask'))
+    await submitted.accepted
+    const deletion = runtime.deleteSession(ref())
+    finish()
+    await assert.rejects(deletion, /Protocol failed after acceptance/u)
+    await assert.rejects(submitted.completed, /Protocol failed after acceptance/u)
+    assert.equal(await rig.sessions.get('codex', ref()), 'native-failure')
+    assert.equal(recorded.states.at(-1)?.kind, 'error')
+    await runtime.close()
+  })
+
+  test('termination records TERM and force failures while retaining the physical close receipt', async () => {
+    const child = spawnEngineProcess(
+      { executable: process.execPath, env: process.env },
+      ['-e', 'setInterval(() => {}, 1000)'],
+      rig.root
+    )
+    await once(child, 'spawn')
+    const closed = waitForEngineProcessClose(child)
+    let physicallyClosed = false
+    void closed.then(() => { physicallyClosed = true })
+    const original = CommandHelper.prototype.terminateForegroundProcess
+    const signals: NodeJS.Signals[] = []
+    const failing = spyOn(CommandHelper.prototype, 'terminateForegroundProcess').mockImplementation(
+      (_pid, signal = 'SIGTERM') => {
+        signals.push(signal)
+        throw new Error(`Cannot send ${signal}`)
+      }
+    )
+    try {
+      await assert.rejects(terminateEngineProcess(child), (error: unknown) =>
+        error instanceof EngineProcessCloseError && error.errors.length === 2
+      )
+      assert.deepEqual(signals, ['SIGTERM', 'SIGKILL'])
+      assert.equal(physicallyClosed, false)
+    } finally {
+      failing.mockRestore()
+      original.call(new CommandHelper(), child.pid, 'SIGKILL')
+      await closed
+    }
+  })
+
   test('a goal setup failure rejects the input before starting a turn', async () => {
     rig.env.FAKE_CODEX_GOAL_ERROR = '1'
     const recorded = record()

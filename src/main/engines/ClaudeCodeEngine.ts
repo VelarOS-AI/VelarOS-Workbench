@@ -35,6 +35,7 @@ import {
 } from './WorkbenchEnginePermissions'
 import {
   engineFailure,
+  EngineProcessCloseError,
   resolveEngineCommand,
   runEngineCommand,
   withTimeout,
@@ -74,16 +75,43 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
   /** 最近一次探到的、能调思考力度的模型。 */
   private readonly effortModels = new Set<string>()
   private readonly running = new Set<ClaudeCodeTransport>()
+  private readonly probes = new Set<Promise<WorkbenchAgentEngineStatus>>()
+  private readonly lifetime = new AbortController()
+  private closing?: Promise<void>
 
   public constructor(private readonly environment: WorkbenchEngineEnvironmentSource) {}
 
   public async status(signal?: AbortSignal): Promise<WorkbenchAgentEngineStatus> {
+    const probe = this.readStatus(
+      signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal
+    )
+    this.probes.add(probe)
     try {
+      return await probe
+    } finally {
+      this.probes.delete(probe)
+    }
+  }
+
+  private async readStatus(signal: AbortSignal): Promise<WorkbenchAgentEngineStatus> {
+    try {
+      signal.throwIfAborted()
       const command = await resolveEngineCommand(this.environment, 'claude', this.label, signal)
-      const [models, loggedIn] = await Promise.all([
+      signal.throwIfAborted()
+      const [modelsResult, loginResult] = await Promise.allSettled([
         this.probeModels(command, signal),
         readLoginState(command, signal),
       ])
+      if (modelsResult.status === 'rejected') {
+        if (loginResult.status === 'rejected') {
+          const failures = [modelsResult.reason, loginResult.reason]
+          throw new AggregateError(failures, failures.map((error) => AppError.getMessage(error)).join('\n'))
+        }
+        throw modelsResult.reason
+      }
+      if (loginResult.status === 'rejected') throw loginResult.reason
+      const models = modelsResult.value
+      const loggedIn = loginResult.value
       if (loggedIn === false)
         return {
           id: this.id,
@@ -107,20 +135,33 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
   }
 
   public async run(input: WorkbenchEngineRunInput): Promise<WorkbenchEngineRunResult> {
-    const command = await resolveEngineCommand(this.environment, 'claude', this.label, input.signal)
+    const ownedInput = { ...input, signal: AbortSignal.any([input.signal, this.lifetime.signal]) }
+    ownedInput.signal.throwIfAborted()
+    const command = await resolveEngineCommand(this.environment, 'claude', this.label, ownedInput.signal)
     try {
-      return await this.runOnce(command, input, input.resume)
+      return await this.runOnce(command, ownedInput, ownedInput.resume)
     } catch (error) {
       if (!(error instanceof ClaudeCodeResumeLost)) throw error
-      log.info('Claude Code 接不上上一轮的会话，另开一段', { sessionId: input.ref.sessionId })
-      await input.sessionLost()
-      return this.runOnce(command, input, null)
+      ownedInput.signal.throwIfAborted()
+      log.info('Claude Code 接不上上一轮的会话，另开一段', { sessionId: ownedInput.ref.sessionId })
+      await ownedInput.sessionLost()
+      return this.runOnce(command, ownedInput, null)
     }
   }
 
-  public async close(): Promise<void> {
-    for (const transport of this.running) transport.close()
-    await Promise.allSettled([...this.running].map((transport) => transport.exited))
+  public close(): Promise<void> {
+    if (!this.closing) {
+      this.lifetime.abort(new AppError('CANCELLED', workbenchMainText('engines.cancelled')))
+      this.closing = Promise.allSettled([
+        ...[...this.running].map((transport) => transport.close(this.lifetime.signal.reason)),
+        ...this.probes,
+      ]).then((results) => {
+        const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+        if (failures.length)
+          throw new AggregateError(failures, failures.map((error) => AppError.getMessage(error)).join('\n'))
+      })
+    }
+    return this.closing
   }
 
   private async probeModels(
@@ -128,6 +169,7 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
     signal?: AbortSignal
   ): Promise<WorkbenchAgentEngineModel[]> {
     const transport = ClaudeCodeTransport.start(command, ClaudeCodeProtocolArgs, homedir())
+    this.running.add(transport)
     try {
       const init = await withTimeout(
         transport.initialize(),
@@ -140,7 +182,7 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
       for (const model of effort) this.effortModels.add(model)
       return models
     } finally {
-      transport.close()
+      await this.release(transport)
     }
   }
 
@@ -171,9 +213,19 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
     const translator = new ClaudeCodeTranslator(surface, input.ref.projectRoot, input.locale)
     let started = false
     let result: Nullable<ClaudeCodeMessage> = null
+    let interruptAccepted = false
+    let interruptTimer: ReturnType<typeof setTimeout> | undefined
+    const close = (): void => {
+      void transport.close(signal.reason).catch((error: unknown) =>
+        log.warn('关闭 Claude Code 进程失败', { error: AppError.getMessage(error) })
+      )
+    }
     const stop = (): void => {
-      void transport.interrupt().catch(() => transport.close())
-      setTimeout(() => transport.close(), InterruptGraceMs).unref()
+      void transport.interrupt().then(() => {
+        interruptAccepted = true
+      }, close)
+      interruptTimer = setTimeout(close, InterruptGraceMs)
+      interruptTimer.unref()
     }
     signal.addEventListener('abort', stop, { once: true })
     try {
@@ -199,9 +251,12 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
         translator.apply(message)
       }
       const exit = await transport.exited
-      if (signal.aborted) return { status: 'aborted' }
+      if (signal.aborted && interruptAccepted && result?.subtype === 'error_during_execution' &&
+        !isNonBlankString(result.result) &&
+        !(isArray(result.errors) && result.errors.some(isNonBlankString)))
+        return { status: 'aborted' }
       if (!result) {
-        if (resume && !started) throw new ClaudeCodeResumeLost()
+        if (resume && !started && !signal.aborted) throw new ClaudeCodeResumeLost()
         throw new AppError(
           'UNAVAILABLE',
           exit.stderr
@@ -216,15 +271,28 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
         throw new AppError('UNAVAILABLE', resultError(result))
       return { status: 'completed' }
     } catch (error) {
-      if (signal.aborted) return { status: 'aborted' }
+      if (signal.aborted && (error === signal.reason || error === this.lifetime.signal.reason))
+        return { status: 'aborted' }
       if (error instanceof ClaudeCodeResumeLost) throw error
-      if (resume && !started) throw new ClaudeCodeResumeLost()
+      if (resume && !started && !signal.aborted) throw new ClaudeCodeResumeLost()
       throw error
     } finally {
       signal.removeEventListener('abort', stop)
-      transport.close()
-      this.running.delete(transport)
+      clearTimeout(interruptTimer)
+      await this.release(transport)
     }
+  }
+
+  private async release(transport: ClaudeCodeTransport): Promise<void> {
+    try {
+      await transport.close()
+    } catch (error) {
+      log.warn('Claude Code 仍在等待进程关闭', { error: AppError.getMessage(error) })
+      await transport.exited
+      this.running.delete(transport)
+      throw error
+    }
+    this.running.delete(transport)
   }
 
   /** 命令行问的工具权限（`can_use_tool`）：提问与计划审批画成提问卡，其余按 Workbench 的权限档回答。 */
@@ -699,6 +767,7 @@ async function readLoginState(
       ? status.loggedIn
       : undefined
   } catch (error) {
+    if (error instanceof EngineProcessCloseError) throw error
     signal?.throwIfAborted()
     log.debug('查不出 Claude Code 的登录状态', { error: AppError.getMessage(error) })
     return undefined

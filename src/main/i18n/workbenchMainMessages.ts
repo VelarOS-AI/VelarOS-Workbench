@@ -159,6 +159,7 @@ const zhCN = {
   'engines.conversationBusy': '当前会话正在运行，请等它结束或先停止。',
   'engines.commandNotFound': '没有找到 {label} 命令行（{name}）。装好后重新打开这个菜单。',
   'engines.cancelled': '已取消。',
+  'engines.stopUnconfirmed': '尚未确认引擎已停止；当前会话仍在等待收尾。',
   'engines.requestWithdrawn': '请求已撤回。',
   'engines.runEnded': '运行已结束。',
   'files.restorePathInvalid': '恢复文件路径无效。',
@@ -584,6 +585,8 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'engines.commandNotFound':
     'The {label} command line ({name}) was not found. Install it, then open this menu again.',
   'engines.cancelled': 'Cancelled.',
+  'engines.stopUnconfirmed':
+    'The engine has not confirmed stopping; this conversation is still waiting for cleanup.',
   'engines.requestWithdrawn': 'The request was withdrawn.',
   'engines.runEnded': 'The run has ended.',
   'files.restorePathInvalid': 'The path of the file to restore is invalid.',

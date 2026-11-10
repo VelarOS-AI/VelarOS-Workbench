@@ -17,17 +17,21 @@ import type {
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
+import { withTimeout } from './WorkbenchEngineProcess'
 import { EngineRunSurface } from './WorkbenchEngineRunSurface'
 import type { WorkbenchEngineSessionStore } from './WorkbenchEngineSessionStore'
 import type { WorkbenchAgentEngine } from './WorkbenchEngineTypes'
 
 /** 引擎在本机的情况缓存这么久：装好、登录之后不用重启 Workbench 就能用上。 */
 const StatusCacheMs = 60_000
+/** 取消调用最多等五秒；超时保留实际运行 owner，不能当成已经停止。 */
+const InterruptGraceMs = 5_000
 
 interface EngineActiveRun {
   readonly controller: AbortController
   readonly surface: EngineRunSurface
   completed: Promise<void>
+  outcome?: 'completed' | 'aborted'
 }
 
 export interface WorkbenchEngineConversationRuntimeOptions {
@@ -112,8 +116,12 @@ export class WorkbenchEngineConversationRuntime {
     const run = this.active.get(runKey(ref))
     if (!run) return { aborted: false }
     run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
-    await Promise.allSettled([run.completed])
-    return { aborted: true }
+    try {
+      await withTimeout(run.completed, InterruptGraceMs, workbenchMainText('engines.stopUnconfirmed'))
+    } catch (error) {
+      if (run.outcome !== 'aborted') throw error
+    }
+    return { aborted: run.outcome === 'aborted' }
   }
 
   public async input(ref: WorkbenchConversationRef, answer: string): Promise<void> {
@@ -141,7 +149,16 @@ export class WorkbenchEngineConversationRuntime {
       .map(([, run]) => run)
     for (const run of runs)
       run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
-    await Promise.allSettled(runs.map((run) => run.completed))
+    const results = await withTimeout(
+      Promise.allSettled(runs.map((run) => run.completed)),
+      InterruptGraceMs,
+      workbenchMainText('engines.stopUnconfirmed')
+    )
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected' && runs[index]?.outcome !== 'aborted' ? [result.reason] : []
+    )
+    if (failures.length)
+      throw new AggregateError(failures, failures.map((error) => AppError.getMessage(error)).join('\n'))
   }
 
   /** 各引擎在本机的情况；探一次要起一回命令行，结果缓存一分钟，refresh 时重探。 */
@@ -165,8 +182,17 @@ export class WorkbenchEngineConversationRuntime {
         run.controller.abort(
           new AppError('CANCELLED', workbenchMainText('conversation.runStopped'))
         )
-      await Promise.allSettled(runs.map((run) => run.completed))
-      await Promise.allSettled([...this.engines.values()].map((engine) => engine.close()))
+      // 先关闭真实引擎，才能解除握手/turn-start等尚无回执的等待。
+      const closed = await Promise.allSettled([...this.engines.values()].map((engine) => engine.close()))
+      const closeFailures = closed.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+      if (closeFailures.length)
+        throw new AggregateError(closeFailures, closeFailures.map((error) => AppError.getMessage(error)).join('\n'))
+      const completed = await Promise.allSettled(runs.map((run) => run.completed))
+      const failures = completed.flatMap((result, index) =>
+        result.status === 'rejected' && runs[index]?.outcome !== 'aborted' ? [result.reason] : []
+      )
+      if (failures.length)
+        throw new AggregateError(failures, failures.map((error) => AppError.getMessage(error)).join('\n'))
     })()
     return this.closing
   }
@@ -187,8 +213,8 @@ export class WorkbenchEngineConversationRuntime {
   ): Promise<void> {
     const { signal } = run.controller
     let admitted = false
-    let failure: unknown
-    let status: 'completed' | 'aborted' = 'completed'
+    let failure: Nullable<AppError> = null
+    let status: 'completed' | 'aborted' | undefined
     try {
       sink.state({ kind: 'phase', teamPhase: 'researching' })
       const resume = await this.options.sessions.get(engine.id, ref)
@@ -218,19 +244,19 @@ export class WorkbenchEngineConversationRuntime {
       if (status === 'completed' && !admitted)
         throw new AppError('PROTOCOL', workbenchMainText('engines.inputNotAccepted'))
     } catch (error) {
-      failure = error
+      if (signal.aborted && error === signal.reason) status = 'aborted'
+      else failure = AppError.from(error)
     } finally {
-      run.surface.settle({ aborted: signal.aborted || status === 'aborted' })
-    }
-    if (signal.aborted || (!failure && status === 'aborted')) {
-      sink.state({ kind: 'aborted', message: workbenchMainText('conversation.runStopped') })
-      if (!admitted) throw new AppError('CANCELLED', workbenchMainText('conversation.runStopped'))
-      return
+      run.surface.settle({ aborted: !failure && status === 'aborted' })
     }
     if (failure) {
-      const message = AppError.getMessage(failure)
-      sink.state({ kind: 'error', message })
-      if (!admitted) throw AppError.from(failure)
+      sink.state({ kind: 'error', message: failure.message })
+      throw failure
+    }
+    run.outcome = status
+    if (status === 'aborted') {
+      sink.state({ kind: 'aborted', message: workbenchMainText('conversation.runStopped') })
+      if (!admitted) throw new AppError('CANCELLED', workbenchMainText('conversation.runStopped'))
       return
     }
     sink.state({ kind: 'done' })

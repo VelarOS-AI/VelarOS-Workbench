@@ -11,6 +11,7 @@ import {
   describeEngineExitStatus,
   spawnEngineProcess,
   terminateEngineProcess,
+  waitForEngineProcessClose,
   type WorkbenchEngineCommand,
 } from './WorkbenchEngineProcess'
 
@@ -54,15 +55,19 @@ interface PendingRequest {
  * 消息的意思由引擎解释。一个进程跑所有会话（每个会话一条 thread）。
  */
 export class CodexAppServerClient {
+  public readonly exited: Promise<void>
+  public failure?: AppError
   private readonly pending = new Map<CodexRpcId, PendingRequest>()
   private nextId = 1
   private stderrTail = ''
-  private closed = false
+  private writable = true
+  private closing?: Promise<void>
 
   private constructor(
     private readonly child: ChildProcessWithoutNullStreams,
     private readonly handlers: CodexAppServerHandlers
   ) {
+    this.exited = waitForEngineProcessClose(child)
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
     lines.on('line', (line) => this.receive(line))
     child.stderr.setEncoding('utf8')
@@ -73,7 +78,7 @@ export class CodexAppServerClient {
       log.debug('写不进 Codex app-server 了', { error: AppError.getMessage(error) })
     )
     child.once('error', (error) =>
-      this.fail(
+      this.failPending(
         new AppError(
           'UNAVAILABLE',
           workbenchMainText('engines.codexStartFailed', { reason: error.message })
@@ -83,29 +88,31 @@ export class CodexAppServerClient {
     child.once('close', (code, signal) => {
       const status = describeEngineExitStatus(code, signal)
       const stderr = this.stderrTail.trim()
-      this.fail(
-        new AppError(
-          'CLOSED',
-          stderr
-            ? workbenchMainText('engines.exitedWithOutput', { engine: 'Codex', status, stderr })
-            : workbenchMainText('engines.exited', { engine: 'Codex', status })
-        )
+      const error = new AppError(
+        'CLOSED',
+        stderr
+          ? workbenchMainText('engines.exitedWithOutput', { engine: 'Codex', status, stderr })
+          : workbenchMainText('engines.exited', { engine: 'Codex', status })
       )
+      this.failPending(error)
+      this.handlers.closed(error)
     })
   }
 
-  /** 起 app-server 并握手；失败时进程一并停下。 */
-  public static async start(
+  /** 先交出真实进程 owner，握手等待期间也能关闭。 */
+  public static start(
     command: WorkbenchEngineCommand,
-    clientVersion: string,
     handlers: CodexAppServerHandlers
-  ): Promise<CodexAppServerClient> {
-    const client = new CodexAppServerClient(
+  ): CodexAppServerClient {
+    return new CodexAppServerClient(
       spawnEngineProcess(command, ['app-server'], homedir()),
       handlers
     )
+  }
+
+  public async initialize(clientVersion: string): Promise<void> {
     try {
-      await client.request('initialize', {
+      await this.request('initialize', {
         clientInfo: {
           name: 'velaros-workbench',
           title: 'VelarOS Workbench',
@@ -113,17 +120,20 @@ export class CodexAppServerClient {
         },
         capabilities: { experimentalApi: true, requestAttestation: false },
       })
-      client.notify('initialized')
-      return client
+      this.notify('initialized')
     } catch (error) {
-      client.close()
+      try {
+        await this.close(AppError.from(error))
+      } catch (closeError) {
+        throw new AggregateError([error, closeError], [error, closeError].map((failure) => AppError.getMessage(failure)).join('\n'))
+      }
       throw error
     }
   }
 
   public request(method: string, params?: unknown): Promise<unknown> {
-    if (this.closed)
-      return Promise.reject(new AppError('CLOSED', workbenchMainText('engines.codexExited')))
+    if (!this.writable)
+      return Promise.reject(this.failure ?? new AppError('CLOSED', workbenchMainText('engines.codexExited')))
     const id = this.nextId++
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
@@ -135,14 +145,14 @@ export class CodexAppServerClient {
     this.write(params === undefined ? { method } : { method, params })
   }
 
-  public close(): void {
-    if (this.closed) return
-    terminateEngineProcess(this.child)
-    this.fail(new AppError('CLOSED', workbenchMainText('engines.codexClosed')))
+  public close(reason: AppError): Promise<void> {
+    this.failPending(reason)
+    this.closing ??= terminateEngineProcess(this.child)
+    return this.closing
   }
 
   private write(message: CodexRpcMessage & { jsonrpc?: never }): void {
-    if (this.closed) return
+    if (!this.writable) return
     this.child.stdin.write(`${JSON.stringify(message)}\n`)
   }
 
@@ -181,12 +191,11 @@ export class CodexAppServerClient {
       )
   }
 
-  private fail(error: AppError): void {
-    if (this.closed) return
-    this.closed = true
-    for (const pending of this.pending.values()) pending.reject(error)
+  private failPending(error: AppError): void {
+    this.writable = false
+    this.failure ??= error
+    for (const pending of this.pending.values()) pending.reject(this.failure)
     this.pending.clear()
-    this.handlers.closed(error)
   }
 }
 

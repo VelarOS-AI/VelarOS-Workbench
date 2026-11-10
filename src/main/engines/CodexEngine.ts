@@ -44,8 +44,6 @@ const log = Log.tag('CodexEngine')
 
 /** 起 app-server、探模型与账号最多等这么久。 */
 const StatusTimeoutMs = 20_000
-/** 停下时请 Codex 打断这一回合；这么久还没收尾就按已停止了结。 */
-const InterruptGraceMs = 5_000
 const TitleChars = 160
 /** 没有回合在跑这么久，就停下常驻的 app-server；下次用到再起（起一次不到一秒）。 */
 const IdleCloseMs = 5 * 60_000
@@ -54,13 +52,24 @@ const EffortOrder: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 interface CodexActiveRun {
   readonly input: WorkbenchEngineRunInput
-  readonly threadId: string
+  threadId: Nullable<string>
+  connection?: CodexConnection
+  readonly preparing: Set<Promise<unknown>>
   readonly translator: CodexTranslator
   turnId: Nullable<string>
+  turnRequested: boolean
+  interrupt?: Promise<unknown>
   settled: boolean
   /** 最近一次不再重试的错误；回合以失败收尾时用它说明原因。 */
   lastError?: string
   settle(outcome: { status: 'completed' | 'aborted' } | { error: unknown }): void
+}
+
+interface CodexConnection {
+  readonly ready: Promise<CodexAppServerClient>
+  client?: CodexAppServerClient
+  closing?: Promise<void>
+  stopReason?: AppError
 }
 
 /**
@@ -71,7 +80,9 @@ interface CodexActiveRun {
 export class CodexEngine implements WorkbenchAgentEngine {
   public readonly id = 'codex' as const
   public readonly label = 'Codex'
-  private client?: Promise<CodexAppServerClient>
+  private connection?: CodexConnection
+  private closing?: Promise<void>
+  private readonly owners = new Set<CodexActiveRun>()
   private readonly runs = new Map<string, CodexActiveRun>()
   /** 最近一次探到的各模型支持的思考力度。 */
   private readonly efforts = new Map<string, readonly string[]>()
@@ -87,7 +98,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
   public async status(signal?: AbortSignal): Promise<WorkbenchAgentEngineStatus> {
     try {
       const client = await withTimeout(
-        this.connect(),
+        this.connect(null),
         StatusTimeoutMs,
         workbenchMainText('engines.codexNoResponse'),
         signal
@@ -128,41 +139,6 @@ export class CodexEngine implements WorkbenchAgentEngine {
 
   public async run(input: WorkbenchEngineRunInput): Promise<WorkbenchEngineRunResult> {
     const { signal, ref } = input
-    const client = await withTimeout(
-      this.connect(),
-      StatusTimeoutMs,
-      workbenchMainText('engines.codexNoResponse'),
-      signal
-    )
-    const permissions = codexPermissions(input.permissionMode, ref.projectRoot)
-    const settings = {
-      cwd: ref.projectRoot,
-      approvalPolicy: permissions.approvalPolicy,
-      approvalsReviewer: 'user',
-      sandbox: permissions.sandbox,
-      developerInstructions: engineInstructions(input.executionModes, input.locale),
-      model: input.model,
-    }
-    let threadId: Nullable<string> = null
-    if (input.resume) {
-      try {
-        threadId = readThreadId(
-          await client.request('thread/resume', { threadId: input.resume, ...settings })
-        )
-      } catch (error) {
-        signal.throwIfAborted()
-        log.info('Codex 接不上上一轮的 thread，另开一条', { error: AppError.getMessage(error) })
-      }
-      if (!threadId) await input.sessionLost()
-    }
-    threadId ??= readThreadId(
-      await client.request('thread/start', { ...settings, ephemeral: false })
-    )
-    if (!threadId) throw new AppError('PROTOCOL', workbenchMainText('engines.codexNoThread'))
-    await input.sessionStarted(threadId)
-    signal.throwIfAborted()
-    await this.applyGoal(client, threadId, input)
-
     let resolveOutcome!: (value: WorkbenchEngineRunResult) => void
     let rejectOutcome!: (error: unknown) => void
     const outcome = new Promise<WorkbenchEngineRunResult>((resolve, reject) => {
@@ -173,33 +149,76 @@ export class CodexEngine implements WorkbenchAgentEngine {
     void outcome.catch(() => undefined)
     const run: CodexActiveRun = {
       input,
-      threadId,
+      threadId: null,
+      preparing: new Set(),
       translator: new CodexTranslator(input.surface, ref.projectRoot, input.locale),
       turnId: null,
+      turnRequested: false,
       settled: false,
       settle: (result) => {
         if (run.settled) return
         run.settled = true
-        this.runs.delete(threadId)
+        if (run.threadId && this.runs.get(run.threadId) === run) this.runs.delete(run.threadId)
+        this.owners.delete(run)
         if ('error' in result) rejectOutcome(result.error)
         else resolveOutcome(result)
       },
     }
-    this.runs.set(threadId, run)
-    const stop = (): void => {
-      const interrupt = (turnId: string): void => {
-        void client.request('turn/interrupt', { threadId, turnId }).catch(() => undefined)
-      }
-      if (run.turnId) interrupt(run.turnId)
-      setTimeout(() => run.settle({ status: 'aborted' }), InterruptGraceMs).unref()
-    }
+    this.owners.add(run)
+    const stop = (): void => this.interrupt(run)
     signal.addEventListener('abort', stop, { once: true })
     try {
+      signal.throwIfAborted()
+      const client = await withTimeout(
+        this.connect(run),
+        StatusTimeoutMs,
+        workbenchMainText('engines.codexNoResponse'),
+        signal
+      )
+      const permissions = codexPermissions(input.permissionMode, ref.projectRoot)
+      const settings = {
+        cwd: ref.projectRoot,
+        approvalPolicy: permissions.approvalPolicy,
+        approvalsReviewer: 'user',
+        sandbox: permissions.sandbox,
+        developerInstructions: engineInstructions(input.executionModes, input.locale),
+        model: input.model,
+      }
+      let threadId: Nullable<string> = null
+      if (input.resume) {
+        try {
+          threadId = readThreadId(
+            await this.prepare(run, () =>
+              client.request('thread/resume', { threadId: input.resume, ...settings })
+            )
+          )
+        } catch (error) {
+          signal.throwIfAborted()
+          if (AppError.from(error).code !== 'PROTOCOL') throw error
+          log.info('Codex 接不上上一轮的 thread，另开一条', { error: AppError.getMessage(error) })
+        }
+        if (!threadId) await this.prepare(run, () => input.sessionLost())
+      }
+      threadId ??= readThreadId(
+        await this.prepare(run, () => client.request('thread/start', { ...settings, ephemeral: false }))
+      )
+      if (!threadId) throw new AppError('PROTOCOL', workbenchMainText('engines.codexNoThread'))
+      if (this.runs.has(threadId))
+        throw new AppError('VALIDATION', workbenchMainText('engines.conversationBusy'))
+      const activeThreadId = threadId
+      run.threadId = activeThreadId
+      this.runs.set(activeThreadId, run)
+      await this.prepare(run, () => input.sessionStarted(activeThreadId))
+      await this.prepare(run, () => this.applyGoal(client, activeThreadId, input))
+      signal.throwIfAborted()
       const effort = codexEffort(
         input.reasoningLevel,
         input.model ? this.efforts.get(input.model) : undefined
       )
-      const turn = await client.request('turn/start', {
+      if (run.settled) return await outcome
+      run.preparing.clear()
+      run.turnRequested = true
+      const starting = client.request('turn/start', {
         threadId,
         input: userInput(input.text, input.images),
         cwd: ref.projectRoot,
@@ -208,73 +227,185 @@ export class CodexEngine implements WorkbenchAgentEngine {
         model: input.model,
         effort,
       })
-      const turnId =
-        isPlainObject(turn) && isPlainObject(turn.turn) && isNonBlankString(turn.turn.id)
-          ? turn.turn.id
-          : null
-      run.turnId ??= turnId
-      input.accepted()
-      // 回合开出来之前就按了停止：现在才有回合可打断。
-      if (signal.aborted && run.turnId)
-        void client
-          .request('turn/interrupt', { threadId, turnId: run.turnId })
-          .catch(() => undefined)
+      // 回执仍归这个 owner；真实 started/completed 不必等 turn/start 的响应。
+      void starting.then(
+        (turn) => {
+          if (isPlainObject(turn) && isPlainObject(turn.turn) && isNonBlankString(turn.turn.id))
+            this.started(run, turn.turn.id)
+        },
+        (error: unknown) => {
+          if (run.settled) return
+          if (!run.turnId && AppError.from(error).code === 'PROTOCOL') run.settle({ error })
+          else run.lastError = AppError.getMessage(error)
+        }
+      )
       return await outcome
     } catch (error) {
-      run.settle({ error })
-      if (signal.aborted) return { status: 'aborted' }
-      throw error
+      // 撤销的是后续准入；已发的准备请求与持久化仍须由原 owner 收完。
+      if (!run.turnRequested) {
+        const connection = run.connection
+        const results = await Promise.allSettled([...run.preparing])
+        const expectedCancel = (reason: unknown): boolean => signal.aborted &&
+          (reason === signal.reason || reason === connection?.stopReason)
+        const failures = new Set<unknown>(expectedCancel(error) ? [] : [error])
+        for (const result of results)
+          if (result.status === 'rejected' && !expectedCancel(result.reason)) failures.add(result.reason)
+        if (connection?.closing) {
+          try { await connection.closing } catch (closeError) { failures.add(closeError) }
+          await connection.client?.exited
+        } else if (connection?.client && (
+          results.some((result) => result.status === 'rejected' && result.reason === connection.client?.failure) ||
+          connection.client.failure
+        )) {
+          await connection.client.exited
+        }
+        const errors = [...failures]
+        if (errors.length)
+          run.settle({ error: errors.length === 1 ? errors[0] : new AggregateError(errors, errors.map((failure) => AppError.getMessage(failure)).join('\n')) })
+        else run.settle({ status: 'aborted' })
+      }
+      return await outcome
     } finally {
       signal.removeEventListener('abort', stop)
-      this.runs.delete(threadId)
       this.scheduleIdleClose()
     }
   }
 
-  public async close(): Promise<void> {
+  public close(): Promise<void> {
     clearTimeout(this.idleTimer)
     this.idleTimer = undefined
-    const client = this.client
-    this.client = undefined
-    if (!client) return
-    try {
-      ;(await client).close()
-    } catch {
-      // 没起来的进程不用停。
-    }
+    this.closing ??= this.closeConnection(
+      this.connection,
+      new AppError('CANCELLED', workbenchMainText('engines.cancelled'))
+    )
+    return this.closing
   }
 
   /** 常驻的 app-server：第一次用时起，闲下来或退出了下次再起。 */
-  private connect(): Promise<CodexAppServerClient> {
+  private connect(run: Nullable<CodexActiveRun>): Promise<CodexAppServerClient> {
+    run?.input.signal.throwIfAborted()
     clearTimeout(this.idleTimer)
     this.idleTimer = undefined
-    if (this.client) return this.client
-    const starting = (async () => {
-      const command = await resolveEngineCommand(this.environment, 'codex', this.label)
-      return CodexAppServerClient.start(command, this.clientVersion, {
-        notification: (method, params) => this.notification(method, params),
-        request: (request) => this.request(request),
-        closed: (error) => {
-          if (this.client === starting) this.client = undefined
-          for (const run of [...this.runs.values()]) run.settle({ error })
-        },
-      })
-    })()
-    this.client = starting
-    starting.catch(() => {
-      if (this.client === starting) this.client = undefined
+    if (this.closing)
+      return Promise.reject(new AppError('CLOSED', workbenchMainText('engines.codexClosed')))
+    if (this.connection?.closing) return this.connection.closing.then(() => this.connect(run))
+    if (this.connection) {
+      if (run) {
+        run.connection = this.connection
+        run.preparing.add(this.connection.ready)
+      }
+      return this.connection.ready
+    }
+    const connection: CodexConnection = {
+      ready: Promise.resolve().then(async () => {
+        const command = await resolveEngineCommand(this.environment, 'codex', this.label)
+        if (this.connection !== connection || this.closing)
+          throw connection.stopReason ?? new AppError('CLOSED', workbenchMainText('engines.codexClosed'))
+        const client = CodexAppServerClient.start(command, {
+          notification: (method, params) => {
+            if (this.connection === connection) this.notification(method, params)
+          },
+          request: (request) => {
+            if (this.connection !== connection)
+              return Promise.reject(new AppError('CLOSED', workbenchMainText('engines.codexClosed')))
+            return this.request(request)
+          },
+          closed: (error) => {
+            if (this.connection === connection) this.connection = undefined
+            for (const run of this.owners) {
+              if (run.connection !== connection || !run.turnRequested) continue
+              void (async () => {
+                let failure: unknown = connection.client?.failure ?? error
+                if (connection.closing) {
+                  try { await connection.closing } catch (closeError) { failure = closeError }
+                }
+                if (run.input.signal.aborted && failure === connection.stopReason)
+                  run.settle({ status: 'aborted' })
+                else run.settle({ error: failure })
+              })()
+            }
+          },
+        })
+        connection.client = client
+        await client.initialize(this.clientVersion)
+        return client
+      }),
+    }
+    this.connection = connection
+    if (run) {
+      run.connection = connection
+      run.preparing.add(connection.ready)
+    }
+    void connection.ready.catch(() => {
+      if (this.connection === connection && !connection.client) this.connection = undefined
     })
-    return starting
+    return connection.ready
+  }
+
+  private closeConnection(connection: CodexConnection | undefined, reason: AppError): Promise<void> {
+    if (!connection) return Promise.resolve()
+    connection.stopReason ??= reason
+    if (!connection.client) {
+      if (this.connection === connection) this.connection = undefined
+      return Promise.resolve()
+    }
+    connection.closing ??= connection.client.close(connection.stopReason)
+    return connection.closing
+  }
+
+  private async prepare<T>(run: CodexActiveRun, action: () => Promise<T>): Promise<T> {
+    const { signal } = run.input
+    signal.throwIfAborted()
+    if (run.settled) throw new AppError('CLOSED', workbenchMainText('engines.codexClosed'))
+    const pending = action()
+    run.preparing.add(pending)
+    let abort!: () => void
+    try {
+      const value = await Promise.race([
+        new Promise<never>((_, reject) => {
+          abort = () => reject(signal.reason)
+          signal.addEventListener('abort', abort, { once: true })
+          if (signal.aborted) abort()
+        }),
+        pending,
+      ])
+      signal.throwIfAborted()
+      if (run.settled) throw new AppError('CLOSED', workbenchMainText('engines.codexClosed'))
+      return value
+    } finally {
+      signal.removeEventListener('abort', abort)
+    }
+  }
+
+  private started(run: CodexActiveRun, turnId: string): void {
+    if (run.settled || !run.turnRequested || (run.turnId && run.turnId !== turnId)) return
+    if (!run.turnId) {
+      run.turnId = turnId
+      run.input.accepted()
+    }
+    if (run.input.signal.aborted) this.interrupt(run)
+  }
+
+  private interrupt(run: CodexActiveRun): void {
+    const client = run.connection?.client
+    if (run.settled || !client || !run.threadId || !run.turnId || run.interrupt) return
+    run.interrupt = client.request('turn/interrupt', { threadId: run.threadId, turnId: run.turnId })
+    void run.interrupt.catch((error: unknown) => {
+      log.warn('Codex 回合仍在等待停止确认', { error: AppError.getMessage(error) })
+    })
   }
 
   /** 没有回合在跑时，过一阵停下 app-server：不用 Codex 的人不必一直开着它。 */
   private scheduleIdleClose(): void {
     clearTimeout(this.idleTimer)
     this.idleTimer = undefined
-    if (this.runs.size > 0 || !this.client) return
+    if (this.owners.size > 0 || !this.connection || this.closing) return
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined
-      if (this.runs.size === 0) void this.close()
+      if (this.owners.size === 0)
+        void this.closeConnection(this.connection, new AppError('CLOSED', workbenchMainText('engines.codexClosed'))).catch((error: unknown) =>
+          log.warn('关闭空闲 Codex 失败', { error: AppError.getMessage(error) })
+        )
     }, IdleCloseMs)
     this.idleTimer.unref()
   }
@@ -332,14 +463,15 @@ export class CodexEngine implements WorkbenchAgentEngine {
     }
     const run = threadId ? this.runs.get(threadId) : undefined
     if (!run) return
+    if (isString(params.turnId) && run.turnId && params.turnId !== run.turnId) return
     switch (method) {
       case 'turn/started':
         if (isPlainObject(params.turn) && isNonBlankString(params.turn.id))
-          run.turnId ??= params.turn.id
+          this.started(run, params.turn.id)
         return
       case 'turn/completed': {
         const turn = isPlainObject(params.turn) ? params.turn : {}
-        if (run.turnId && turn.id !== run.turnId) return
+        if (!run.turnId || turn.id !== run.turnId) return
         if (turn.status === 'failed') {
           const error =
             isPlainObject(turn.error) && isNonBlankString(turn.error.message)
@@ -382,7 +514,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
         return { action: 'cancel', content: null, _meta: null }
       return { decision: 'decline' }
     }
-    if (!run) {
+    if (!run || (isString(params.turnId) && run.turnId && params.turnId !== run.turnId)) {
       if (isApproval(request.method) || request.method === 'item/tool/requestUserInput')
         return refuse()
       throw new AppError(

@@ -71,6 +71,8 @@ export class ClaudeCodeTransport {
   private stderrTail = ''
   private finished = false
   private writable = true
+  private closing?: Promise<void>
+  private closeReason?: unknown
 
   private constructor(
     private readonly child: ChildProcessWithoutNullStreams,
@@ -98,7 +100,9 @@ export class ClaudeCodeTransport {
         const stderr = [spawnError?.message, this.stderrTail.trim()]
           .filter(isNonBlankString)
           .join('\n')
-        const reason = new AppError('UNAVAILABLE', describeExit(code, signal, stderr))
+        const reason = !stderr && this.closeReason !== undefined
+          ? this.closeReason
+          : new AppError('UNAVAILABLE', describeExit(code, signal, stderr))
         for (const request of this.pending.values()) request.reject(reason)
         this.pending.clear()
         for (const controller of this.inbound.values()) controller.abort(reason)
@@ -157,9 +161,11 @@ export class ClaudeCodeTransport {
   }
 
   /** 停下进程连同它起的命令。 */
-  public close(): void {
+  public close(reason?: unknown): Promise<void> {
     this.writable = false
-    terminateEngineProcess(this.child)
+    this.closeReason ??= reason
+    this.closing ??= terminateEngineProcess(this.child)
+    return this.closing
   }
 
   /** 逐条读出消息，进程退出且读完为止。 */

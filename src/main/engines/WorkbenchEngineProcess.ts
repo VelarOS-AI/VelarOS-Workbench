@@ -1,4 +1,9 @@
-import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
+import {
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams,
+  execFile,
+  spawn,
+} from 'node:child_process'
 import { access, constants } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { delimiter, extname, isAbsolute, join } from 'node:path'
@@ -15,6 +20,43 @@ import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import { CommandHelper } from '../workspace/CommandHelper'
 
 const log = Log.tag('WorkbenchEngineProcess')
+
+interface EngineProcessLifetime {
+  closed: boolean
+  readonly completed: Promise<void>
+  stopping?: Promise<void>
+}
+
+const processLifetimes = new WeakMap<ChildProcess, EngineProcessLifetime>()
+
+/** 终止尝试失败不等于物理进程已经关闭；原 close 票仍由宿主持有。 */
+export class EngineProcessCloseError extends AggregateError {
+  public constructor(errors: readonly unknown[]) {
+    super(errors, errors.map((error) => AppError.getMessage(error)).join('\n'))
+  }
+}
+
+function observeEngineProcess(child: ChildProcess): EngineProcessLifetime {
+  const existing = processLifetimes.get(child)
+  if (existing) return existing
+  let finish!: () => void
+  const lifetime: EngineProcessLifetime = {
+    closed: false,
+    completed: new Promise<void>((resolve) => {
+      finish = resolve
+    }),
+  }
+  processLifetimes.set(child, lifetime)
+  child.once('close', () => {
+    lifetime.closed = true
+    finish()
+  })
+  return lifetime
+}
+
+export function waitForEngineProcessClose(child: ChildProcess): Promise<void> {
+  return observeEngineProcess(child).completed
+}
 
 /** 进程是怎么结束的（「被信号 SIGTERM 结束」「退出码 1」），拼进「已退出」的提示里。 */
 export function describeEngineExitStatus(
@@ -106,7 +148,7 @@ export function spawnEngineProcess(
   cwd: string
 ): ChildProcessWithoutNullStreams {
   const spec = engineCommandSpec(command, args)
-  return spawn(spec.file, spec.args, {
+  const child = spawn(spec.file, spec.args, {
     cwd,
     env: engineEnvironment(command.env),
     detached: new CommandHelper().shouldDetachForegroundProcess(),
@@ -114,6 +156,8 @@ export function spawnEngineProcess(
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   })
+  observeEngineProcess(child)
+  return child
 }
 
 /** npm 的 CMD 包装需要保留路径与各参数的边界，不能让 spawn 的 shell 选项直接拼接。 */
@@ -162,7 +206,7 @@ export function runEngineCommand(
 ): Promise<{ code: Nullable<number>; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const spec = engineCommandSpec(command, args)
-    execFile(
+    const child = execFile(
       spec.file,
       spec.args,
       {
@@ -175,17 +219,39 @@ export function runEngineCommand(
         windowsVerbatimArguments: spec.windowsVerbatimArguments,
       },
       (error, stdout, stderr) => {
-        if (error && typeof (error as { code?: unknown }).code !== 'number') {
-          reject(error)
-          return
-        }
-        resolve({
-          code: error ? ((error as { code?: number }).code ?? null) : 0,
-          stdout: String(stdout),
-          stderr: String(stderr),
+        void observeEngineProcess(child).completed.then(async () => {
+          try {
+            await observeEngineProcess(child).stopping
+          } catch (stopError) {
+            reject(stopError)
+            return
+          }
+          if (error && typeof (error as { code?: unknown }).code !== 'number') {
+            reject(error)
+            return
+          }
+          resolve({
+            code: error ? ((error as { code?: number }).code ?? null) : 0,
+            stdout: String(stdout),
+            stderr: String(stderr),
+          })
         })
       }
     )
+    const lifetime = observeEngineProcess(child)
+    const stop = (): void => {
+      void terminateEngineProcess(child).catch((error: unknown) => {
+        log.warn('终止引擎探测进程失败', { error: AppError.getMessage(error) })
+      })
+    }
+    const timer = setTimeout(stop, options.timeoutMs)
+    timer.unref()
+    if (options.signal?.aborted) stop()
+    else options.signal?.addEventListener('abort', stop, { once: true })
+    void lifetime.completed.then(() => {
+      clearTimeout(timer)
+      options.signal?.removeEventListener('abort', stop)
+    })
   })
 }
 
@@ -218,14 +284,41 @@ export async function withTimeout<T>(
 }
 
 /** 停下引擎进程连同它起的命令：先礼后兵，给它一秒收尾。 */
-export function terminateEngineProcess(child: ChildProcessWithoutNullStreams): void {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  const helper = new CommandHelper()
-  helper.terminateForegroundProcess(child.pid, 'SIGTERM')
-  const timer = setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null)
-      helper.terminateForegroundProcess(child.pid, 'SIGKILL')
-  }, helper.getForceKillDelayMs())
-  timer.unref()
-  child.once('exit', () => clearTimeout(timer))
+export function terminateEngineProcess(child: ChildProcess): Promise<void> {
+  const lifetime = observeEngineProcess(child)
+  if (lifetime.closed) return lifetime.stopping ?? lifetime.completed
+  lifetime.stopping ??= (async () => {
+    const helper = new CommandHelper()
+    const errors: unknown[] = []
+    let escalated!: () => void
+    const escalation = new Promise<void>((resolve) => {
+      escalated = resolve
+    })
+    const timer = setTimeout(() => {
+      try {
+        if (!lifetime.closed && child.exitCode === null && child.signalCode === null)
+          helper.terminateForegroundProcess(child.pid, 'SIGKILL')
+      } catch (error) {
+        errors.push(error)
+      } finally {
+        escalated()
+      }
+    }, helper.getForceKillDelayMs())
+    timer.unref()
+    // exit 之后仍等 close，但不再按可能已复用的 pid 发信号。
+    try {
+      try {
+        if (child.exitCode === null && child.signalCode === null)
+          helper.terminateForegroundProcess(child.pid, 'SIGTERM')
+      } catch (error) {
+        errors.push(error)
+      }
+      await Promise.race([lifetime.completed, escalation])
+      if (errors.length) throw new EngineProcessCloseError(errors)
+      await lifetime.completed
+    } finally {
+      clearTimeout(timer)
+    }
+  })()
+  return lifetime.stopping
 }
