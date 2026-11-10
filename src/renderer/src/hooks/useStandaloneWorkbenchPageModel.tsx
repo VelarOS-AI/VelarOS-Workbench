@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -75,6 +76,7 @@ import {
   type WorkbenchReadFileResult,
 } from '@shared/contracts/workbench'
 import type { WorkbenchWatchStatus } from '@shared/workbenchWatch'
+import type { WorkbenchWindowCloseRequest } from '@shared/workbenchWindowClose'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useWorkbenchAgentBrowserSite } from '../runtime/workbenchAgentBrowserSite'
@@ -101,6 +103,10 @@ const WORKBENCH_NATIVE_AI_RULES_PATH = '.velar/rules.md'
 const log = Log.tag('workbench-page')
 
 export type PendingWorkbenchBrowserElementSelection = WorkbenchBrowserElementSelectionDelivery
+
+interface WorkbenchPageCloseOwner {
+  pendingRequest: Nullable<WorkbenchWindowCloseRequest>
+}
 
 /** 一次页面导航：去向（决定编辑区落在哪一组、左侧切到哪个面板）加上要放进编辑区的东西。 */
 type WorkbenchNavigationRequest =
@@ -589,26 +595,41 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
   // 关窗与退出前的确认：这个窗口有没有未保存的改动随时报给主进程（macOS 顺带标在关闭按钮上）；
   // 主进程拦下关闭时交回这里，先存能存的，存不下的再问用户，答复送回去由主进程放行或作罢。
   const { hasUnsavedOpenTabs, confirmWindowClose } = workbench
-  useEffect(() => {
-    window.velarosWorkbenchWindowClose.setUnsavedChanges(hasUnsavedOpenTabs)
-  }, [hasUnsavedOpenTabs])
-
-  useEffect(() => {
+  const windowCloseOwnerRef = useRef<Nullable<WorkbenchPageCloseOwner>>(null)
+  useLayoutEffect(() => {
+    const owner: WorkbenchPageCloseOwner = { pendingRequest: null }
+    windowCloseOwnerRef.current = owner
     const unsubscribe = window.velarosWorkbenchWindowClose.onCloseRequested((request) => {
-      void confirmWindowClose(request.reason)
-        .catch((error: unknown) => {
-          log.error('关窗前确认未保存改动失败', { error })
-          return false
-        })
-        .then((proceed) => {
-          window.velarosWorkbenchWindowClose.resolveCloseRequest({ id: request.id, proceed })
-        })
+      if (windowCloseOwnerRef.current !== owner) return
+      owner.pendingRequest = request
+      const ownsRequest = (): boolean =>
+        windowCloseOwnerRef.current === owner && owner.pendingRequest === request
+      const resolveRequest = (proceed: boolean): void => {
+        if (!ownsRequest()) return
+        owner.pendingRequest = null
+        window.velarosWorkbenchWindowClose.resolveCloseRequest({ id: request.id, proceed })
+      }
+      void confirmWindowClose(request.reason).then(resolveRequest, (error: unknown) => {
+        if (!ownsRequest()) return
+        log.error('关窗前确认未保存改动失败', { error })
+        resolveRequest(false)
+      })
     })
     return () => {
+      if (windowCloseOwnerRef.current === owner) windowCloseOwnerRef.current = null
       unsubscribe()
+      const request = owner.pendingRequest
+      owner.pendingRequest = null
+      if (request)
+        window.velarosWorkbenchWindowClose.resolveCloseRequest({ id: request.id, proceed: false })
       window.velarosWorkbenchWindowClose.setUnsavedChanges(false)
     }
-  }, [confirmWindowClose])
+  }, [confirmWindowClose, project.id, project.rootPath])
+
+  // 等其他窗口确认退出时，仍为 dirty 的新标签快照也会撤销本窗口的旧同意。
+  useLayoutEffect(() => {
+    window.velarosWorkbenchWindowClose.setUnsavedChanges(hasUnsavedOpenTabs)
+  }, [confirmWindowClose, hasUnsavedOpenTabs, project.id, project.rootPath, workbench.openTabs])
 
   useEffect(
     () =>

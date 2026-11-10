@@ -91,6 +91,7 @@ export class WorkbenchWindowCloseGuard {
     if (!record) return
 
     record.unsaved = unsaved
+    if (unsaved && !this.shuttingDown) record.approved = false
     if (this.platform === 'darwin' && !record.window.isDestroyed())
       record.window.setDocumentEdited(unsaved)
   }

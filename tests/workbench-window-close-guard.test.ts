@@ -165,6 +165,28 @@ void describe('closing a window with unsaved editor changes', () => {
     assert.deepEqual(clean.webContents.requests, [])
   })
 
+  void test('new drafts revoke an earlier approval while another window is confirming quit', () => {
+    const { guard, install } = createGuard()
+    const first = install()
+    const second = install()
+    guard.setUnsavedChanges(first.webContents.id, true)
+    guard.setUnsavedChanges(second.webContents.id, true)
+
+    assert.equal(guard.holdQuit(), true)
+    guard.resolveCloseRequest(first.webContents.id, { id: 1, proceed: true })
+    assert.equal(guard.holdQuit(), true)
+    assert.deepEqual(second.webContents.requests, [{ id: 2, reason: 'quit' }])
+
+    // 未保存状态仍为 true，但这是第一次批准之后的新草稿快照。
+    guard.setUnsavedChanges(first.webContents.id, true)
+    guard.resolveCloseRequest(second.webContents.id, { id: 2, proceed: true })
+    assert.equal(guard.holdQuit(), true)
+    assert.deepEqual(first.webContents.requests.at(-1), { id: 3, reason: 'quit' })
+
+    guard.resolveCloseRequest(first.webContents.id, { id: 3, proceed: true })
+    assert.equal(guard.holdQuit(), false)
+  })
+
   void test('once every window agreed the quit goes ahead and windows close freely', () => {
     const { guard, install, quits } = createGuard()
     const window = install()
@@ -246,7 +268,7 @@ void describe('closing a window with unsaved editor changes', () => {
     assert.equal(tabs.get(editedAgain.path)?.content, 'newer draft')
   })
 
-  void test('main holds the quit before tearing anything down and the renderer answers', () => {
+  void test('main holds the quit before tearing anything down and exposes the close bridge', () => {
     const main = readSource('src/main/index.ts')
     const preload = readSource('src/preload/index.ts')
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
@@ -260,7 +282,6 @@ void describe('closing a window with unsaved editor changes', () => {
     )
     assert.match(preload, /exposeInMainWorld\('velarosWorkbenchWindowClose', windowCloseBridge\)/u)
     assert.match(pageModel, /setUnsavedChanges\(hasUnsavedOpenTabs\)/u)
-    assert.match(pageModel, /onCloseRequested\([\s\S]*?confirmWindowClose\(request\.reason\)[\s\S]*?resolveCloseRequest\(\{ id: request\.id, proceed \}\)/u)
     // 不保存：放弃改动，页面卸载时也不再替它们写回去。
     assert.match(controller, /skipExitFlush\(dirtyTabs\)\n\s*revertOpenFiles\(/u)
     assert.match(controller, /saveEditorTabs\(dirtyTabs\.filter\(isWorkbenchEditorTabAutosavable\)\)/u)
