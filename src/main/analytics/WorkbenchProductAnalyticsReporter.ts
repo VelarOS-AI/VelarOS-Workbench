@@ -168,7 +168,13 @@ export class WorkbenchProductAnalyticsReporter {
     this.#onNoticeRequired = input.onNoticeRequired
   }
 
-  public async recordConsentDecision(decision: 'allowed' | 'declined'): Promise<void> {
+  public async recordConsentDecision(
+    decision: 'allowed' | 'declined',
+    signal?: AbortSignal
+  ): Promise<void> {
+    const timeout = AbortSignal.timeout(15_000)
+    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+    requestSignal.throwIfAborted()
     const response = await this.#fetch(`${VelarOSCloudBaseUrl}/v1/analytics/consent`, {
       method: 'POST',
       headers: {
@@ -183,8 +189,9 @@ export class WorkbenchProductAnalyticsReporter {
         noticeVersion: 1,
         occurredAt: new Date(this.#now()).toISOString(),
       }),
-      signal: AbortSignal.timeout(15_000),
+      signal: requestSignal,
     })
+    requestSignal.throwIfAborted()
     if (!response.ok) throw new Error(`Consent analytics returned HTTP ${response.status}.`)
   }
 

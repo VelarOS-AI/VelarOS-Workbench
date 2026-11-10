@@ -2,15 +2,33 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test'
 
 import { WorkbenchProductAnalyticsPreferencesStore } from '../src/main/analytics/WorkbenchProductAnalyticsPreferencesStore'
 import { WorkbenchProductAnalyticsReporter } from '../src/main/analytics/WorkbenchProductAnalyticsReporter'
 import { WorkbenchProductAnalyticsChannels } from '../src/shared/workbenchProductAnalytics'
 
 const temporaryRoots: string[] = []
+const ipcHandlers = new Map<string, (...args: unknown[]) => unknown>()
+const broadcasts: unknown[] = []
+
+mock.module('electron', () => ({
+  ipcMain: {
+    handle: (channel: string, handler: (...args: unknown[]) => unknown) => ipcHandlers.set(channel, handler),
+    removeHandler: (channel: string) => ipcHandlers.delete(channel),
+  },
+  BrowserWindow: {
+    getAllWindows: () => [{
+      isDestroyed: () => false,
+      webContents: { send: (_channel: string, state: unknown) => broadcasts.push(state) },
+    }],
+  },
+  shell: { openExternal: async () => undefined },
+}))
 
 afterEach(async () => {
+  ipcHandlers.clear()
+  broadcasts.length = 0
   await Promise.all(
     temporaryRoots.splice(0).map((path) => rm(path, { recursive: true, force: true }))
   )
@@ -46,16 +64,6 @@ describe('WorkbenchProductAnalyticsReporter', () => {
     const directory = join(dataRoot, 'storage')
     const path = join(directory, 'product-analytics-preferences.json')
     await mkdir(directory)
-    const handlers = new Map<string, (...args: unknown[]) => unknown>()
-    let broadcasts = 0
-    mock.module('electron', () => ({
-      ipcMain: {
-        handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler),
-        removeHandler: (channel: string) => handlers.delete(channel),
-      },
-      BrowserWindow: { getAllWindows: () => { broadcasts += 1; return [] } },
-      shell: { openExternal: async () => undefined },
-    }))
     const { installWorkbenchProductAnalyticsRuntime } = await import('../src/main/analytics/WorkbenchProductAnalyticsRuntime')
     let requests = 0
     let now = 0
@@ -68,7 +76,7 @@ describe('WorkbenchProductAnalyticsReporter', () => {
     })
     expect(reporter).toBeDefined()
     const invoke = (channel: string, value?: unknown): Promise<unknown> => Promise.resolve().then(() => {
-      const handler = handlers.get(channel)
+      const handler = ipcHandlers.get(channel)
       expect(handler).toBeDefined()
       return handler!({}, value)
     })
@@ -94,9 +102,9 @@ describe('WorkbenchProductAnalyticsReporter', () => {
         now += 60_000
         await reporter!.flush(true)
         expect(requests).toBe(0)
-        expect(broadcasts).toBe(0)
+        expect(broadcasts).toHaveLength(0)
       } finally {
-        dispose()
+        await dispose()
       }
     }
     try {
@@ -118,6 +126,70 @@ describe('WorkbenchProductAnalyticsReporter', () => {
       expect(await readFile(join(path, 'keep.txt'), 'utf8')).toBe('keep this directory')
     } finally {
       await reporter!.dispose()
+    }
+  })
+
+  test('runtime close waits for a late consent response without writing or broadcasting it', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-analytics-closing-'))
+    temporaryRoots.push(dataRoot)
+    const preferences = new WorkbenchProductAnalyticsPreferencesStore(dataRoot)
+    preferences.resolveNotice('allowed')
+    const path = join(dataRoot, 'storage', 'product-analytics-preferences.json')
+    const previousBytes = await readFile(path)
+    const response = Promise.withResolvers<Response>()
+    const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
+    let now = 0
+    const reporter = await WorkbenchProductAnalyticsReporter.create({
+      dataRoot,
+      appVersion: '1.2.3',
+      isActive: () => true,
+      now: () => now,
+      fetchImpl: (async (input, init) => {
+        requests.push({ input, init })
+        // Deliberately ignore abort: close must wait for the actual response and
+        // still reject its late success before persisting the consent receipt.
+        return response.promise
+      }) as typeof fetch,
+    })
+    expect(reporter).toBeDefined()
+    const disposeReporter = spyOn(reporter!, 'dispose')
+    const { installWorkbenchProductAnalyticsRuntime } = await import('../src/main/analytics/WorkbenchProductAnalyticsRuntime')
+    const stopRuntime = installWorkbenchProductAnalyticsRuntime({
+      dataRootDir: dataRoot,
+      privacyDetailsUrl: 'https://privacy.test/details',
+      reporter,
+    })
+    let cleanup: Promise<void> | undefined
+    try {
+      reporter!.start()
+      expect(requests).toHaveLength(1)
+      expect(String(requests[0]?.input)).toEndWith('/v1/analytics/consent')
+      const signal = requests[0]?.init?.signal
+      expect(signal?.aborted).toBe(false)
+      const previousBroadcasts = broadcasts.length
+      now += 60_000
+
+      const runtimeClosing = stopRuntime()
+      cleanup = runtimeClosing.finally(() => reporter!.dispose())
+      expect(signal?.aborted).toBe(true)
+      expect(ipcHandlers.size).toBe(0)
+      await Promise.resolve()
+      expect(disposeReporter).not.toHaveBeenCalled()
+
+      response.resolve(new Response(null, { status: 202 }))
+      await cleanup
+      expect(disposeReporter).toHaveBeenCalledTimes(1)
+      expect(await readFile(path)).toEqual(previousBytes)
+      expect(new WorkbenchProductAnalyticsPreferencesStore(dataRoot).value.consentReceiptRecorded).toBe(false)
+      expect(broadcasts).toHaveLength(previousBroadcasts)
+      expect(requests).toHaveLength(1)
+    } finally {
+      response.resolve(new Response(null, { status: 202 }))
+      try {
+        await (cleanup ?? stopRuntime().finally(() => reporter!.dispose()))
+      } finally {
+        disposeReporter.mockRestore()
+      }
     }
   })
 

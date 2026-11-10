@@ -15,7 +15,7 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
   readonly dataRootDir: string
   readonly privacyDetailsUrl: string
   readonly reporter?: WorkbenchProductAnalyticsReporter
-}): () => void {
+}): () => Promise<void> {
   const startup = Result.wrapSync(() =>
     new WorkbenchProductAnalyticsPreferencesStore(input.dataRootDir)
   )
@@ -37,11 +37,13 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
       WorkbenchProductAnalyticsChannels.resolveNotice,
     ])
       ipcMain.handle(channel, () => Result.unwrap(startup))
-    return removeHandlers
+    return () => Promise.resolve(removeHandlers())
   }
   const preferences = startup.data
+  const lifetime = new AbortController()
   let revision = 0
   let consentReceiptInFlight: Promise<void> | undefined
+  let closing: Promise<void> | undefined
 
   const getState = (): WorkbenchProductAnalyticsState => ({
     revision,
@@ -56,6 +58,7 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
     }
   }
   const requireNotice = (): void => {
+    if (lifetime.signal.aborted) return
     const previous = preferences.value
     preferences.requireNotice()
     if (previous === preferences.value) return
@@ -76,15 +79,16 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
     })
   }
   const synchronizeConsentReceipt = (): Promise<void> => {
+    if (lifetime.signal.aborted) return Promise.resolve()
     const value = preferences.value
     if (!input.reporter || value.consentDecision === 'unresolved' || value.consentReceiptRecorded)
       return Promise.resolve()
     if (consentReceiptInFlight) return consentReceiptInFlight
     const decision = value.consentDecision
     const operation = input.reporter
-      .recordConsentDecision(decision)
+      .recordConsentDecision(decision, lifetime.signal)
       .then(async () => {
-        if (preferences.value.consentDecision !== decision) return
+        if (lifetime.signal.aborted || preferences.value.consentDecision !== decision) return
         preferences.markConsentReceiptRecorded()
         revision += 1
         applyReporterState()
@@ -95,6 +99,7 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
       .finally(() => {
         if (consentReceiptInFlight !== operation) return
         consentReceiptInFlight = undefined
+        if (lifetime.signal.aborted) return
         const current = preferences.value
         if (
           current.consentDecision !== 'unresolved' &&
@@ -137,7 +142,14 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
     return getState()
   })
   return () => {
-    clearInterval(consentReceiptRetryTimer)
-    removeHandlers()
+    if (!closing) {
+      lifetime.abort()
+      clearInterval(consentReceiptRetryTimer)
+      removeHandlers()
+      // Abort is a stop request. Even an uncooperative transport must actually
+      // settle before the runtime's close receipt allows its reporter to close.
+      closing = consentReceiptInFlight ?? Promise.resolve()
+    }
+    return closing
   }
 }

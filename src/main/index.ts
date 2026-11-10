@@ -510,7 +510,7 @@ if (hasSingleInstanceLock)
       disposeBrowserIpc()
       browserService.close()
       disposeWorkspaceIpc()
-      disposeProductAnalyticsRuntime()
+      const analyticsClosing = disposeProductAnalyticsRuntime()
       disposeDebugIpc()
       void Promise.allSettled([
         fsIpc.cancelCommands(),
@@ -520,7 +520,7 @@ if (hasSingleInstanceLock)
         providers.workspace.dispose(),
         // 先停对话（运行时关闭时释放脚本子进程与存储），再停 Agent 起的后台任务。
         conversationRuntime.close().finally(() => shellHosts.dispose()),
-        productAnalytics?.dispose(),
+        analyticsClosing.finally(() => productAnalytics?.dispose()),
         fsIpc.cancelContentSearches(),
       ])
         .then((results) => {
