@@ -109,8 +109,6 @@ export type WorkbenchEditorZoomAction = 'increase' | 'decrease' | 'reset'
 export const MAX_LOCAL_HISTORY_THROTTLE_SECONDS = 3600
 
 export const WORKBENCH_PREFERENCES_CHANGED_EVENT = 'velaros:workbench-preferences-changed'
-export const WORKBENCH_PROJECT_GIT_SETTINGS_CHANGED_EVENT =
-  'velaros:workbench-project-git-settings-changed'
 export const WORKBENCH_PROJECT_RUN_SETTINGS_CHANGED_EVENT =
   'velaros:workbench-project-run-settings-changed'
 
@@ -454,7 +452,7 @@ export function normalizeWorkbenchProjectGitSettings(
   settings: Partial<WorkbenchProjectGitSettings> | undefined
 ): WorkbenchProjectGitSettings {
   return {
-    gitSshKeyPath: settings?.gitSshKeyPath?.trim() ?? '',
+    gitSshKeyPath: isString(settings?.gitSshKeyPath) ? settings.gitSshKeyPath.trim() : '',
   }
 }
 
@@ -468,7 +466,6 @@ const workbenchProjectGitSettingsStore = createLocalStorageJsonStore<
   log,
   readErrorLevel: 'warn',
   readErrorMessage: '工作台项目 Git 设置读取失败',
-  writeErrorMessage: '工作台项目 Git 设置写入失败',
 })
 
 function readProjectGitSettingsStore(
@@ -484,32 +481,6 @@ export function readWorkbenchProjectGitSettings(
   if (!projectRoot) return DEFAULT_WORKBENCH_PROJECT_GIT_SETTINGS
 
   return normalizeWorkbenchProjectGitSettings(readProjectGitSettingsStore(storage)[projectRoot])
-}
-
-export function saveWorkbenchProjectGitSettings(
-  projectRoot: string,
-  settings: WorkbenchProjectGitSettings,
-  storage: StorageLike | undefined = undefined,
-  target: Window = window
-): void {
-  const normalized = normalizeWorkbenchProjectGitSettings(settings)
-  const store = readProjectGitSettingsStore(storage)
-
-  workbenchProjectGitSettingsStore.write(
-    {
-      ...store,
-      [projectRoot]: normalized,
-    },
-    storage
-  )
-  target.dispatchEvent(
-    new CustomEvent(WORKBENCH_PROJECT_GIT_SETTINGS_CHANGED_EVENT, {
-      detail: {
-        projectRoot,
-        settings: normalized,
-      },
-    })
-  )
 }
 
 export function normalizeWorkbenchProjectRunSettings(
