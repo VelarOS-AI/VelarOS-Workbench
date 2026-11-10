@@ -307,7 +307,7 @@ void describe('project content search: matches', () => {
           inEnglish
         )
       } finally {
-        session.close()
+        await session.close()
         setWorkbenchMainLocale('zh-CN')
       }
     })

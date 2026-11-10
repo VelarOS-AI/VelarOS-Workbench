@@ -11,6 +11,7 @@
 import { resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
 
+import { Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { type WorkbenchSearchContentBatch } from '@shared/contracts/workbench'
@@ -52,6 +53,7 @@ const WorkerHeapLimitMb = 512
 const DefaultStallTimeoutMs = 10_000
 /** 发出请求后，worker 起来并接下它最多等这么久。 */
 const StartTimeoutMs = 10_000
+const log = Log.tag('WorkbenchContentSearchWorkerSession')
 
 /** 构建产物里与主进程入口同目录的 `workbench-search-worker.js`（见 electron.vite.config.ts）。 */
 export function createDefaultWorkbenchContentSearchWorker(): WorkbenchContentSearchWorkerPort {
@@ -77,10 +79,17 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>
 }
 
+interface OwnedSearchWorker {
+  readonly worker: WorkbenchContentSearchWorkerPort
+  /** Node terminate 的回执表示物理退出；失败票保留，不能用业务结算提前建后继。 */
+  termination?: Promise<void>
+}
+
 export class WorkbenchContentSearchWorkerSession {
-  private worker: Nullable<WorkbenchContentSearchWorkerPort> = null
+  private worker: Nullable<OwnedSearchWorker> = null
   private pending: Nullable<PendingRequest> = null
   private nextRequestId = 1
+  private closing?: Promise<void>
 
   public constructor(
     private readonly createWorker: WorkbenchContentSearchWorkerFactory,
@@ -99,16 +108,16 @@ export class WorkbenchContentSearchWorkerSession {
     let abort: () => void = () => undefined
     const aborted = new Promise<typeof cancelled>((resolveAborted) => {
       abort = () => {
-        this.discard(new AppError('CANCELLED', workbenchMainText('search.cancelled')))
+        void this.discard(new AppError('CANCELLED', workbenchMainText('search.cancelled')))
         resolveAborted(cancelled)
       }
       signal?.addEventListener('abort', abort, { once: true })
     })
-    const searching = this.request<WorkbenchContentSearchTaskResult>(
-      { kind: 'search', task, stream: !!options.onBatch },
-      { onBatch: options.onBatch }
-    )
     try {
+      const searching = this.request<WorkbenchContentSearchTaskResult>(
+        { kind: 'search', task, stream: !!options.onBatch },
+        { onBatch: options.onBatch, signal }
+      )
       const result = await Promise.race([searching, aborted])
       return result === cancelled ? null : result
     } catch (error) {
@@ -130,19 +139,29 @@ export class WorkbenchContentSearchWorkerSession {
     )
   }
 
-  /** 会话结束：结束 worker（还在跑的请求按取消处理）。 */
-  public close(): void {
-    this.discard(new AppError('CANCELLED', workbenchMainText('search.ended')))
+  /** 会话结束：拒绝新请求，并等待同一物理 worker 的退出回执。 */
+  public close(): Promise<void> {
+    this.closing ??= this.discard(new AppError('CANCELLED', workbenchMainText('search.ended')))
+    return this.closing
   }
 
   private request<T>(
     message:
       | Omit<Extract<WorkbenchContentSearchWorkerRequest, { kind: 'search' }>, 'id' | 'locale'>
       | Omit<Extract<WorkbenchContentSearchWorkerRequest, { kind: 'replace' }>, 'id' | 'locale'>,
-    options: { onBatch?: (batch: WorkbenchSearchContentBatch) => void; currentPath?: string }
+    options: {
+      onBatch?: (batch: WorkbenchSearchContentBatch) => void
+      currentPath?: string
+      signal?: AbortSignal
+    }
   ): Promise<T> {
+    if (this.closing)
+      return Promise.reject(new AppError('CLOSED', workbenchMainText('search.ended')))
     if (this.pending)
       return Promise.reject(new AppError('INVARIANT', '搜索 worker 同一时间只处理一个请求。'))
+    options.signal?.throwIfAborted()
+    if (this.worker?.termination)
+      return this.worker.termination.then(() => this.request<T>(message, options))
 
     const worker = this.ensureWorker()
     const id = this.nextRequestId
@@ -156,28 +175,38 @@ export class WorkbenchContentSearchWorkerSession {
         currentPath: options.currentPath ?? null,
         timer: setTimeout(() => this.stall(), StartTimeoutMs),
       }
-      worker.postMessage({
-        ...message,
-        id,
-        locale: getWorkbenchMainLocale(),
-      } as WorkbenchContentSearchWorkerRequest)
+      try {
+        worker.postMessage({
+          ...message,
+          id,
+          locale: getWorkbenchMainLocale(),
+        } as WorkbenchContentSearchWorkerRequest)
+      } catch (error) {
+        void this.discard(AppError.from(error))
+      }
     })
   }
 
   private ensureWorker(): WorkbenchContentSearchWorkerPort {
-    if (this.worker) return this.worker
+    if (this.worker) return this.worker.worker
 
     const worker = this.createWorker()
-    this.worker = worker
+    const owned: OwnedSearchWorker = { worker }
+    this.worker = owned
     worker.on('message', (message) => {
-      if (this.worker === worker) this.receive(message as WorkbenchContentSearchWorkerResponse)
+      if (this.worker === owned && !owned.termination)
+        this.receive(message as WorkbenchContentSearchWorkerResponse)
     })
     worker.on('error', (error) => {
-      if (this.worker === worker) this.discard(toWorkerFailure(error))
+      if (this.worker === owned) void this.discard(toWorkerFailure(error))
     })
     worker.on('exit', () => {
-      if (this.worker === worker)
-        this.discard(new AppError('CLOSED', workbenchMainText('search.workerExited')))
+      if (this.worker !== owned) return
+      // exit 确认物理槽位可复用；已交出的 terminate/close 票仍保留各自原结果。
+      this.worker = null
+      const pending = this.pending
+      this.settle()
+      pending?.reject(new AppError('CLOSED', workbenchMainText('search.workerExited')))
     })
     return worker
   }
@@ -214,7 +243,7 @@ export class WorkbenchContentSearchWorkerSession {
   /** 久没有动静：多半卡在正则的回溯里，结束 worker。 */
   private stall(): void {
     const path = this.pending?.currentPath
-    this.discard(
+    void this.discard(
       new AppError(
         'TIMEOUT',
         path
@@ -229,14 +258,24 @@ export class WorkbenchContentSearchWorkerSession {
     this.pending = null
   }
 
-  /** 结束 worker；还在等的请求以 error 结束。 */
-  private discard(error: AppError): void {
+  /** 业务先退役；实际 worker 与失败回执保留到 terminate/exit 确认。 */
+  private discard(error: AppError): Promise<void> {
     const pending = this.pending
     this.settle()
-    const worker = this.worker
-    this.worker = null
-    if (worker) void worker.terminate().catch(() => undefined)
+    const owned = this.worker
+    if (owned && !owned.termination) {
+      const termination = Promise.resolve().then(async () => {
+        await owned.worker.terminate()
+        if (this.worker === owned) this.worker = null
+      })
+      owned.termination = termination
+      // timer/error 入口没有 await 方；原票仍由 record/close 持有并交给真正的资源 owner。
+      void termination.catch((failure: unknown) => {
+        log.warn('搜索 worker 未能确认退出', { error: failure })
+      })
+    }
     pending?.reject(error)
+    return owned?.termination ?? Promise.resolve()
   }
 }
 

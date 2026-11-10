@@ -17,8 +17,9 @@ import {
 } from '../src/main/workspace/ContentSearchWorkerHost'
 
 /**
- * 搜索 worker 会话（主进程这边）：久没有动静就结束 worker 并说卡在哪个文件上，心跳说明它还活着；取消时不等
- * worker，立刻返回并结束它；worker 意外退出，请求以错误结束。worker 用假的，时间可控。
+ * 搜索 worker 会话（主进程这边）：久没有动静就结束 worker 并说卡在哪个文件上，心跳说明它还活着。
+ * 取消的业务先返回，close 等物理退出，后继不能越过未完成的终止票；worker 意外退出，请求以错误结束。
+ * worker 用假的，时间可控。
  */
 
 class FakeSearchWorker extends EventEmitter implements WorkbenchContentSearchWorkerPort {
@@ -101,7 +102,7 @@ void describe('content search worker session', () => {
     worker.reply({ id, kind: 'result', result: Done })
     assert.deepEqual(await searching, Done)
     assert.equal(worker.terminated, false)
-    session.close()
+    await session.close()
     assert.equal(worker.terminated, true)
 
     // 心跳说明上一个文件已经搜完：之后没了动静，不能怪到那个文件头上。
@@ -119,7 +120,7 @@ void describe('content search worker session', () => {
     })
   })
 
-  void test('cancelling returns at once and ends the worker; late messages are ignored', async () => {
+  void test('cancelling retires the worker until physical termination; late messages are ignored', async () => {
     const { session, workers } = openSession(60_000)
     const controller = new AbortController()
     const batches: unknown[] = []
@@ -129,6 +130,11 @@ void describe('content search worker session', () => {
     })
     const worker = workers[0]!
     const { id } = worker.requests[0]!
+    const terminated = Promise.withResolvers<number>()
+    worker.terminate = () => {
+      worker.terminated = true
+      return terminated.promise
+    }
     assert.equal((worker.requests[0] as { stream?: boolean }).stream, true)
     controller.abort()
     assert.equal(await searching, null)
@@ -137,13 +143,56 @@ void describe('content search worker session', () => {
     worker.reply({ id, kind: 'batch', batch: { files: [], openPathsInScope: ['a.ts'] } })
     assert.deepEqual(batches, [])
 
-    // 同一会话的下一个请求开新的 worker。
+    // 同一会话的新请求须先等实际退出，不能因业务取消已结算就腾出物理槽位。
     const again = session.search(Task)
+    assert.equal(workers.length, 1)
+    terminated.resolve(1)
+    await delay(0)
     const next = workers[1]!
     assert.equal((next.requests[0] as { stream?: boolean }).stream, false)
     next.reply({ id: next.requests[0]!.id, kind: 'result', result: Done })
     assert.deepEqual(await again, Done)
-    session.close()
+    await session.close()
+  })
+
+  void test('a late exit frees the worker slot without changing a failed close receipt', async () => {
+    const { session, workers } = openSession(60_000)
+    const controller = new AbortController()
+    const searching = session.search(Task, { signal: controller.signal })
+    const worker = workers[0]!
+    const terminated = Promise.withResolvers<number>()
+    const failure = new Error('termination failed')
+    let attempts = 0
+    worker.terminate = () => {
+      attempts += 1
+      return terminated.promise
+    }
+    controller.abort()
+    assert.equal(await searching, null)
+    const next = session.search(Task)
+    const rejected = assert.rejects(next, (error: unknown) => error === failure)
+    assert.equal(workers.length, 1)
+    terminated.reject(failure)
+    await rejected
+    await assert.rejects(session.search(Task), (error: unknown) => error === failure)
+    assert.equal(workers.length, 1)
+    worker.emit('exit', 1)
+    const recovered = session.search(Task)
+    const replacement = workers[1]!
+    replacement.reply({ id: replacement.requests[0]!.id, kind: 'result', result: Done })
+    assert.deepEqual(await recovered, Done)
+    replacement.terminate = () => {
+      attempts += 1
+      return Promise.reject(failure)
+    }
+    const closing = session.close()
+    assert.equal(session.close(), closing)
+    await assert.rejects(closing, (error: unknown) => error === failure)
+    replacement.emit('exit', 1)
+    assert.equal(session.close(), closing)
+    await assert.rejects(session.close(), (error: unknown) => error === failure)
+    assert.equal(workers.length, 2)
+    assert.equal(attempts, 2)
   })
 
   void test('a replace that hangs names its file; a worker that exits fails the request', async () => {
@@ -191,8 +240,9 @@ void describe('content search worker session', () => {
       setWorkbenchMainLocale('zh-CN')
       const replacing = session.replace({ content: 'a', query: Task.query, replacement: 'b' }, 'a.ts')
       assert.equal(workers[1]!.requests[0]!.locale, 'zh-CN')
-      session.close()
-      await assert.rejects(replacing, rejectsWith('CANCELLED', /搜索已结束/u))
+      const cancelled = assert.rejects(replacing, rejectsWith('CANCELLED', /搜索已结束/u))
+      await session.close()
+      await cancelled
     } finally {
       setWorkbenchMainLocale('zh-CN')
     }

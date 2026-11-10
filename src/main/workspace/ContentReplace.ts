@@ -74,6 +74,7 @@ class ContentReplace {
     const files: WorkbenchReplaceContentFileResult[] = []
     // 正则在某个文件上跑不完：后面的文件多半也一样，都不换了。
     let stopped: Nullable<AppError> = null
+    let failure: { cause: unknown } | undefined
     try {
       for (const file of request.files) {
         try {
@@ -91,9 +92,20 @@ class ContentReplace {
           })
         }
       }
-    } finally {
-      session.close()
+    } catch (error) {
+      failure = { cause: error }
     }
+    try {
+      await session.close()
+    } catch (error) {
+      if (failure)
+        throw new AggregateError(
+          [failure.cause, error],
+          'Content replacement and worker cleanup failed'
+        )
+      throw error
+    }
+    if (failure) throw failure.cause
     return { projectRoot, files }
   }
 

@@ -155,7 +155,7 @@ class SearchIndex {
     options: WorkbenchContentSearchRunOptions = {}
   ): Promise<WorkbenchSearchContentResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const result: WorkbenchSearchContentResult = {
+    let result: WorkbenchSearchContentResult = {
       projectRoot,
       query: request.query,
       files: [],
@@ -185,6 +185,7 @@ class SearchIndex {
     if (signal?.aborted) return { ...result, cancelled: true }
 
     const session = this.openSearchSession()
+    let failure: { cause: unknown } | undefined
     try {
       const outcome = await session.search(
         {
@@ -197,10 +198,19 @@ class SearchIndex {
         },
         { signal, onBatch }
       )
-      return outcome ? { ...result, ...outcome } : { ...result, cancelled: true }
-    } finally {
-      session.close()
+      result = outcome ? { ...result, ...outcome } : { ...result, cancelled: true }
+    } catch (error) {
+      failure = { cause: error }
     }
+    try {
+      await session.close()
+    } catch (error) {
+      if (failure)
+        throw new AggregateError([failure.cause, error], 'Content search and worker cleanup failed')
+      throw error
+    }
+    if (failure) throw failure.cause
+    return result
   }
 
   private normalizeContentSearchLimit(value: number | undefined): number {
