@@ -17,16 +17,49 @@ export function platformSnapshotSpecification(entry) {
   return `file:${platformSnapshotDirectory}/${entry.sha256}/${entry.fileName}`
 }
 
+/** 依赖身份来自正式发布 URL；哈希缓存只负责本地字节核验和恢复。 */
+export function platformSnapshotDependencySpecification(snapshot, entry) {
+  const source = snapshot.sources[entry.source]
+  if (source?.kind === 'github-release')
+    return `https://github.com/${source.repository}/releases/download/${encodeURIComponent(source.tag)}/${entry.fileName}`
+  if (source?.kind === 'frozen-local-candidate') return platformSnapshotSpecification(entry)
+  throw new Error(`Invalid dependency snapshot source: ${entry.source}`)
+}
+
+export function isPlatformSnapshotDependencySpecification(value) {
+  return typeof value === 'string' && (
+    /^file:build\/runtime-packages\/[a-f0-9]{64}\/[a-z0-9][a-z0-9._-]*\.tgz$/u.test(value) ||
+    /^https:\/\/github\.com\/VelarOS-AI\/VelarOS-(?:Platform|UI)\/releases\/download\/[^/]+\/[a-z0-9][a-z0-9._-]*\.tgz$/u.test(value)
+  )
+}
+
+function assertCapabilityBaseDependency(snapshot, entry, manifest) {
+  if (entry.name !== '@velaros-ai/capabilities') return
+  const base = snapshot.packages.find((item) => item.name === '@velaros-ai/velaros')
+  if (
+    !base ||
+    base.version !== entry.version ||
+    manifest?.dependencies?.['@velaros-ai/velaros'] !== platformSnapshotDependencySpecification(snapshot, base) ||
+    Object.hasOwn(manifest.peerDependencies ?? {}, '@velaros-ai/velaros')
+  )
+    throw new Error('Capabilities must declare the canonical mandatory base archive dependency without a registry peer.')
+}
+
 export function verifyPlatformSnapshotLock(snapshot, lockfile) {
   for (const entry of snapshot.packages) {
-    const specification = platformSnapshotSpecification(entry)
+    const specification = platformSnapshotDependencySpecification(snapshot, entry)
     const locked = lockfile.packages?.[entry.name]
+    const resolutions = Object.values(lockfile.packages ?? {}).filter(
+      (candidate) => typeof candidate?.[0] === 'string' && candidate[0].startsWith(`${entry.name}@`)
+    )
     if (
-      locked?.[0] !== `${entry.name}@${specification.slice('file:'.length)}` ||
+      locked?.[0] !== `${entry.name}@${specification.replace(/^file:/u, '')}` ||
       locked.at(-1) !== entry.integrity ||
-      lockfile.overrides?.[entry.name] !== specification
+      resolutions.length !== 1 ||
+      Object.hasOwn(lockfile.overrides ?? {}, entry.name)
     )
       throw new Error(`Platform snapshot lock identity mismatch: ${entry.name}`)
+    assertCapabilityBaseDependency(snapshot, entry, locked[1])
   }
 }
 
@@ -192,6 +225,9 @@ async function verifyArchive(file, entry, platformGeneration) {
     (platformGeneration !== undefined && manifest.velaros?.platform !== platformGeneration)
   )
     throw new Error(`Platform snapshot package identity mismatch: ${entry.name}`)
+  if (Object.hasOwn(manifest, 'overrides') || Object.hasOwn(manifest, 'resolutions'))
+    throw new Error(`Published library manifest must not contain development dependency mappings: ${entry.name}`)
+  return manifest
 }
 
 function githubApi(endpoint) {
@@ -260,7 +296,8 @@ export async function verifyPlatformSnapshot(root, { downloadMissing = false, re
         await rm(staging, { recursive: true, force: true })
       }
     }
-    await verifyArchive(archive, entry, generations.get(entry.source))
+    const manifest = await verifyArchive(archive, entry, generations.get(entry.source))
+    assertCapabilityBaseDependency(snapshot, entry, manifest)
   }
   return snapshot
 }

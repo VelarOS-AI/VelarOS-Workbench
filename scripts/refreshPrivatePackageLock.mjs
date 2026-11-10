@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 import {
-  platformSnapshotSpecification,
+  isPlatformSnapshotDependencySpecification,
+  platformSnapshotDependencySpecification,
   verifyPlatformSnapshot,
   verifyPlatformSnapshotLock,
 } from "./release/platformSnapshot.mjs";
@@ -22,6 +23,7 @@ const dependencyFields = [
 ];
 const ignoredDirectories = new Set([
   ".git",
+  ".velaros",
   ".turbo",
   "coverage",
   "dist",
@@ -30,8 +32,6 @@ const ignoredDirectories = new Set([
   "build",
 ]);
 const localPackageSpecification = /^(?:file|link|portal|workspace):/u;
-const snapshotSpecification =
-  /^file:build\/runtime-packages\/[a-f0-9]{64}\/[a-z0-9][a-z0-9._-]*\.tgz$/u;
 // 与 Desktop 一致，Platform 与 UI 在发版前经 `bun link` 从本机兄弟仓消费：只认 `link:<同名包>`。
 const siblingLinkSpecification = /^link:(@velaros-ai\/[\w.-]+)$/u;
 const cloudDownloadPrefix = "https://npm.pkg.github.com/download/";
@@ -67,7 +67,7 @@ const linkedPackageNames = [
   ...new Set(linked.map(({ packageName }) => packageName)),
 ].sort();
 const snapshotRequirements = requirements.filter(({ range }) =>
-  snapshotSpecification.test(range),
+  isPlatformSnapshotDependencySpecification(range),
 );
 const snapshot =
   snapshotRequirements.length > 0
@@ -171,7 +171,7 @@ function collectExternalVelarPackageRequirements(
         }
         if (
           localPackageSpecification.test(range) &&
-          !snapshotSpecification.test(range)
+          !isPlatformSnapshotDependencySpecification(range)
         ) {
           throw new Error(
             `${path.relative(repositoryRoot, manifestPath)}#${field}.${packageName} must use a published cloud version, not ${range}`,
@@ -319,14 +319,14 @@ function validateResolvedVersion(lockfile, requirement) {
   }
 
   const resolvedVersion = resolution.slice(prefix.length);
-  if (snapshotSpecification.test(requirement.range)) {
+  if (isPlatformSnapshotDependencySpecification(requirement.range)) {
     const entry = snapshot?.packages.find(
       ({ name }) => name === requirement.packageName,
     );
     if (
       !entry ||
-      platformSnapshotSpecification(entry) !== requirement.range ||
-      resolvedVersion !== requirement.range.slice("file:".length)
+      platformSnapshotDependencySpecification(snapshot, entry) !== requirement.range ||
+      resolvedVersion !== requirement.range.replace(/^file:/u, "")
     ) {
       throw new Error(
         `${formatRequirement(requirement)} must resolve to its verified Platform snapshot.`,

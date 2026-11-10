@@ -16,6 +16,7 @@ import { test } from "bun:test";
 
 import {
   importPlatformCandidate,
+  platformSnapshotDependencySpecification,
   platformSnapshotSpecification,
   verifyPlatformSnapshot,
   verifyPlatformSnapshotLock,
@@ -60,6 +61,8 @@ test("local release snapshots verify archive bytes, package identity and the com
       ],
     };
     const specification = platformSnapshotSpecification(snapshot.packages[0]);
+    const dependencySpecification = platformSnapshotDependencySpecification(snapshot, snapshot.packages[0]);
+    assert.equal(dependencySpecification, `https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.6.57/${fileName}`);
     const archive = path.join(root, specification.slice("file:".length));
     await mkdir(path.dirname(archive), { recursive: true });
     await rename(packedArchive, archive);
@@ -76,10 +79,9 @@ test("local release snapshots verify archive bytes, package identity and the com
     await writeFile(snapshotFile, JSON.stringify(snapshot));
 
     const lock = {
-      overrides: { "@velaros-ai/core": specification },
       packages: {
         "@velaros-ai/core": [
-          `@velaros-ai/core@${specification.slice(5)}`,
+          `@velaros-ai/core@${dependencySpecification}`,
           {},
           integrity,
         ],
@@ -90,7 +92,6 @@ test("local release snapshots verify archive bytes, package identity and the com
     assert.throws(
       () =>
         verifyPlatformSnapshotLock(snapshot, {
-          overrides: { "@velaros-ai/core": legacySpecification },
           packages: {
             "@velaros-ai/core": [
               `@velaros-ai/core@${legacySpecification.slice(5)}`,
@@ -137,10 +138,9 @@ test("local release snapshots verify archive bytes, package identity and the com
     assert.deepEqual(await readFile(archive), bytes);
     assert.doesNotThrow(() =>
       verifyPlatformSnapshotLock(nextSnapshot, {
-        overrides: { "@velaros-ai/core": nextSpecification },
         packages: {
           "@velaros-ai/core": [
-            `@velaros-ai/core@${nextSpecification.slice(5)}`,
+            `@velaros-ai/core@${platformSnapshotDependencySpecification(nextSnapshot, nextEntry)}`,
             {},
             nextEntry.integrity,
           ],
@@ -149,7 +149,14 @@ test("local release snapshots verify archive bytes, package identity and the com
     );
     await writeFile(snapshotFile, JSON.stringify(snapshot));
     assert.throws(
-      () => verifyPlatformSnapshotLock(snapshot, { ...lock, overrides: {} }),
+      () => verifyPlatformSnapshotLock(snapshot, { ...lock, overrides: { "@velaros-ai/core": specification } }),
+      /lock identity mismatch/u,
+    );
+    assert.throws(
+      () => verifyPlatformSnapshotLock(snapshot, {
+        ...lock,
+        packages: { ...lock.packages, "nested/@velaros-ai/core": lock.packages["@velaros-ai/core"] },
+      }),
       /lock identity mismatch/u,
     );
     assert.throws(
@@ -169,6 +176,23 @@ test("local release snapshots verify archive bytes, package identity and the com
     await writeFile(archive, "tampered archive");
     await assert.rejects(verifyPlatformSnapshot(root), /integrity mismatch/u);
     await writeFile(archive, bytes);
+    for (const field of ["overrides", "resolutions"]) {
+      await writeFile(path.join(root, "package/package.json"), JSON.stringify({
+        name: "@velaros-ai/core", version: "0.4.3", [field]: { react: "19.2.5" },
+      }));
+      execFileSync("tar", ["-czf", fileName, "-C", root, "package"], { cwd: root });
+      const mappedBytes = await readFile(packedArchive);
+      const mappedEntry = {
+        ...snapshot.packages[0], sizeBytes: mappedBytes.length,
+        sha256: createHash("sha256").update(mappedBytes).digest("hex"),
+        integrity: `sha512-${createHash("sha512").update(mappedBytes).digest("base64")}`,
+      };
+      const mappedArchive = path.join(root, platformSnapshotSpecification(mappedEntry).slice(5));
+      await mkdir(path.dirname(mappedArchive), { recursive: true });
+      await rename(packedArchive, mappedArchive);
+      await writeFile(snapshotFile, JSON.stringify({ ...snapshot, packages: [mappedEntry] }));
+      await assert.rejects(verifyPlatformSnapshot(root), /must not contain development dependency mappings/u);
+    }
     snapshot.packages[0].fileName = "../outside.tgz";
     await writeFile(snapshotFile, JSON.stringify(snapshot));
     await assert.rejects(
@@ -179,6 +203,23 @@ test("local release snapshots verify archive bytes, package identity and the com
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('capability locks require the canonical mandatory base dependency without a registry peer', () => {
+  const packages = [
+    { name: '@velaros-ai/velaros', version: '0.9.7', fileName: 'velaros-ai-velaros-0.9.7.tgz', source: 'platform', integrity: 'sha512-base' },
+    { name: '@velaros-ai/capabilities', version: '0.9.7', fileName: 'velaros-ai-capabilities-0.9.7.tgz', source: 'platform', integrity: 'sha512-capabilities' },
+  ]
+  const snapshot = { sources: { platform: { kind: 'github-release', repository: 'VelarOS-AI/VelarOS-Platform', tag: 'v0.7.8' } }, packages }
+  const baseUrl = platformSnapshotDependencySpecification(snapshot, packages[0])
+  const dependency = { '@velaros-ai/velaros': baseUrl }
+  const locked = (metadata: object) => ({ packages: Object.fromEntries(packages.map((entry) => [entry.name, [
+    `${entry.name}@${platformSnapshotDependencySpecification(snapshot, entry)}`,
+    entry.name === '@velaros-ai/capabilities' ? metadata : {}, entry.integrity,
+  ]])) })
+  assert.doesNotThrow(() => verifyPlatformSnapshotLock(snapshot, locked({ dependencies: dependency })))
+  for (const metadata of [{}, { peerDependencies: { '@velaros-ai/velaros': '0.9.7' } }, { dependencies: dependency, peerDependencies: { '@velaros-ai/velaros': '0.9.7' } }])
+    assert.throws(() => verifyPlatformSnapshotLock(snapshot, locked(metadata)), /canonical mandatory base archive dependency/u)
+})
 
 test('frozen candidates import unchanged bytes and commit proof without becoming published releases', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'velaros-candidate-test-'))

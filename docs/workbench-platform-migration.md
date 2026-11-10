@@ -1,4 +1,4 @@
-# Workbench → Platform 0.9.5
+# Workbench → Platform 0.9.7 / UI 1.1.2
 
 Workbench 使用配套的基础与扩展正式固定归档，不引用兄弟仓源码，也不修改依赖包实现。
 
@@ -26,23 +26,27 @@ Workbench 使用配套的基础与扩展正式固定归档，不引用兄弟仓�
 
 ## 一次接入所需归档
 
-安装身份为配套的 `@velaros-ai/velaros@0.9.5` 与 `@velaros-ai/capabilities@0.9.5`。
+安装身份为配套的 `@velaros-ai/velaros@0.9.7` 与 `@velaros-ai/capabilities@0.9.7`，UI 为 `@velaros-ai/ui@1.1.2`。
 Workbench 使用项目/代码/图像、浏览器、网页和产品会话协作，不能仅接基础包。
-正式来源：[Platform v0.7.6](https://github.com/VelarOS-AI/VelarOS-Platform/releases/tag/v0.7.6)，
-commit `70e93a2b8c020ad7509a9fb2d8eb3f7a754664a7`。schema2 快照仅声明正式发布来源，
+正式来源：[Platform v0.7.8](https://github.com/VelarOS-AI/VelarOS-Platform/releases/tag/v0.7.8)，
+commit `30982bfc1ae92912aa734ea5be2acf01687d87ed`；[UI v1.1.2](https://github.com/VelarOS-AI/VelarOS-UI/releases/tag/v1.1.2)，
+commit `5d208907105cedde577976c4eda9787e5ac1227f`。schema2 快照仅声明正式发布来源，
 核对 Release 公开状态、tag→commit、资源大小/digest、实际下载 SHA256/SHA512 与 tar 内包身份。
 
 | 安装身份 | 版本 | 归档 | SHA256 |
 | --- | --- | --- | --- |
-| @velaros-ai/velaros | 0.9.5 | [velaros-ai-velaros-0.9.5.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.6/velaros-ai-velaros-0.9.5.tgz) | 8d8bc25d98bda5ab207c6bae05151922df77c23d1494a6e5cab17273d3db3b2b |
-| @velaros-ai/capabilities | 0.9.5 | [velaros-ai-capabilities-0.9.5.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.6/velaros-ai-capabilities-0.9.5.tgz) | f576132e2309413d333a2671e3d2e7c333c8a183914fc5941e5939787cfe6601 |
+| @velaros-ai/velaros | 0.9.7 | [velaros-ai-velaros-0.9.7.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/velaros-ai-velaros-0.9.7.tgz) | d4f3e502eb59e4a3d42e5ca66a8aa55d3da06586e7ce79e699644cdbe51a9d69 |
+| @velaros-ai/capabilities | 0.9.7 | [velaros-ai-capabilities-0.9.7.tgz](https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/velaros-ai-capabilities-0.9.7.tgz) | 8bf90825f5f4a40b7ead3320ac0bdde1331d49546a44a2f6a39342bb124c25f9 |
+| @velaros-ai/ui | 1.1.2 | [velaros-ai-ui-1.1.2.tgz](https://github.com/VelarOS-AI/VelarOS-UI/releases/download/v1.1.2/velaros-ai-ui-1.1.2.tgz) | 20cbe8a35301920bbe0de7d5f21710c39fe5dae79783b477a866ede3e0adad1d |
 
-两包的大小与 SHA512 integrity 由 `resources/runtime-snapshot.json` 固定，归档位于本仓按哈希分格的缓存。
-UI 仍使用原 1.0.0 正式固定归档。正式来源门继续拒绝本机候选，不把预发布身份伪造成 Release。
+三包的大小与 SHA512 integrity 由 `resources/runtime-snapshot.json` 固定，归档缓存仅用于字节校验与恢复。
+正式依赖直接声明表中 canonical 官方 URL；capabilities 的普通 mandatory 基础依赖与宿主声明完全同 URL。
+两包在 dependencies，UI 保持 devDependencies；产品清单和发布库 manifest 均无 overrides / resolutions。
+正式来源门继续拒绝开发链接、冻结候选与开发映射，不通过本地 file 缓存改变依赖身份。
 
 0.9.1 的源 commit `e3e157696994a0d667cbd542a809484b93e40e71`、原始候选证明和消费验证已保留：
 接入提交 `f0cd235`，原字节位于 `resources/runtime-sources/platform-0.9.1/`。其 658 输入、dirty 来源事实
-及四个真实 Node 场景仍是历史证据。0.9.2/0.9.3/0.9.4 的归档、tag 与回执同样保留；当前安装以 0.9.5 发布来源为准。
+及四个真实 Node 场景仍是历史证据。0.9.2/0.9.3/0.9.4/0.9.5 的归档、tag 与回执同样保留；当前安装以 0.9.7 / UI 1.1.2 发布来源为准。
 
 2026-11-09 对 0.9.3 核验正式 Release、tag/commit、GitHub asset digest、实际 SHA256/SHA512/长度及 tar 身份后，
 仅执行一次 `bun install --ignore-scripts`。三包锁身份通过；新归档上的真实 Node 24.22 取消/进程关闭及写窗口收口用例通过。
@@ -65,6 +69,28 @@ Workbench 的 `createRuntime()` 未提供 `packageEnvironment`；固定 `package
 公开 `/script` 新增 `NodeCodeRunnerApi extends CodeRunnerApi`，工厂返回强类型保证查询存在；参数、
 泛端口可选查询及 Node 环境输入不变，project 版本字面量更新为 0.9.5。
 发布方同基础归档的 JS/严格声明/nodeEnvironmentQuery 证明属于发布方；查询转发不等同实际只读采集成功。
+
+2026-11-10 最终接入 0.9.7 / UI 1.1.2：独立核对正式来源、三份实际归档及库清单。
+0.9.6 的 registry-only peer 在无 overrides 时会请求 npm 并返回 404；0.9.7 改由 capabilities 普通依赖同批基础 URL，
+当前校验只接受这一合同，缺字段或保留基础 peer 都明确拒绝。UI 1.1.2 的发布清单剔除开发字段，
+发布方对比确认 1457 个编译文件及声明与 1.1.1 逐字节相同。
+
+旧 Bun 锁自身仍残留 overrides，直接安装与定向更新都会重入旧图。保留原锁恢复副本后，在一次性隔离目录中
+保留旧图和原 Markdown 补丁字节，仅移除隔离 seed 的旧顶层映射，再由 Bun 原生生成当前图。
+相对过渡锁，第三方版本与 integrity 无变化；相对此前 main，capabilities 新声明的 `@xmldom/xmldom@0.8.15` 被接纳，
+plist 自己的 0.8.14 仍保留，其他第三方锁身份不变。没有在产品代码中增加旧锁迁移或兼容分支。
+真实工作区普通安装、frozen 安装、三包锁身份、库 manifest 无开发映射与 root/capabilities 同一实际基础入口均通过。
+原 Markdown 补丁 SHA256 `032f84b64e5522966f2fc97e7afacafa3b7472c144570e86fe193c6be88b7a8f` 保持不变。
+
+UI 1.0.0 → 现行合同的消费差量保留真实业务身份：Workbench 自己持有必填 agentId，按它归并续跑历史与稳定名称；
+UI threadId 仅描述一次激活。删除恒等 activationId、常 null 字段和旧空 billingModel，不恢复 UI 已删除属性。
+五个既有线程/锚点/续跑场景、node/web 类型和精确 lint 在 0.9.6 / UI 1.1.1 字节上通过；
+其后版本只改变发行 metadata，保留这些证据原身份，没有机械重播。五个发布来源、归档和 mandatory 依赖规则场景也通过。
+
+最终三包实际完成一次 bundle，构建预算全部通过。隔离数据根与共享账号根后，真实 Electron main、preload、renderer
+以隐藏窗口加载欢迎页，实际 IPC 返回空 Hub 和 signed-out 账号，再经正常 before-quit 收尾，父进程观察真实退出。
+构建约 66.7 秒、启动与收尾约 16.4 秒，共用原 120 秒预算。此证明覆盖基本启动，未新增完整项目/Agent、
+供应商、跨 OS 或签名安装矩阵；旧 Node/PTY/观察执行证明仍保持原归档身份。
 
 ## 小型观察与动态上下文
 
@@ -91,12 +117,13 @@ context source/snapshot、worker/memory/widget 装配；执行身份与授权 sc
 - `capabilities/sessions` 的 `SessionTold.status` 仅 `queued`，tell 只给目标活动 run 追加 guidance，空闲拒绝。
   Workbench 先显示 pending guidance 并回执，再 await 真实 steer；不新建运行或检查点，目标换轮会拒绝。
   接纳后来源取消或 UI 通知失败不误报未投递，不自动重放，也不把先到的 applied 降级。
-- 0.9.5 扩展 required peer 为基础精确 `0.9.5`；宿主 optional peer 是 Electron `>=41.0.0`、
-  React / @types/react `^19.0.0`，与本仓宿主版本一致，无本地依赖补丁或 peer override。
+- 0.9.7 扩展通过普通 mandatory dependency 声明基础包的同批官方 URL，与宿主基础声明完全一致；不再声明基础 peer。
+  宿主 optional peer 仍是 Electron `>=41.0.0`、React / @types/react `^19.0.0`，与本仓宿主版本一致。
 
 ## 实际公开调用库存
 
-当前产品调用库存从已验证的 0.9.1 接入延续到 0.9.5；0.9.4 新增真实宿主支持查询转发，0.9.5 不需改动产品调用。
+当前产品调用库存从已验证的 0.9.1 接入延续到 0.9.7；0.9.4 新增真实宿主支持查询转发，0.9.5 不需改动产品调用。
+0.9.7 的发行依赖修复没有新增 operation 签名、effect、mode 或限值变化。
 空闲 trace/traceBranches 不是 Workbench 当前产品调用；空闲 UI 恢复读取产品 Recovery 日志。
 后续验证若发现真实合同缺口再补充，不恢复已删除字段或导入包内私有实现。
 

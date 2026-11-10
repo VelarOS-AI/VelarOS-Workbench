@@ -86,6 +86,23 @@ void describe('release source identity', () => {
     )
   })
 
+  void test('rejects formal release dependency mappings before source staging', async () => {
+    const { root, sourceSha } = await createReleaseRepository()
+    try {
+      for (const field of ['overrides', 'resolutions']) {
+        await writeFile(path.join(root, 'package.json'), JSON.stringify({
+          name: 'root', version: '0.3.0', [field]: { react: '19.2.5' },
+        }))
+        await assert.rejects(
+          validateReleaseSource({ repoRoot: root, releaseTag: 'v0.3.0', sourceSha }),
+          new RegExp(`published dependency versions[\\s\\S]*${field}\\.react 19\\.2\\.5`, 'u')
+        )
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   void test('rejects frozen candidate dependency sources before release staging', async () => {
     const { root, sourceSha } = await createReleaseRepository()
     try {

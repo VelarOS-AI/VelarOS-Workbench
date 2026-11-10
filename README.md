@@ -115,7 +115,9 @@ Platform 与 UI 改动由对应 owner 构建为固定归档，Workbench
 只消费公开入口，不引用兄弟仓源码或共享 node_modules。基础和扩展必须同版切换。
 
 开发验证按影响范围选择类型/lint 分区和必要行为测试，复用已通过结果；完整 `bun run check` 留给需要全量检查的交付。
-`check:platform-packages` 核对快照、归档、锁元组及 overrides。更新受控清单和快照后用 Bun 刷新锁文件，审查再提交。
+`check:platform-packages` 核对快照、归档、直接依赖锁元组及单一包实例。正式依赖声明直接固定已验证归档，不写 overrides；
+overrides / resolutions 仅用于开发配置，正式产品清单与发布库归档均不能携带。基础与能力包由普通 Bun 解析共享同一正式基础实例。
+更新受控清单和快照后用 Bun 刷新锁文件，审查再提交。
 正式发布门只接受已发布来源；此前 0.9.1 的本机候选来源与消费证明保留为历史证据，不再是当前发行状态。
 源码仓库中的旧 CI 与锁文件刷新
 Actions 仍是静态停用哨兵；正式发布由 Desktop 仓库的 `release-workbench.yml` 承载，使用固定 Workbench 提交在各平台原生 runner 上检查与打包。

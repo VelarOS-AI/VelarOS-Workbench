@@ -231,7 +231,8 @@ export type ConversationAgentStatus =
 export interface ConversationAgentProjection {
   /** `conversation:agent:${executionId}:${jobId}:${n}` */
   id: string
-  agentId?: string
+  /** 子 Agent 的稳定身份；多次派发/续跑各有独立 id。 */
+  agentId: string
   model?: string
   activity?: Array<
     | { kind: 'conversation-script'; payload: ConversationScriptProjection; timestamp?: number }

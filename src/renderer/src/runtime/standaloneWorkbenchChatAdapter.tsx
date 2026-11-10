@@ -25,7 +25,6 @@ import {
   ChatConversationPane,
   ChatThinkingVisibilityProvider,
   type ConversationView,
-  type ConversationWorkerThread,
   readConversationLiveActivity,
   useConversationTranslatorRuntime,
   useScrollToBottom,
@@ -91,6 +90,7 @@ import {
   withSettledScripts,
   withSettledToolCalls,
   withSettledWorkerThreads,
+  type WorkbenchConversationWorkerThread,
 } from './conversation/workbenchConversationNotices'
 import { WorkbenchNotebook } from './conversation/WorkbenchNotebook'
 import {
@@ -207,7 +207,7 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly messages: readonly ChatMessage[]
   readonly lastRunStartedAt: number | null
   /** 本轮派出去的子 Agent 线程；不持久化——它描述的是「这次跑了什么」，不是会话内容。 */
-  readonly workerThreads: readonly ConversationWorkerThread[]
+  readonly workerThreads: readonly WorkbenchConversationWorkerThread[]
   /** main 最近一次模型请求的上下文用量；仪表读它，renderer 不自己重算。 */
   readonly contextUsage: Nullable<StandaloneContextUsageEstimate>
   /**

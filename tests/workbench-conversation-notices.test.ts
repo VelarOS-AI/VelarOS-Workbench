@@ -199,6 +199,7 @@ describe('Workbench conversation notices', () => {
   test('sub-agents become worker threads anchored to their script card', () => {
     const agent = {
       id: 'conversation:agent:exec-1:job-1:1',
+      agentId: 'job-1',
       anchorId: 'conversation:script:run-1:turn-1:0',
       task: '\n  查一下测试\n细节',
       profile: 'worker',
@@ -212,6 +213,7 @@ describe('Workbench conversation notices', () => {
     expect(state.messages).toHaveLength(0)
     expect(state.workerThreads[0]).toMatchObject({
       threadId: agent.id,
+      agentId: agent.agentId,
       anchorId: agent.anchorId,
       title: '查一下测试',
       status: 'running',

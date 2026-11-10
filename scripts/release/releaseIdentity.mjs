@@ -6,7 +6,8 @@ import path from "node:path";
 import ts from "typescript";
 
 import {
-  platformSnapshotSpecification,
+  isPlatformSnapshotDependencySpecification,
+  platformSnapshotDependencySpecification,
   verifyPlatformSnapshot,
   verifyPlatformSnapshotLock,
 } from "./platformSnapshot.mjs";
@@ -101,10 +102,8 @@ export function assertSameFileIdentity(
  * 正式发布只接收已发布的依赖来源；兄弟仓链接与带提交证明的冻结候选均不能由本地缓存冒充发布版本。
  */
 async function assertPublishedDependencies(manifest, root) {
-  const snapshotDependencies = Object.values(manifest.dependencies ?? {}).some(
-    (range) =>
-      typeof range === "string" &&
-      range.startsWith("file:build/runtime-packages/"),
+  const snapshotDependencies = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"].some(
+    (field) => Object.values(manifest[field] ?? {}).some(isPlatformSnapshotDependencySpecification),
   );
   const snapshot = snapshotDependencies
     ? await verifyPlatformSnapshot(root, { requirePublished: true })
@@ -121,15 +120,20 @@ async function assertPublishedDependencies(manifest, root) {
     "optionalDependencies",
     "peerDependencies",
     "overrides",
+    "resolutions",
   ]) {
     for (const [name, range] of Object.entries(manifest[field] ?? {})) {
-      if (
+      if (field === "overrides" || field === "resolutions") {
+        unpublished.push(`${field}.${name} ${range}`);
+      } else if (name.startsWith("@velaros-ai/")) {
+        const entry = snapshot?.packages.find((entry) => entry.name === name);
+        if (!entry || platformSnapshotDependencySpecification(snapshot, entry) !== range)
+          unpublished.push(`${field}.${name} ${range}`);
+      } else if (
         typeof range === "string" &&
         /^(?:file|link|portal|workspace):/u.test(range)
       ) {
-        const entry = snapshot?.packages.find((entry) => entry.name === name);
-        if (!entry || platformSnapshotSpecification(entry) !== range)
-          unpublished.push(`${field}.${name} ${range}`);
+        unpublished.push(`${field}.${name} ${range}`);
       }
     }
   }

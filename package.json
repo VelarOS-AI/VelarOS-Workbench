@@ -51,8 +51,8 @@
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-markdown-languageservice": "^0.5.0",
     "vscode-uri": "^3.1.0",
-    "@velaros-ai/velaros": "file:build/runtime-packages/8d8bc25d98bda5ab207c6bae05151922df77c23d1494a6e5cab17273d3db3b2b/velaros-ai-velaros-0.9.5.tgz",
-    "@velaros-ai/capabilities": "file:build/runtime-packages/f576132e2309413d333a2671e3d2e7c333c8a183914fc5941e5939787cfe6601/velaros-ai-capabilities-0.9.5.tgz"
+    "@velaros-ai/velaros": "https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/velaros-ai-velaros-0.9.7.tgz",
+    "@velaros-ai/capabilities": "https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.8/velaros-ai-capabilities-0.9.7.tgz"
   },
   "devDependencies": {
     "@ast-grep/napi": "0.45.3",
@@ -128,7 +128,7 @@
     "vite": "^7.3.2",
     "zod": "^4.3.6",
     "npm": "12.2.0",
-    "@velaros-ai/ui": "file:build/runtime-packages/d7ef7c3281ec3587036d3e81026cf5d9471a86f3a55d09079a4e6471ceac09e7/velaros-ai-ui-1.0.0.tgz",
+    "@velaros-ai/ui": "https://github.com/VelarOS-AI/VelarOS-UI/releases/download/v1.1.2/velaros-ai-ui-1.1.2.tgz",
     "@typescript/native": "npm:typescript@7.0.2",
     "react-dom": "^19.2.5"
   },
@@ -146,10 +146,5 @@
     "node-linux-x64": "24.22.0",
     "node-win-arm64": "24.22.0",
     "node-win-x64": "24.22.0"
-  },
-  "overrides": {
-    "@velaros-ai/velaros": "file:build/runtime-packages/8d8bc25d98bda5ab207c6bae05151922df77c23d1494a6e5cab17273d3db3b2b/velaros-ai-velaros-0.9.5.tgz",
-    "@velaros-ai/capabilities": "file:build/runtime-packages/f576132e2309413d333a2671e3d2e7c333c8a183914fc5941e5939787cfe6601/velaros-ai-capabilities-0.9.5.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/d7ef7c3281ec3587036d3e81026cf5d9471a86f3a55d09079a4e6471ceac09e7/velaros-ai-ui-1.0.0.tgz"
   }
 }

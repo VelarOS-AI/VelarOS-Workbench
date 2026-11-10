@@ -55,10 +55,15 @@ export type WorkbenchConversationTextBlock = TextBlock & {
   preview?: boolean
 }
 
+/** 稳定 Agent 身份由 Workbench 持有，UI 投影只描述本次激活的展示内容。 */
+export interface WorkbenchConversationWorkerThread extends ConversationWorkerThread {
+  readonly agentId: string
+}
+
 /** 一次运行的通知落到会话上的两处：消息（运行消息里的块）与子 Agent 线程。 */
 export interface WorkbenchConversationTranscript {
   readonly messages: readonly ChatMessage[]
-  readonly workerThreads: readonly ConversationWorkerThread[]
+  readonly workerThreads: readonly WorkbenchConversationWorkerThread[]
 }
 
 /** 新建运行消息时记在它上面的这一轮的界面身份（与用户消息同一组）。 */
@@ -320,11 +325,11 @@ function applyAgent(
   payload: ConversationAgentProjection
 ): WorkbenchConversationTranscript {
   const previous = transcript.workerThreads.find((item) => item.threadId === payload.id)
-  const identity = payload.agentId ?? previous?.taskId ?? payload.id
-  const history = transcript.workerThreads.filter((item) => item.taskId === identity)
+  const identity = payload.agentId
+  const history = transcript.workerThreads.filter((item) => item.agentId === identity)
   // 续跑会回放旧 run；消息时刻属于原 run，不随新的执行卡或刷新时间移动。
   const timestamps = new Map<string, number>()
-  let prior: ConversationWorkerThread | undefined
+  let prior: WorkbenchConversationWorkerThread | undefined
   for (const item of history) {
     for (const message of item.messages)
       timestamps.set(
@@ -376,30 +381,22 @@ function applyAgent(
     prior &&
     (prior.status === 'aborted' || prior.status === 'failed') &&
     prior.messages.some((message) => messages.some((item) => item.id === message.id))
-  const thread: ConversationWorkerThread = {
+  const thread: WorkbenchConversationWorkerThread = {
     threadId: payload.id,
-    activationId: payload.id,
-    taskId: identity,
-    nodeId: null,
+    agentId: identity,
     title:
       (resumesInterrupted && prior?.title) ||
       previous?.title ||
       workbenchWorkerTaskTitle(payload.task),
     agentName: workerName(transcript.workerThreads, identity),
-    roleId: null,
     phase: null,
     status: payload.status,
-    workspaceTarget: null,
-    dag: null,
     subagentType: payload.profile,
-    customAgentName: null,
-    mode: null,
     model: payload.model ?? previous?.model ?? null,
     startedAt: payload.startedAt,
     updatedAt: payload.updatedAt,
     input: payload.task,
     output: payload.answer || null,
-    summary: null,
     error: payload.error,
     messages,
   }
@@ -415,8 +412,8 @@ function applyAgent(
 }
 
 /** 同一子任务续跑复用名字，名称随线程一起持久化。 */
-function workerName(threads: readonly ConversationWorkerThread[], identity: string): string {
-  const existing = threads.find((thread) => thread.taskId === identity)?.agentName
+function workerName(threads: readonly WorkbenchConversationWorkerThread[], identity: string): string {
+  const existing = threads.find((thread) => thread.agentId === identity)?.agentName
   if (existing) return existing
   const names = ['Atlas', 'Beacon', 'Cipher', 'Forge', 'Harbor', 'Lumen', 'Nova', 'Orion']
   const used = new Set(threads.map((thread) => thread.agentName))
@@ -492,8 +489,8 @@ export function withExpiredInteractions(messages: readonly ChatMessage[]): ChatM
 
 /** 同样的收尾：还在跑或等回答的子 Agent 线程不会再有消息，按中断收掉。 */
 export function withSettledWorkerThreads(
-  threads: readonly ConversationWorkerThread[]
-): ConversationWorkerThread[] {
+  threads: readonly WorkbenchConversationWorkerThread[]
+): WorkbenchConversationWorkerThread[] {
   return threads.map((thread) =>
     thread.status === 'running' || thread.status === 'awaiting_input'
       ? { ...thread, status: 'aborted' as const }
@@ -662,7 +659,7 @@ function isAgentProjection(value: unknown): value is ConversationAgentProjection
     isString(value.task) &&
     value.task.length <= ConversationAgentTextMaxChars &&
     isString(value.profile) &&
-    (value.agentId === undefined || isString(value.agentId)) &&
+    isString(value.agentId) &&
     (value.model === undefined || isString(value.model)) &&
     (value.activity === undefined ||
       (isArray(value.activity) &&

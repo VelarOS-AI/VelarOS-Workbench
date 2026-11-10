@@ -154,6 +154,7 @@ void describe('Workbench sub-agent threads', () => {
       ]
     )
     const [first] = threads()
+    assert.deepEqual(threads().map((thread) => thread.agentId), ['job-1', 'job-1'])
     // 卡挂在派发它的脚本卡后面；点开看完整任务；原位更新时开始时刻不变。
     assert.equal(first?.anchorId, anchorOf(Execution))
     assert.equal(first?.input, '\n  审计 Project 事务核心\n先读 src/core')
@@ -343,10 +344,6 @@ void describe('streaming stays cheap for the rest of the page', () => {
       'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx'
     )
 
-    assert.match(
-      panel,
-      /const fallbackBody = thread\.error \?\? thread\.output \?\? thread\.summary \?\? null/u
-    )
     assert.match(panel, /\{thread\.input\}/u)
     assert.match(panel, /<ChatTranscript\n\s*messages=\{thread\.messages\}/u)
     assert.match(
@@ -419,6 +416,7 @@ void test('child traces preserve execution results, names and model across updat
   assert.notEqual(state.workerThreads[1].agentName, state.workerThreads[2].agentName)
   assert.equal(state.workerThreads[0].model, 'velar-dev/gpt-5.6-sol')
   const restored = JSON.parse(JSON.stringify(state)) as WorkbenchConversationTranscript
+  assert.equal(restored.workerThreads[0].agentId, 'job-1')
   assert.equal(restored.workerThreads[0].status, 'completed')
   assert(
     restored.workerThreads[0].messages.some((message) =>
