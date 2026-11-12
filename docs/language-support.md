@@ -1,6 +1,6 @@
-# Focused Language Support
+# Language Support
 
-VelarOS Workbench intentionally supports a small, polished language surface.
+VelarOS Workbench bundles editor syntax independently of optional local compiler toolchains.
 
 ## First-class languages
 
@@ -10,16 +10,52 @@ VelarOS Workbench intentionally supports a small, polished language surface.
 - Python (`.py`, `.pyi`): built-in syntax and the Workbench-owned `pyright`
   runtime dependency through the shared stdio LSP client. A project-local
   `pyright-langserver` remains a development fallback.
-- Related Web formats: HTML, CSS, SCSS, Less, JSON, and Markdown.
+- Vue (`.vue`): SFC template directives/interpolations, TypeScript/JavaScript script blocks,
+  and CSS/Less/SCSS/Sass style blocks. The bundled `@vue/language-server` is pinned to
+  2.2.12 and runs in standalone mode with Workbench's TypeScript SDK, so script and
+  template semantics work without a separate tsserver plugin or project-installed server.
+  Keep this pin until a replacement supports standalone operation or the host implements
+  the newer server's companion TypeScript protocol.
+- Java, C#, Go, Rust, Dart, Swift, Kotlin, WebAssembly text and GLSL: built-in syntax,
+  language labels, comments/indentation and file identification; semantic requests use
+  the shared stdio LSP client and locally installed servers listed below.
+- Related Web formats: HTML, CSS, SCSS, Less, Sass, JSON, and Markdown. Less and SCSS
+  use their own parsers plus the bundled CSS language service. Indented `.sass` uses
+  the Sass parser; it is intentionally excluded from the CSS/SCSS semantic service
+  to avoid false diagnostics. Vue style blocks use the corresponding parser too.
 - Common project formats: YAML, XML/SVG, SQL, TOML, shell scripts,
   Dockerfile/Containerfile, INI/Properties, and `.env` variants. These use
   bundled editor parsers for syntax, indentation, and bracket structure; they
   do not pretend to provide a schema-aware language server when none is
   configured by the project.
 
-Java, C/C++, Go, and Rust are deliberately outside the product scope. Workbench
-does not offer downloads, recommendations, settings, protocols, or build
-artifacts for them; unknown files remain plain text.
+C/C++ support is outside this language expansion. `.wasm` files remain binary;
+editable WebAssembly source uses `.wat` / `.wast`. Markdown code fences recognize
+the new language names, including `wasm` as a WebAssembly text alias.
+
+## Local language services
+
+Syntax works immediately. Completion, diagnostics, navigation, rename and formatting
+are forwarded according to the server's advertised LSP capabilities. Install the
+language's SDK and put the server command on `PATH`; missing servers produce the
+existing actionable language-service message. Opening a file does not download tools.
+
+| Language | Files | Language server |
+| --- | --- | --- |
+| Java | `.java` | [`jdtls`](https://github.com/eclipse-jdtls/eclipse.jdt.ls), with a compatible JDK |
+| C# | `.cs`, `.csx` | [`csharp-ls`](https://github.com/razzmatazz/csharp-language-server), with .NET SDK |
+| Go | `.go` | [`gopls`](https://go.dev/gopls/) |
+| Rust | `.rs` | [`rust-analyzer`](https://rust-analyzer.github.io/book/installation.html) |
+| Dart / Flutter | `.dart` | Dart SDK's `dart language-server --protocol=lsp` |
+| Swift | `.swift` | [`sourcekit-lsp`](https://github.com/swiftlang/sourcekit-lsp), with Swift toolchain |
+| Kotlin | `.kt`, `.kts` | [`intellij-server --stdio`](https://github.com/Kotlin/kotlin-lsp); `kotlin-lsp --stdio` is a launcher fallback |
+| WebAssembly text | `.wat`, `.wast` | [`wat_server`](https://github.com/g-plane/wasm-language-tools) |
+| GLSL | `.glsl`, `.vert`, `.frag`, `.geom`, `.tesc`, `.tese`, `.comp`, `.vsh`, `.fsh` | [`glsl_analyzer`](https://github.com/nolanderc/glsl_analyzer) |
+
+Runtime roots follow project markers such as `pom.xml`, Gradle settings, `go.mod`,
+`Cargo.toml`, `pubspec.yaml`, and `Package.swift`, within the opened workspace.
+Java, C#, Rust, Swift and Kotlin allow extra time for initial indexing. Windows
+executable resolution includes native binaries and `.cmd` / `.bat` SDK launchers.
 
 ## Velar built-in contribution contract
 

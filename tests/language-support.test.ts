@@ -158,7 +158,8 @@ void describe('focused Workbench language surface', () => {
   void test('keeps Velar outside the generic host until its built-in contribution is injected', () => {
     assert.deepEqual(
       getBuiltinWorkbenchLanguageServices().map((service) => service.id),
-      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown']
+      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown',
+        'java', 'csharp', 'go', 'rust', 'vue', 'dart', 'swift', 'kotlin', 'webassembly', 'glsl']
     )
     assert.equal(resolveBuiltinWorkbenchLanguageService('vel'), null)
     assert.equal(resolveWorkbenchCodeMirrorLanguage('src/main.vel', '').mode, 'plain-text')
@@ -166,10 +167,11 @@ void describe('focused Workbench language surface', () => {
     const remove = installVelarWorkbenchContribution()
     assert.deepEqual(
       getBuiltinWorkbenchLanguageServices().map((service) => service.id),
-      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown', 'velarscript']
+      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown',
+        'java', 'csharp', 'go', 'rust', 'vue', 'dart', 'swift', 'kotlin', 'webassembly', 'glsl', 'velarscript']
     )
     remove()
-    for (const language of ['java', 'cpp', 'go', 'rust'])
+    for (const language of ['c', 'cpp'])
       assert.equal(resolveBuiltinWorkbenchLanguageService(language), null)
   })
 
@@ -223,7 +225,7 @@ void describe('focused Workbench language surface', () => {
     assert.equal(usesWorkbenchInlayHintLanguageService('src/main.py'), true)
     assert.equal(usesWorkbenchInlayHintLanguageService('src/main.html'), false)
     assert.equal(usesWorkbenchBuiltinLanguageService('src/main.py'), true)
-    assert.equal(resolveWorkbenchCodeMirrorLanguage('src/main.go', '').mode, 'plain-text')
+    assert.equal(resolveWorkbenchCodeMirrorLanguage('src/main.go', '').mode, 'builtin')
     const state = EditorState.create({ doc: 'const value = 1\n', extensions: [velar.extension] })
     assert.deepEqual(state.languageDataAt<{ line: string }>('commentTokens', 0), [{ line: '//' }])
     const exactOccurrences = buildWorkbenchSemanticOccurrenceDecorations(

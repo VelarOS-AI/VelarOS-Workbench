@@ -1,4 +1,6 @@
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   buildWorkbenchTerminalFindPattern,
   DefaultWorkbenchTerminalFindOptions,
@@ -10,6 +12,9 @@ import {
 } from '@renderer/models/editor/workbenchEditorFindState'
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+
+import { findWorkbenchTerminalWebLinks } from '../../models/commands/workbenchTerminalWebLinks'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
 
@@ -72,7 +77,11 @@ export function WorkbenchTerminalView({
   onResolveFileLinks,
   onOpenFileLink,
 }: WorkbenchTerminalViewProps): ReactElement {
+  const { t } = useWorkbenchI18n()
   const containerRef = useRef<HTMLDivElement>(null)
+  const [externalLinks, setExternalLinks] = useState<
+    Array<{ url: string; left: number; top: number; width: number; height: number }>
+  >([])
   const cwdLatest = useLatest(cwd)
   const onDataLatest = useLatest(onData)
   const onResizeLatest = useLatest(onResize)
@@ -159,6 +168,48 @@ export function WorkbenchTerminalView({
   }, [sessionId, workbenchTheme])
 
   useEffect(() => {
+    const container = containerRef.current
+    const instance = findWorkbenchTerminal(sessionId)
+    if (!container || !instance) return undefined
+    let frame: Nullable<number> = null
+    let previous = ''
+    const refresh = (): void => {
+      frame = null
+      const screen = instance.terminal.element?.querySelector('.xterm-screen')
+      if (!screen || !container.parentElement) return
+      const rect = screen.getBoundingClientRect()
+      const parentRect = container.parentElement.getBoundingClientRect()
+      const cellWidth = rect.width / instance.terminal.cols
+      const cellHeight = rect.height / instance.terminal.rows
+      const links = findWorkbenchTerminalWebLinks(instance.terminal).map((link) => ({
+        url: link.url,
+        left: rect.left - parentRect.left + link.column * cellWidth,
+        top: rect.top - parentRect.top + link.row * cellHeight,
+        width: cellWidth * 2,
+        height: cellHeight,
+      }))
+      const projection = JSON.stringify(links)
+      if (projection === previous) return
+      previous = projection
+      setExternalLinks(links)
+    }
+    const schedule = (): void => {
+      frame ??= requestAnimationFrame(refresh)
+    }
+    const rendered = instance.terminal.onRender(schedule)
+    const scrolled = instance.terminal.onScroll(schedule)
+    const observer = new ResizeObserver(schedule)
+    observer.observe(container)
+    schedule()
+    return () => {
+      rendered.dispose()
+      scrolled.dispose()
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [sessionId])
+
+  useEffect(() => {
     const instance = findWorkbenchTerminal(sessionId)
     if (instance) instance.terminal.options.disableStdin = !isRunning
   }, [isRunning, sessionId])
@@ -202,11 +253,23 @@ export function WorkbenchTerminalView({
   }
 
   return (
-    <div
-      className={styles.terminalViewFrame}
-      data-terminal-session={sessionId}
-    >
+    <div className={styles.terminalViewFrame} data-terminal-session={sessionId}>
       <div ref={containerRef} className={styles.terminalViewHost} data-running={isRunning} />
+      {externalLinks.map((link) => (
+        <IconButton
+          key={`${link.url}:${link.top}:${link.left}`}
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className={styles.terminalLinkExternalButton}
+          style={{ left: link.left, top: link.top, width: link.width, height: link.height }}
+          label={t('workbench.runOpenExternal')}
+          title={`${t('workbench.runOpenExternal')}: ${link.url}`}
+          onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+        >
+          <ArrowSquareOutIcon size={11} />
+        </IconButton>
+      ))}
       {find && (
         <WorkbenchTerminalFindBar
           query={find.query}

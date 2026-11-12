@@ -527,15 +527,15 @@ function launchFor(
   descriptor: WorkbenchLanguageServiceDescriptor,
   workspaceRoot?: string
 ): ExternalLspLaunch {
-  if (descriptor.id === 'python') {
+  if (descriptor.bundledNodeModule) {
     try {
       return {
         command: process.execPath,
-        args: [require.resolve('pyright/langserver.index.js'), ...(descriptor.args ?? [])],
+        args: [require.resolve(descriptor.bundledNodeModule), ...(descriptor.args ?? [])],
         electronRunAsNode: !!process.versions['electron'],
       }
     } catch {
-      // 开发期依赖尚未安装时，继续尝试项目本地或 PATH 中的 pyright-langserver。
+      // 开发期依赖尚未安装时，继续尝试项目本地或 PATH 中的语言服务。
     }
   }
 
@@ -570,9 +570,12 @@ function launchFor(
     }
   }
 
-  const executable = executablePath(runtimeRoot, descriptor.command ?? '', workspaceRoot)
+  const pathValue = extendPath(runtimeRoot, workspaceRoot)
+  const commands = [descriptor.command ?? '', ...(descriptor.commandAlternatives ?? [])]
+  const command = commands.find((candidate) => executableExists(candidate, pathValue)) ?? commands[0] ?? ''
+  const executable = executablePath(runtimeRoot, command, workspaceRoot)
   return {
-    command: executable.command,
+    command: resolvedExecutablePath(executable.command, pathValue),
     args: descriptor.args ?? [],
     electronRunAsNode: false,
     unavailableMessage: optionalWhen(
@@ -960,6 +963,14 @@ export class ExternalLspClient {
 
   public async getDiagnostics(path: string, content: string): Promise<ExternalLspDiagnostic[]> {
     const document = await this.synchronize(path, content)
+    if (this.descriptor.diagnosticMode === 'pull' || (
+      this.descriptor.diagnosticMode !== 'push' && this.serverCapabilities['diagnosticProvider']
+    )) {
+      const report = objectValue(await this.request('textDocument/diagnostic', {
+        textDocument: { uri: document.uri },
+      }))
+      return Array.isArray(report?.['items']) ? report['items'] as ExternalLspDiagnostic[] : []
+    }
     const current = this.diagnostics.get(document.uri)
     if (current && current.version >= document.version) return current.diagnostics
 
@@ -1073,7 +1084,7 @@ export class ExternalLspClient {
       args: launch.args,
       cwd: this.runtimeRoot,
       env,
-      shell: process.platform === 'win32' && launch.command.endsWith('.cmd'),
+      shell: process.platform === 'win32' && /\.(?:cmd|bat)$/iu.test(launch.command),
     })
     this.opening = opening
     let child: ExternalLspTransport
@@ -1116,11 +1127,13 @@ export class ExternalLspClient {
       processId: process.pid,
       rootUri: pathToFileURL(this.runtimeRoot).toString(),
       workspaceFolders: [this.workspaceFolder()],
+      initializationOptions: this.initializationOptions(),
       capabilities: {
         // 声明什么就实现什么：既然 params 里传了 workspaceFolders，能力节就必须对齐，
         // 对应的 workspace/workspaceFolders 请求由 handleServerRequest 回复。
-        workspace: { workspaceFolders: true },
+        workspace: { workspaceFolders: true, diagnostics: { refreshSupport: false } },
         textDocument: {
+          diagnostic: { dynamicRegistration: false, relatedDocumentSupport: false },
           completion: {
             completionItem: {
               snippetSupport: true,
@@ -1171,6 +1184,16 @@ export class ExternalLspClient {
     }
   }
 
+  private initializationOptions(): Record<string, unknown> | undefined {
+    const options = this.descriptor.initializationOptions
+    if (!this.descriptor.initializationTypeScriptSdk) return options
+    const typescript = objectValue(options?.['typescript']) ?? {}
+    return {
+      ...options,
+      typescript: { ...typescript, tsdk: dirname(require.resolve('typescript/lib/typescript.js')) },
+    }
+  }
+
   /** `signal` 中止（请求被新请求顶掉）时告诉服务器不必再算，并立刻以取消结束。 */
   private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (signal?.aborted)
@@ -1215,7 +1238,9 @@ export class ExternalLspClient {
               })
             )
           ),
-        Math.max(1, this.requestTimeoutMs)
+        Math.max(1, method === 'initialize'
+          ? (this.descriptor.initializeTimeoutMs ?? this.requestTimeoutMs)
+          : this.requestTimeoutMs)
       )
       this.pending.set(id, {
         resolve: (value) => {

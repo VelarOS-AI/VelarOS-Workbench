@@ -15,6 +15,7 @@ import {
   type WorkbenchProjectHubMenuCommand,
   type WorkbenchProjectHubState,
   type WorkbenchProjectOpenResult,
+  type WorkbenchRecentProject,
 } from '../../shared/projectHub'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -134,6 +135,14 @@ export class WorkbenchWindowManager {
 
   public getFocusedState(): WorkbenchProjectHubState {
     return this.getFocusedRecord()?.hub.getState() ?? emptyProjectHubState()
+  }
+
+  /** 系统任务栏在没有窗口时也保留项目历史。 */
+  public getRecentProjects(): WorkbenchRecentProject[] {
+    return this.store.list().map((entry) => ({
+      ...entry,
+      missing: validateProjectDirectory(entry.path) !== null,
+    }))
   }
 
   /** 打开着这个项目的窗口的 WebContents：项目路径全局去重，最多一个。 */

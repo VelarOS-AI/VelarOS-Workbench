@@ -17,7 +17,6 @@ export interface WorkbenchPeerTask extends WorkbenchConversationSessionRequest {
   sourceSessionId: string
   inputId: string
   text: string
-  newSession: boolean
 }
 
 export type WorkbenchPeerEvent =

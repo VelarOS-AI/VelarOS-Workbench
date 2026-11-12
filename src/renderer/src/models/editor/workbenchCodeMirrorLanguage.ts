@@ -1,20 +1,37 @@
 import { css } from '@codemirror/lang-css'
+import { go } from '@codemirror/lang-go'
 import { html } from '@codemirror/lang-html'
+import { java } from '@codemirror/lang-java'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
+import { less } from '@codemirror/lang-less'
 import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
+import { rust } from '@codemirror/lang-rust'
+import { sass } from '@codemirror/lang-sass'
 import { sql } from '@codemirror/lang-sql'
+import { vue } from '@codemirror/lang-vue'
 import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
-import { Language, LanguageDescription, LanguageSupport, StreamLanguage } from '@codemirror/language'
+import {
+  Language,
+  LanguageDescription,
+  LanguageSupport,
+  StreamLanguage,
+} from '@codemirror/language'
+import { csharp, dart, kotlin, shader } from '@codemirror/legacy-modes/mode/clike'
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
 import { properties } from '@codemirror/legacy-modes/mode/properties'
 import { shell } from '@codemirror/legacy-modes/mode/shell'
+import { swift } from '@codemirror/legacy-modes/mode/swift'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
+import { wast } from '@codemirror/legacy-modes/mode/wast'
 import type { Extension } from '@codemirror/state'
 
-import { getWorkbenchPathExtension, normalizeWorkbenchLanguage } from '@shared/workbenchLanguageServices'
+import {
+  getWorkbenchPathExtension,
+  normalizeWorkbenchLanguage,
+} from '@shared/workbenchLanguageServices'
 
 import { resolveWorkbenchEditorLanguage } from './workbenchEditorLanguageContributions'
 import { workbenchGitIgnoreLanguage } from './workbenchGitIgnoreLanguage'
@@ -30,7 +47,7 @@ export interface WorkbenchCodeMirrorLanguageSupport {
 const TypeScriptTokens = new Set(['cts', 'mts', 'ts', 'tsx', 'typescript'])
 const JavaScriptTokens = new Set(['cjs', 'js', 'javascript', 'jsx', 'mjs'])
 const JsxTokens = new Set(['jsx', 'tsx'])
-const CssTokens = new Set(['css', 'less', 'sass', 'scss'])
+const CssTokens = new Set(['css'])
 const HtmlTokens = new Set(['htm', 'html'])
 const PythonTokens = new Set(['py', 'pyi', 'python'])
 const YamlTokens = new Set(['yaml', 'yml'])
@@ -38,7 +55,96 @@ const XmlTokens = new Set(['atom', 'plist', 'rss', 'svg', 'xml', 'xsd', 'xsl', '
 const ShellTokens = new Set(['bash', 'sh', 'shell', 'zsh'])
 const PropertiesTokens = new Set(['cfg', 'env', 'ini', 'properties'])
 
+const AdditionalLanguages = [
+  { id: 'java', name: 'Java', tokens: ['java'], support: java() },
+  {
+    id: 'csharp',
+    name: 'C#',
+    tokens: ['cs', 'csx', 'csharp', 'c#'],
+    support: new LanguageSupport(StreamLanguage.define(csharp)),
+  },
+  { id: 'go', name: 'Go', tokens: ['go', 'golang'], support: go() },
+  { id: 'rust', name: 'Rust', tokens: ['rs', 'rust'], support: rust() },
+  {
+    id: 'vue',
+    name: 'Vue',
+    tokens: ['vue'],
+    support: vue({
+      base: html({
+        nestedLanguages: [
+          {
+            tag: 'script',
+            attrs: (attrs) => attrs['lang'] === 'ts',
+            parser: javascript({ typescript: true }).language.parser,
+          },
+          {
+            tag: 'script',
+            attrs: (attrs) => attrs['lang'] === 'tsx',
+            parser: javascript({ typescript: true, jsx: true }).language.parser,
+          },
+          {
+            tag: 'style',
+            attrs: (attrs) => attrs['lang'] === 'less',
+            parser: less().language.parser,
+          },
+          {
+            tag: 'style',
+            attrs: (attrs) => attrs['lang'] === 'scss',
+            parser: sass().language.parser,
+          },
+          {
+            tag: 'style',
+            attrs: (attrs) => attrs['lang'] === 'sass',
+            parser: sass({ indented: true }).language.parser,
+          },
+        ],
+      }),
+    }),
+  },
+  {
+    id: 'dart',
+    name: 'Dart',
+    tokens: ['dart'],
+    support: new LanguageSupport(StreamLanguage.define(dart)),
+  },
+  {
+    id: 'swift',
+    name: 'Swift',
+    tokens: ['swift'],
+    support: new LanguageSupport(StreamLanguage.define(swift)),
+  },
+  {
+    id: 'kotlin',
+    name: 'Kotlin',
+    tokens: ['kt', 'kts', 'kotlin'],
+    support: new LanguageSupport(StreamLanguage.define(kotlin)),
+  },
+  {
+    id: 'wat',
+    name: 'WebAssembly',
+    tokens: ['wat', 'wast', 'webassembly', 'wasm'],
+    support: new LanguageSupport(StreamLanguage.define(wast)),
+  },
+  {
+    id: 'glsl',
+    name: 'GLSL',
+    tokens: ['glsl', 'vert', 'frag', 'geom', 'tesc', 'tese', 'comp', 'vsh', 'fsh'],
+    support: new LanguageSupport(StreamLanguage.define(shader)),
+  },
+  { id: 'less', name: 'Less', tokens: ['less'], support: less() },
+  { id: 'scss', name: 'SCSS', tokens: ['scss'], support: sass() },
+  { id: 'sass', name: 'Sass', tokens: ['sass'], support: sass({ indented: true }) },
+]
+
 const MarkdownCodeLanguages = [
+  ...AdditionalLanguages.map((language) =>
+    LanguageDescription.of({
+      name: language.name,
+      alias: language.tokens,
+      extensions: language.tokens.filter((token) => token !== 'wasm'),
+      support: language.support,
+    })
+  ),
   LanguageDescription.of({
     name: 'JavaScript',
     alias: ['js', 'jsx', 'mjs', 'cjs'],
@@ -57,7 +163,12 @@ const MarkdownCodeLanguages = [
   LanguageDescription.of({ name: 'Python', alias: ['py'], extensions: ['py'], support: python() }),
   LanguageDescription.of({ name: 'SQL', extensions: ['sql'], support: sql() }),
   LanguageDescription.of({ name: 'XML', extensions: ['xml'], support: xml() }),
-  LanguageDescription.of({ name: 'YAML', alias: ['yml'], extensions: ['yaml', 'yml'], support: yaml() }),
+  LanguageDescription.of({
+    name: 'YAML',
+    alias: ['yml'],
+    extensions: ['yaml', 'yml'],
+    support: yaml(),
+  }),
 ]
 
 // 同一种语言共用一份实例：换回一个看过的文件时，它的语法树还能接着用（语言没变就不必重新解析）。
@@ -103,6 +214,18 @@ export function resolveWorkbenchCodeMirrorLanguage(
       mode: 'builtin',
     }
 
+  // `.wasm` 仍由文件读取层按二进制处理；无文件路径的 wasm 代码围栏可以用 WAT 高亮。
+  const additional =
+    token === 'wasm' && path
+      ? undefined
+      : AdditionalLanguages.find((language) => language.tokens.includes(token))
+  if (additional)
+    return {
+      extension: additional.support,
+      languageId: additional.id,
+      mode: 'builtin',
+    }
+
   if (TypeScriptTokens.has(token) || JavaScriptTokens.has(token))
     return {
       extension: javascript({
@@ -113,14 +236,11 @@ export function resolveWorkbenchCodeMirrorLanguage(
       mode: 'builtin',
     }
 
-  if (PythonTokens.has(token))
-    return { extension: python(), languageId: 'python', mode: 'builtin' }
+  if (PythonTokens.has(token)) return { extension: python(), languageId: 'python', mode: 'builtin' }
 
-  if (CssTokens.has(token))
-    return { extension: css(), languageId: token, mode: 'builtin' }
+  if (CssTokens.has(token)) return { extension: css(), languageId: token, mode: 'builtin' }
 
-  if (HtmlTokens.has(token))
-    return { extension: html(), languageId: 'html', mode: 'builtin' }
+  if (HtmlTokens.has(token)) return { extension: html(), languageId: 'html', mode: 'builtin' }
 
   if (token === 'json' || token === 'jsonc')
     return { extension: json(), languageId: 'json', mode: 'builtin' }
@@ -135,14 +255,11 @@ export function resolveWorkbenchCodeMirrorLanguage(
   if (token === 'gitignore')
     return { extension: workbenchGitIgnoreLanguage, languageId: 'gitignore', mode: 'builtin' }
 
-  if (YamlTokens.has(token))
-    return { extension: yaml(), languageId: 'yaml', mode: 'builtin' }
+  if (YamlTokens.has(token)) return { extension: yaml(), languageId: 'yaml', mode: 'builtin' }
 
-  if (XmlTokens.has(token))
-    return { extension: xml(), languageId: 'xml', mode: 'builtin' }
+  if (XmlTokens.has(token)) return { extension: xml(), languageId: 'xml', mode: 'builtin' }
 
-  if (token === 'sql')
-    return { extension: sql(), languageId: 'sql', mode: 'builtin' }
+  if (token === 'sql') return { extension: sql(), languageId: 'sql', mode: 'builtin' }
 
   if (token === 'toml')
     return {

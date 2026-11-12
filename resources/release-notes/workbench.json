@@ -3,6 +3,40 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.19",
+      "releasedAt": "2026-11-12",
+      "title": {
+        "zh": "扩展语言支持与 Windows 项目快捷入口",
+        "en": "More languages and Windows project shortcuts"
+      },
+      "added": {
+        "zh": [
+          "新增 Java、C#、Go、Rust、Vue、Dart、Swift、Kotlin、GLSL 和 WebAssembly 文本编辑支持，语言服务可连接本机工具链。",
+          "内置 Vue 补全和诊断，完善 Less、SCSS 与缩进式 Sass 的语法支持。",
+          "Windows 任务栏右键菜单显示最近项目名称，点击即可打开项目或聚焦已有窗口。"
+        ],
+        "en": [
+          "Add editing support for Java, C#, Go, Rust, Vue, Dart, Swift, Kotlin, GLSL and WebAssembly text, with language-service connections to local toolchains.",
+          "Bundle Vue completion and diagnostics and improve Less, SCSS and indented Sass syntax support.",
+          "Show recent project names in the Windows taskbar menu and open or focus a project with one click."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "升级至 Platform v0.7.13（运行时 0.12.1）和 UI 1.1.3，使用经过完整性校验的正式发布归档。",
+          "会话任务交接统一使用当前项目中的已有会话，保留排队、取消与对应任务结果回收。",
+          "运行地址旁增加外部浏览器按钮，并缩小文件标签页的关闭图标。",
+          "改进语言服务诊断请求与 Windows SDK 启动脚本兼容性。"
+        ],
+        "en": [
+          "Upgrade to Platform v0.7.13 (runtime 0.12.1) and UI 1.1.3 using integrity-verified published archives.",
+          "Address existing project sessions for task handoffs while preserving queuing, cancellation and task-specific results.",
+          "Add external-browser buttons beside run URLs and reduce editor tab close icon sizes.",
+          "Improve language-server diagnostic requests and Windows SDK launcher compatibility."
+        ]
+      }
+    },
+    {
       "version": "0.4.18",
       "releasedAt": "2026-11-06",
       "title": {

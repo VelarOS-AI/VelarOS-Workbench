@@ -125,10 +125,12 @@ Actions 仍是静态停用哨兵；正式发布由 Desktop 仓库的 `release-wo
 Platform 的本地存储用 `node:sqlite`，bun 里没有：会话运行时的集成测试
 （`scripts/test/conversationRuntime.test.mjs`）先用 bun 打包，再在 Node 里跑，`bun run test` 已包含它。
 
-Workbench deliberately ships a focused language surface: VelarScript, JavaScript / TypeScript,
-Python, and related Web formats. Its generic editor core has no Velar-specific branches. The app
+Workbench ships syntax support for VelarScript, JavaScript / TypeScript, Python, Java, C#, Go,
+Rust, Vue, Dart, Swift, Kotlin, WebAssembly text, GLSL, and related Web/project formats.
+Its generic editor core has no Velar-specific branches. The app
 injects its built-in Velar contribution for syntax and project-local `velar lsp` connectivity,
-while Python uses the bundled Pyright server through the same generic LSP transport.
+while Python and Vue use bundled servers through the same generic LSP transport. Other added
+languages connect to their locally installed language servers and SDKs.
 See [docs/language-support.md](docs/language-support.md) for the supported surface and the
 Velar compiler/editor joint-delivery contract.
 

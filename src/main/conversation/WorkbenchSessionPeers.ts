@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { realpath } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import type { SessionsSpacePort } from '@velaros-ai/capabilities/sessions'
@@ -56,9 +55,6 @@ export class WorkbenchSessionPeers {
         this.members(request).map((member): SessionPeer => ({
           id: member.sessionId,
           title: member.title,
-          workspace: 'project',
-          root: request.projectRoot,
-          site: null,
           running: this.options.runtime.isRunning({ ...request, sessionId: member.sessionId }),
           self: member.sessionId === request.sessionId,
         })),
@@ -87,7 +83,7 @@ export class WorkbenchSessionPeers {
     this.options.assertAdmission(from)
     const scoped = this.signal(from, signal)
     scoped.throwIfAborted()
-    const task = await this.task(from, input.to, input.task, input)
+    const task = this.task(from, input.to, input.task, 'task')
     scoped.throwIfAborted()
     const fromKey = key(from)
     const toKey = key(task)
@@ -116,7 +112,7 @@ export class WorkbenchSessionPeers {
     this.options.assertAdmission(from)
     const scoped = this.signal(from, signal)
     scoped.throwIfAborted()
-    const task = await this.task(from, input.to, input.message)
+    const task = this.task(from, input.to, input.message, 'message')
     scoped.throwIfAborted()
     if (!this.options.runtime.isRunning(task))
       throw new AppError('UNAVAILABLE', '目标会话当前没有活动运行，不能追加引导。')
@@ -153,38 +149,27 @@ export class WorkbenchSessionPeers {
     return members
   }
 
-  private async task(
+  private task(
     from: WorkbenchConversationRef,
-    to: string | undefined,
+    to: string,
     body: string,
-    input?: SessionAskInput
-  ): Promise<WorkbenchPeerTask> {
+    kind: 'task' | 'message'
+  ): WorkbenchPeerTask {
     const members = this.members(from)
     if (to === from.sessionId) throw new AppError('CONFLICT', '请选择当前项目中的另一个会话。')
-    if (to && !members.some((member) => member.sessionId === to))
+    if (!to || !members.some((member) => member.sessionId === to))
       throw new AppError('NOT_FOUND', '目标会话必须在当前项目的会话列表中。')
-    if (
-      !to &&
-      (input?.workspace !== 'project' ||
-        !input.root ||
-        (await realpath(input.root)) !== (await realpath(from.projectRoot)))
-    )
-      throw new AppError(
-        'PERMISSION',
-        'Workbench 的新会话使用当前项目，请将 workspace 设为 project，并将 root 设为当前项目目录。'
-      )
     const request =
-      this.requests.get(key({ ...from, sessionId: to ?? from.sessionId })) ??
+      this.requests.get(key({ ...from, sessionId: to })) ??
       this.requests.get(key(from))
     if (!request) throw new AppError('UNAVAILABLE', '会话执行配置暂不可用。')
     const title = members.find((member) => member.sessionId === from.sessionId)?.title
     return {
       projectRoot: from.projectRoot,
       sourceSessionId: from.sessionId,
-      sessionId: to ?? `workbench-peer-${randomUUID()}`,
+      sessionId: to,
       inputId: `peer-${randomUUID()}`,
-      newSession: !to,
-      text: `[来自会话 ${title ? `${title} · ` : ''}${from.sessionId} 的${input ? '任务' : '消息'}]\n\n${body}`,
+      text: `[来自会话 ${title ? `${title} · ` : ''}${from.sessionId} 的${kind === 'task' ? '任务' : '消息'}]\n\n${body}`,
     }
   }
 
@@ -205,10 +190,7 @@ export class WorkbenchSessionPeers {
       this.assertNoDeadlock(key(from), id)
       await this.untilIdle(task, signal)
       this.members(from)
-      if (
-        !task.newSession &&
-        !this.members(from).some((member) => member.sessionId === task.sessionId)
-      )
+      if (!this.members(from).some((member) => member.sessionId === task.sessionId))
         throw new AppError('NOT_FOUND', '目标会话已关闭。')
       const configuration = this.requests.get(id) ?? this.requests.get(key(from))
       if (!configuration) throw new AppError('UNAVAILABLE', '会话执行配置暂不可用。')

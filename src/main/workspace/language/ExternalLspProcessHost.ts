@@ -37,7 +37,10 @@ class NativeLspTransport extends ExternalLspTransport {
 
   public constructor(launch: ExternalLspLaunchSpec) {
     super()
-    this.child = spawn(launch.command, launch.args, {
+    const command = process.platform === 'win32' && launch.shell
+      ? `"${launch.command}"`
+      : launch.command
+    this.child = spawn(command, launch.args, {
       cwd: launch.cwd,
       env: launch.env,
       detached: shouldDetachExternalLspProcess(),

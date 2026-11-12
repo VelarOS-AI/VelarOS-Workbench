@@ -19,6 +19,14 @@ export interface WorkbenchLanguageServiceDescriptor {
   languages: string[]
   packageName?: string
   command?: string
+  commandAlternatives?: readonly string[]
+  /** App-owned Node entry; project/PATH lookup remains the development fallback. */
+  bundledNodeModule?: string
+  initializationOptions?: Record<string, unknown>
+  /** Supply the app-owned TypeScript SDK to standalone TypeScript-based servers. */
+  initializationTypeScriptSdk?: boolean
+  initializeTimeoutMs?: number
+  diagnosticMode?: 'pull' | 'push'
   /** Project-local package bin executed with Workbench's own Node-compatible runtime. */
   projectNodePackageBin?: string
   /** Files that establish the nearest runtime root for a document inside a workspace. */
@@ -68,6 +76,7 @@ const BuiltinLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     runtime: 'python-language-server',
     packageName: 'pyright',
     command: 'pyright-langserver',
+    bundledNodeModule: 'pyright/langserver.index.js',
     args: ['--stdio'],
     extensions: ['py', 'pyi'],
     languages: ['python'],
@@ -96,6 +105,131 @@ const BuiltinLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     runtime: 'markdown-language-service',
     extensions: ['md', 'markdown', 'mdown'],
     languages: ['markdown'],
+  },
+  {
+    id: 'java',
+    label: 'Java',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['java'],
+    languages: ['java'],
+    command: 'jdtls',
+    projectRootMarkers: [
+      'pom.xml',
+      'build.gradle',
+      'build.gradle.kts',
+      'settings.gradle',
+      'settings.gradle.kts',
+    ],
+    initializeTimeoutMs: 90_000,
+  },
+  {
+    id: 'csharp',
+    label: 'C#',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['cs', 'csx'],
+    languages: ['csharp', 'c#'],
+    command: 'csharp-ls',
+    documentLanguageId: 'csharp',
+    initializeTimeoutMs: 90_000,
+  },
+  {
+    id: 'go',
+    label: 'Go',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['go'],
+    languages: ['go', 'golang'],
+    command: 'gopls',
+    projectRootMarkers: ['go.work', 'go.mod'],
+  },
+  {
+    id: 'rust',
+    label: 'Rust',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['rs'],
+    languages: ['rust'],
+    command: 'rust-analyzer',
+    projectRootMarkers: ['Cargo.toml', 'rust-project.json'],
+    initializeTimeoutMs: 90_000,
+  },
+  {
+    id: 'vue',
+    label: 'Vue',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['vue'],
+    languages: ['vue'],
+    command: 'vue-language-server',
+    bundledNodeModule: '@vue/language-server/bin/vue-language-server.js',
+    args: ['--stdio'],
+    initializationOptions: { vue: { hybridMode: false } },
+    initializationTypeScriptSdk: true,
+    diagnosticMode: 'pull',
+    projectRootMarkers: ['tsconfig.json', 'jsconfig.json', 'package.json'],
+  },
+  {
+    id: 'dart',
+    label: 'Dart',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['dart'],
+    languages: ['dart'],
+    command: 'dart',
+    args: ['language-server', '--protocol=lsp'],
+    projectRootMarkers: ['pubspec.yaml'],
+  },
+  {
+    id: 'swift',
+    label: 'Swift',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['swift'],
+    languages: ['swift'],
+    command: 'sourcekit-lsp',
+    projectRootMarkers: ['Package.swift'],
+    initializeTimeoutMs: 90_000,
+  },
+  {
+    id: 'kotlin',
+    label: 'Kotlin',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['kt', 'kts'],
+    languages: ['kotlin'],
+    command: 'intellij-server',
+    commandAlternatives: ['kotlin-lsp'],
+    args: ['--stdio'],
+    projectRootMarkers: [
+      'settings.gradle.kts',
+      'settings.gradle',
+      'build.gradle.kts',
+      'build.gradle',
+      'pom.xml',
+    ],
+    initializeTimeoutMs: 90_000,
+  },
+  {
+    id: 'webassembly',
+    label: 'WebAssembly',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['wat', 'wast'],
+    languages: ['wat', 'wast', 'webassembly'],
+    documentLanguageId: 'wat',
+    command: 'wat_server',
+  },
+  {
+    id: 'glsl',
+    label: 'GLSL',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['glsl', 'vert', 'frag', 'geom', 'tesc', 'tese', 'comp', 'vsh', 'fsh'],
+    languages: ['glsl'],
+    documentLanguageId: 'glsl',
+    command: 'glsl_analyzer',
   },
 ]
 

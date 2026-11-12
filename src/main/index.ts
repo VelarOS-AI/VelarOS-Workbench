@@ -61,6 +61,7 @@ import { prepareWorkbenchWebviewAttachment } from './projects/WorkbenchWebviewSe
 import { WorkbenchWindowCloseGuard } from './projects/WorkbenchWindowCloseGuard'
 import { registerWorkbenchWindowCloseIpc } from './projects/WorkbenchWindowCloseIpc'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
+import { installWorkbenchWindowsJumpList } from './projects/WorkbenchWindowsJumpList'
 import { installWorkbenchWindowState } from './projects/WorkbenchWindowState'
 import { registerWorkbenchWindowStateIpc } from './projects/WorkbenchWindowStateIpc'
 import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
@@ -127,6 +128,11 @@ interface WorkbenchInstanceLaunchData {
 }
 
 app.setName(WorkbenchApplicationName)
+if (process.platform === 'win32') {
+  app.setAppUserModelId(
+    WorkbenchIsDevelopmentRuntime ? 'com.velaros.workbench.dev' : 'com.velaros.workbench'
+  )
+}
 if (WorkbenchIsDevelopmentRuntime) {
   app.setPath('userData', join(process.cwd(), '.velaros', 'data', 'workbench-app'))
 }
@@ -551,6 +557,7 @@ if (hasSingleInstanceLock)
     installWorkbenchUpdateRuntime()
     setWorkbenchSystemLanguageSource(() => app.getPreferredSystemLanguages()[0] ?? app.getLocale())
     installProjectHubMenu(windowManager)
+    installWorkbenchWindowsJumpList(windowManager)
     if (pendingExternalPaths.length > 0) {
       const paths = pendingExternalPaths.splice(0)
       void windowManager.openExternalPaths(paths)

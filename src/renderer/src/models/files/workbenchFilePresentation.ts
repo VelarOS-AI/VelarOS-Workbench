@@ -93,6 +93,28 @@ function resolveBuiltinFilePresentation(
   ) return { variant: extension === 'json' || extension === 'jsonc' ? 'json' : 'config' }
 
   switch (extension) {
+    case 'java':
+    case 'cs':
+    case 'csx':
+    case 'go':
+    case 'rs':
+    case 'vue':
+    case 'dart':
+    case 'swift':
+    case 'kt':
+    case 'kts':
+    case 'wat':
+    case 'wast':
+    case 'glsl':
+    case 'vert':
+    case 'frag':
+    case 'geom':
+    case 'tesc':
+    case 'tese':
+    case 'comp':
+    case 'vsh':
+    case 'fsh':
+      return { variant: 'code' }
     case 'css':
       return { variant: 'css' }
     case 'less':

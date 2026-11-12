@@ -788,6 +788,23 @@
   background: var(--workbench-surface);
 }
 
+.terminalLinkExternalButton {
+  @apply absolute flex items-center justify-center;
+  z-index: 2;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  color: var(--workbench-editor-hover-link);
+  background: var(--workbench-surface);
+}
+
+.terminalLinkExternalButton > svg {
+  width: 11px;
+  height: 11px;
+}
+
 /* 终端查找栏浮在右上角（避开滚动条），不占终端的行。 */
 .terminalFindBar {
   @apply absolute flex items-center gap-1 rounded-md border text-muted-foreground;

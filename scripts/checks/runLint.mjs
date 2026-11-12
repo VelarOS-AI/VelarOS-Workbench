@@ -35,7 +35,8 @@ for (const partition of partitions) {
   )
   // 每个子组只以自己的文件和原分区的声明文件为程序根，保留导入图与类型选项。
   // 仅缩小 lintFiles 而仍加载整份 tsconfig，不会缩小类型程序的冷启动开销。
-  const groupSize = partition.name.endsWith('tests') ? 35 : 50
+  // 编辑器与语言解析器的导入图较大，Web 分组缩到 25 个文件以守住单组 45 秒预算。
+  const groupSize = partition.name.endsWith('tests') ? 35 : partition.group === 'web' ? 25 : 50
   if (files.length > groupSize) {
     for (let offset = 0; offset < files.length; offset += groupSize)
       groups.push({

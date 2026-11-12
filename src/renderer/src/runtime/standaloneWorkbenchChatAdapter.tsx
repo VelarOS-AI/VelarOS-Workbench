@@ -693,14 +693,6 @@ async function prepareWorkbenchPeerTask(
   const targetKey = runKey(projectRoot, task.sessionId)
   if (conversationRecovery.hasSubmission(projectRoot, task.sessionId) || activeRuns.has(targetKey))
     throw new AppError('CONFLICT', '目标会话正在提交或运行。')
-  let target = readSession(projectRoot, task.sessionId)
-  if (!target && task.newSession) {
-    target = { ...createState(projectRoot, false, task.sessionId), engine: null }
-    inactiveStates.set(stateKey(projectRoot), [
-      ...(inactiveStates.get(stateKey(projectRoot)) ?? []),
-      target,
-    ])
-  }
   const submission = conversationRecovery.claimSubmission(projectRoot, task.sessionId, ownerSignal)
   let run: Nullable<ActiveConversationRun> = null
   let acknowledging = false
@@ -711,7 +703,7 @@ async function prepareWorkbenchPeerTask(
   try {
     await conversationRecovery.ensureProject(projectRoot)
     conversationRecovery.assertSubmission(submission)
-    target = readSession(projectRoot, task.sessionId)
+    const target = readSession(projectRoot, task.sessionId)
     if (!target || target.engine || isActiveChatRun(target.status) || activeRuns.has(targetKey))
       throw new AppError('CONFLICT', '目标会话暂时无法接收任务。')
     const scope = { runId: task.inputId, turnId: nextId('turn') }

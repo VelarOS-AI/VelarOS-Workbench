@@ -99,7 +99,6 @@ async function fixture(
     catalog: () => members,
     prepare: async (task) => {
       prepared.push(task)
-      if (task.newSession) members.push({ sessionId: task.sessionId, title: null })
       return {
         sink: { notice: () => undefined, state: () => undefined },
         finish: async () => {},
@@ -194,9 +193,11 @@ test('peers reject asks and tells before preparation while retaining directory r
 test('peers use the project catalog, inherit execution settings and return only their own input outcome', async () => {
   const f = await fixture()
   try {
-    assert.equal((await f.ports.a.list()).filter((peer) => peer.self)[0]?.id, 'a')
+    assert.deepEqual((await f.ports.a.list()).filter((peer) => peer.self), [
+      { id: 'a', title: 'a', running: false, self: true },
+    ])
     const answer = f.ports.a.ask(
-      { workspace: 'project', root: f.projectRoot, task: 'review src' },
+      { to: 'b', task: 'review src' },
       new AbortController().signal
     )
     await until(() => f.sent.length === 1)
@@ -204,7 +205,9 @@ test('peers use the project catalog, inherit execution settings and return only 
     assert.equal(request.sandbox, true)
     assert.equal(request.permissionMode, 'ask-every-time')
     assert.deepEqual(request.executionModes, [])
-    assert.equal(f.prepared[0]?.newSession, true)
+    assert.equal(f.prepared[0]?.sessionId, 'b')
+    assert.equal(f.prepared[0]?.projectRoot, f.projectRoot)
+    assert.equal(f.members.length, 3)
     let answered = false
     void answer.then(() => {
       answered = true
@@ -336,12 +339,8 @@ test('rejects cross-project and self targets and detects indirect waiting cycles
       code: 'NOT_FOUND',
     })
     await assert.rejects(
-      f.ports.a.ask({ workspace: 'system', task: 'system' }, controller.signal),
-      { code: 'PERMISSION' }
-    )
-    await assert.rejects(
-      f.ports.a.ask({ workspace: 'project', root: tmpdir(), task: 'outside' }, controller.signal),
-      { code: 'PERMISSION' }
+      f.ports.a.ask({ to: '', task: 'no target' }, controller.signal),
+      { code: 'NOT_FOUND' }
     )
     f.running.add('a')
     f.running.add('b')

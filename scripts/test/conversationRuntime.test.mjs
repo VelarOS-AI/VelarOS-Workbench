@@ -32,6 +32,7 @@ const built = spawnSync(
 assert.equal(built.status, 0, built.stderr)
 const {
   createWorkbenchConversationRuntime,
+  createWorkbenchConversationDispatcher,
   WorkbenchMemoryService,
   WorkbenchShellHostRegistry,
   WorkbenchSessionPeers,
@@ -626,7 +627,10 @@ test(
   { timeout: 30_000 },
   async (t) => {
     let peers
-    const members = [{ sessionId: 'session-1', title: '代码审查' }]
+    const members = [
+      { sessionId: 'session-1', title: '代码审查' },
+      { sessionId: 'session-peer', title: '代码检查' },
+    ]
     const prepared = []
     const outcomes = []
     const f = await fixture(
@@ -635,23 +639,27 @@ test(
         if (call === 1)
           yield execute(
             frame,
-            `// 交接代码检查\nimport {ask} from 'velaros:sessions';console.log('PEER:'+JSON.stringify(await ask({workspace:'project',root:${JSON.stringify(f.workspace)},task:'检查项目代码并回复 child-proof'})));`
+            "// 交接代码检查\nimport {ask} from 'velaros:sessions';console.log('PEER:'+JSON.stringify(await ask({to:'session-peer',task:'检查项目代码并回复 child-proof'})));"
           )
         else yield done(frame, call === 2 ? 'child-proof' : 'parent-proof')
         yield { type: 'finish', reason: 'stop' }
       },
       { sessions: (request) => peers.forSession(request) }
     )
+    const dispatcher = createWorkbenchConversationDispatcher(
+      f.runtime,
+      { has: () => false },
+      { remove: async () => {} }
+    )
     peers = new WorkbenchSessionPeers({
-      runtime: f.runtime,
+      runtime: dispatcher,
       assertAdmission: (request) => {
         assert.equal(request.projectRoot, f.workspace)
       },
       catalog: () => members,
       prepare: async (task) => {
         prepared.push(task)
-        members.push({ sessionId: task.sessionId, title: '代码检查' })
-        return f.sink
+        return { sink: f.sink, finish: async () => {} }
       },
       cancelPreparation: () => assert.fail('the prepared peer should be accepted'),
       prepareGuidance: async () => assert.fail('this case delegates a task, not guidance'),

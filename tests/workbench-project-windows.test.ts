@@ -71,6 +71,23 @@ async function projectTransitionFixture(
 }
 
 void describe('Workbench project window ownership', () => {
+  void test('project history survives startup without a window and closing the last project', async () => {
+    const fixture = await projectTransitionFixture(async () => {})
+    try {
+      const expected = fixture.manager.getRecentProjects()
+      assert.equal(expected[0]?.name, 'first')
+      fixture.window.emit('closed')
+      assert.deepEqual(fixture.manager.getRecentProjects(), expected)
+      const { WorkbenchWindowManager } = await import('../src/main/projects/WorkbenchWindowManager')
+      const restarted = new WorkbenchWindowManager(fixture.dataRoot, {
+        createBrowserWindow: () => { throw new Error('History must not need a window') },
+      })
+      assert.deepEqual(restarted.getRecentProjects(), expected)
+    } finally {
+      await rm(fixture.dataRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('failed clones preserve a concurrently created destination and partial clone files without opening a window', async () => {
     const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-clone-failure-'))
     const activeRoot = join(dataRoot, 'active')

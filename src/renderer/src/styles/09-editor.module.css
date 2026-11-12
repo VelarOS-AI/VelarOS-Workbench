@@ -887,6 +887,12 @@
   background: var(--workbench-hover);
 }
 
+.editorTabClose:not(.editorTabPin) > svg,
+.editorTabListClose > svg {
+  width: 10px;
+  height: 10px;
+}
+
 /* 固定标签：关闭按钮的位置上是图钉（点它取消固定），一直显示。 */
 .editorTabPin {
   opacity: 1;

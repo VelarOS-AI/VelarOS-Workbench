@@ -21,6 +21,31 @@ export function fileLanguage(path: Nullable<string>): string {
 
   const extension = path.split('.').at(-1)?.toLowerCase()
   switch (extension) {
+    case 'java': return 'Java'
+    case 'cs':
+    case 'csx': return 'C#'
+    case 'go': return 'Go'
+    case 'rs': return 'Rust'
+    case 'vue': return 'Vue'
+    case 'dart': return 'Dart'
+    case 'swift': return 'Swift'
+    case 'kt':
+    case 'kts': return 'Kotlin'
+    case 'wat':
+    case 'wast': return 'WebAssembly'
+    case 'wasm': return 'WebAssembly Binary'
+    case 'glsl':
+    case 'vert':
+    case 'frag':
+    case 'geom':
+    case 'tesc':
+    case 'tese':
+    case 'comp':
+    case 'vsh':
+    case 'fsh': return 'GLSL'
+    case 'less': return 'Less'
+    case 'sass': return 'Sass'
+    case 'scss': return 'SCSS'
     case 'ts':
     case 'tsx':
       return 'TypeScript'
