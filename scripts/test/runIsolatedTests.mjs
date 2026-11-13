@@ -82,7 +82,9 @@ async function main() {
   } finally {
     process.off('SIGINT', onSigint)
     process.off('SIGTERM', onSigterm)
-    const cleanup = await Promise.allSettled([...activeChildren.values()].map((owner) => owner.stop('SIGKILL')))
+    const cleanup = await Promise.allSettled(
+      [...activeChildren.values()].map((owner) => owner.stop('SIGKILL'))
+    )
     for (const result of cleanup) if (result.status === 'rejected') console.error(result.reason)
     if (activeChildren.size || unclosedTerminationCommands.size) process.exitCode = 1
   }
@@ -95,33 +97,48 @@ async function main() {
   }
 
   const elapsedSeconds = ((performance.now() - startedAt) / 1_000).toFixed(2)
-  const summary = failureCount === 0
-    ? `${testCount} tests across ${results.length} files passed in ${elapsedSeconds}s.`
-    : `${failureCount}/${results.length} test files failed after ${testCount} tests in ${elapsedSeconds}s.`
+  const summary =
+    failureCount === 0
+      ? `${testCount} tests across ${results.length} files passed in ${elapsedSeconds}s.`
+      : `${failureCount}/${results.length} test files failed after ${testCount} tests in ${elapsedSeconds}s.`
   console.info(`\n${summary}`)
 
   if (interruptedSignal) process.exitCode = interruptedSignal === 'SIGINT' ? 130 : 143
-  else if (failureCount > 0 || activeChildren.size || unclosedTerminationCommands.size) process.exitCode = 1
+  else if (failureCount > 0 || activeChildren.size || unclosedTerminationCommands.size)
+    process.exitCode = 1
 }
 
-export function runTestFile({ activeChildren, file, repositoryRoot, spawnChild = spawn, timeoutMs = testFileTimeoutMilliseconds }) {
+export function runTestFile({
+  activeChildren,
+  file,
+  repositoryRoot,
+  spawnChild = spawn,
+  timeoutMs = testFileTimeoutMilliseconds,
+}) {
   return new Promise((resolve) => {
     const startedAt = performance.now()
     const deadlineAt = Date.now() + timeoutMs
     const relativeFile = path.relative(repositoryRoot, file)
     const preload = path.join(repositoryRoot, 'scripts/test/setRepositoryCwd.mjs')
-    const child = spawnChild('bun', ['test', '--preload', preload, file], {
-      // Bun 1.3.13 loses piped child stdout when its initial cwd is this repository root.
-      // Initialize one level above it, then let the preload restore the cwd expected by tests.
-      cwd: path.dirname(repositoryRoot),
-      detached: process.platform !== 'win32',
-      env: {
-        ...process.env,
-        FORCE_COLOR: '0',
-        NO_COLOR: '1',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    // .test.mjs 是原生 Node 集成测试；更新器会把当前运行时复制为 node.exe。
+    // 在 Bun 中运行会改变 worker 的 IPC、进程退出和文件锁行为。
+    const nativeNode = file.endsWith('.test.mjs')
+    const child = spawnChild(
+      nativeNode ? process.execPath : 'bun',
+      nativeNode ? ['--test', file] : ['test', '--preload', preload, file],
+      {
+        // Bun 1.3.13 loses piped child stdout when its initial cwd is this repository root.
+        // Initialize one level above it, then let the preload restore the cwd expected by tests.
+        cwd: nativeNode ? repositoryRoot : path.dirname(repositoryRoot),
+        detached: process.platform !== 'win32',
+        env: {
+          ...process.env,
+          FORCE_COLOR: '0',
+          NO_COLOR: '1',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    )
     const stdout = []
     const stderr = []
     const owner = new OwnedChildProcess(child, { deadlineAt, label: `test ${relativeFile}` })
@@ -139,7 +156,9 @@ export function runTestFile({ activeChildren, file, repositoryRoot, spawnChild =
         ok: !!record && !timedOut && !stopped && !error && record.code === 0,
         signal: record?.signal ?? null,
         spawnError: error,
-        stderr: timedOut ? `${capturedStderr}\nTest file exceeded its ${timeoutMs}ms budget: ${relativeFile}\n` : capturedStderr,
+        stderr: timedOut
+          ? `${capturedStderr}\nTest file exceeded its ${timeoutMs}ms budget: ${relativeFile}\n`
+          : capturedStderr,
         stdout: capturedStdout,
         testCount: readTestCount(`${capturedStdout}\n${capturedStderr}`),
       })
@@ -188,7 +207,7 @@ function compareText(left, right) {
 
 function readTestCount(output) {
   const matches = [...output.matchAll(/Ran (\d+) tests? across \d+ files?/gu)]
-  return Number(matches.at(-1)?.[1] ?? 0)
+  return Number(matches.at(-1)?.[1] ?? output.match(/^# tests (\d+)$/mu)?.[1] ?? 0)
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : ''

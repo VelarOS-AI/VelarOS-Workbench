@@ -328,7 +328,7 @@
   transform: translateY(-50%);
 }
 
-/* 高亮线压在面板上沿那条缝的正中，与左右两条同粗细。 */
+/* 面板会裁掉外侧内容，整条 2px 高亮线放在内侧，避免只剩下半条 1px。 */
 .bottomToolWindowSlot > .horizontalResizeHandle::after {
   z-index: 2;
   top: 0;
@@ -336,7 +336,7 @@
   bottom: auto;
   left: 0;
   height: var(--workbench-resize-line-size);
-  transform: translateY(-50%);
+  transform: none;
 }
 
 .workbenchShell[data-workbench-viewport='narrow'] .ideUnifiedTopTrailing {
@@ -437,15 +437,27 @@
 }
 
 .horizontalResizeHandle::after {
-  inset: 0;
-  top: 1px;
-  bottom: 1px;
+  top: 50%;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  height: var(--workbench-resize-line-size);
+  transform: translateY(-50%);
 }
 
 .verticalResizeHandle:hover::after,
 .verticalResizeHandle:active::after,
 .horizontalResizeHandle:hover::after,
 .horizontalResizeHandle:active::after {
+  opacity: 1;
+  background: color-mix(in oklab, var(--workbench-theme-color) 55%, transparent);
+}
+
+.workbenchShell[data-pane-resizing='file'] .fileResizeHandle::after,
+.workbenchShell[data-pane-resizing='file'] .embeddedFileResizeHandle::after,
+.workbenchShell[data-pane-resizing='right'] .rightResizeHandle::after,
+.workbenchShell[data-pane-resizing='command'] .horizontalResizeHandle::after,
+.editorGroups[data-resizing='true'] .editorGroupResizeHandle::after {
   opacity: 1;
   background: color-mix(in oklab, var(--workbench-theme-color) 55%, transparent);
 }

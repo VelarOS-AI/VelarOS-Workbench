@@ -57,16 +57,20 @@ void describe('Workbench window and chat chrome details', () => {
     const modules = config.renderer?.css?.modules
     assert(modules && typeof modules.generateScopedName === 'function')
     const generateScopedName = modules.generateScopedName
-    const scopedName = (file: string): string => generateScopedName(
-      'root', path.resolve(file), ''
-    )
+    const scopedName = (file: string): string => generateScopedName('root', path.resolve(file), '')
 
     assert.equal(scopedName('src/renderer/src/styles/01-shell.module.css'), 'wb_root')
     assert.equal(scopedName('src/renderer/src/styles/15-overrides.module.css'), 'wb_root')
-    assert.equal(scopedName('src/renderer/src/styles/standaloneWorkbenchChat.module.css'), 'wb_root')
+    assert.equal(
+      scopedName('src/renderer/src/styles/standaloneWorkbenchChat.module.css'),
+      'wb_root'
+    )
     const debug = scopedName('src/renderer/src/styles/WorkbenchDebugPanel.module.css')
     assert.notEqual(debug, 'wb_root')
-    assert.notEqual(debug, scopedName('src/renderer/src/styles/WorkbenchRunConfigurationsDialog.module.css'))
+    assert.notEqual(
+      debug,
+      scopedName('src/renderer/src/styles/WorkbenchRunConfigurationsDialog.module.css')
+    )
     assert.notEqual(debug, scopedName('node_modules/@velaros-ai/ui/WorkbenchDebugPanel.module.css'))
     assert.equal(debug, scopedName('src/renderer/src/styles/WorkbenchDebugPanel.module.css?direct'))
   })
@@ -99,7 +103,10 @@ void describe('Workbench window and chat chrome details', () => {
     const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const shellStyles = readSource('src/renderer/src/styles/01-shell.module.css')
 
-    assert.match(main, /installWorkbenchEditorZoom\(window\)\n\s*installWorkbenchWindowState\(window\)/u)
+    assert.match(
+      main,
+      /installWorkbenchEditorZoom\(window\)\n\s*installWorkbenchWindowState\(window\)/u
+    )
     assert.match(main, /registerWorkbenchWindowStateIpc\(\)/u)
     assert.match(
       ipc,
@@ -107,14 +114,20 @@ void describe('Workbench window and chat chrome details', () => {
     )
     assert.match(preload, /exposeInMainWorld\('velarosWorkbenchWindowState', windowStateBridge\)/u)
     // 先订阅再补读；收到过推送后，晚回来的初始读取是旧值，不许盖掉推送。
-    assert.match(hook, /onChanged\([\s\S]*pushed = true[\s\S]*getState\(\)\.then\(\(state\) => \{\n\s*if \(!pushed\) apply\(state\)/u)
+    assert.match(
+      hook,
+      /onChanged\([\s\S]*pushed = true[\s\S]*getState\(\)\.then\(\(state\) => \{\n\s*if \(!pushed\) apply\(state\)/u
+    )
     assert.match(presentation, /const windowFullScreen = useWorkbenchWindowFullScreen\(\)/u)
     assert.match(presentation, /data-mac-title-inset=\{macTitleInset && !windowFullScreen\}/u)
     assert.match(
       shellStyles,
       /\[data-mac-title-inset='true'\] \.workbenchSettingsHeader \{\n\s*padding-left: 76px;/u
     )
-    assert.match(shellStyles, /\[data-mac-title-inset='true'\] \.leftToolRailColumn \{\n\s*padding-top: 36px;/u)
+    assert.match(
+      shellStyles,
+      /\[data-mac-title-inset='true'\] \.leftToolRailColumn \{\n\s*padding-top: 36px;/u
+    )
     assert.match(
       shellStyles,
       /\[data-mac-title-inset='true'\] \.embeddedKernelRoot\[data-file-panel-open='false'\] \.editorTabBar \{\n\s*padding-left: calc\(76px - var\(--workbench-left-rail-width\)\);/u
@@ -135,9 +148,8 @@ void describe('Workbench window and chat chrome details', () => {
       { channel: WorkbenchWindowStateChannels.changed, payload: { fullScreen: true } },
     ])
 
-    // 设置页与文件历史不是独立窗口：主进程只有一种界面 BrowserWindow，由创建项目窗口的工厂装上推送，
-    // 所以它们跟着所在的项目窗口一起拿到全屏状态。以后若另开界面窗口，这里会先失败。网上查资料的无头页面与
-    // Agent 浏览器的后台页面也是 BrowserWindow，但从不显示、没有界面，不需要全屏状态。
+    // 项目窗口装配全屏推送；设置使用系统原生标题栏的独立窗口。
+    // 网上查资料与 Agent 浏览器的后台页从不显示，不需要全屏推送。
     const windowFactories = listSourceFiles('src/main').filter((file) =>
       /new BrowserWindow\(/u.test(readSource(file))
     )
@@ -145,29 +157,34 @@ void describe('Workbench window and chat chrome details', () => {
       path.join('src/main', 'browser', 'WorkbenchBrowserBackgroundPages.ts'),
       path.join('src/main', 'conversation', 'WorkbenchWebSearchPages.ts'),
     ]
-    assert.deepEqual(windowFactories.sort(), [...hiddenPages, path.join('src/main', 'index.ts')].sort())
+    assert.deepEqual(
+      windowFactories.sort(),
+      [...hiddenPages, path.join('src/main', 'index.ts')].sort()
+    )
     for (const file of hiddenPages) assert.match(readSource(file), /show: false,/u, file)
-    assert.equal(readSource('src/main/index.ts').match(/new BrowserWindow\(/gu)?.length, 1)
+    assert.equal(readSource('src/main/index.ts').match(/new BrowserWindow\(/gu)?.length, 2)
+    assert.match(readSource('src/main/index.ts'), /frame: true,\s*titleBarStyle: 'default'/u)
   })
 
-  void test('drops the traffic-light inset on the settings page and never reserves it in file history', () => {
+  void test('uses native settings window controls and keeps file history inside the editor', () => {
     const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
-    const settingsDialog = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
+    const settingsDialog = readSource(
+      'src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx'
+    )
     const settingsStyles = readSource('src/renderer/src/styles/14-settings.module.css')
     const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
     const historyView = readSource('src/renderer/src/components/editor/FileHistoryView.tsx')
     const historyStyles = readSource('src/renderer/src/styles/10-history.module.css')
 
-    // 设置页是外壳里的同窗浮层（不走 portal），外壳上的 data-mac-title-inset 管得到它的标题行。
-    const shellStart = presentation.indexOf('data-mac-title-inset=')
-    const settingsAt = presentation.indexOf('<LazyWorkbenchSettingsDialog')
-    const quickOpenAt = presentation.indexOf('<LazyQuickOpen')
-    assert.ok(shellStart > 0 && shellStart < settingsAt && settingsAt < quickOpenAt)
+    assert.doesNotMatch(presentation, /LazyWorkbenchSettingsDialog/u)
+    assert.doesNotMatch(settingsDialog, /workbenchSettingsHeader|workbenchSettingsCloseButton/u)
     assert.doesNotMatch(settingsDialog, /createPortal/u)
-    // 左侧常规留白与侧栏导航文字对齐；76px 只在外壳标记了红绿灯空位时才撑出来。
-    const header = ruleBody(settingsStyles, '.workbenchSettingsHeader')
-    assert.match(header, /padding-inline: 18px 10px;/u)
-    assert.doesNotMatch(header, /76px/u)
+    assert.match(readSource('src/main/index.ts'), /frame: true,\s*titleBarStyle: 'default'/u)
+    assert.match(
+      readSource('src/renderer/src/app/StandaloneWorkbenchSettingsWindow.tsx'),
+      /WorkbenchSettingsDialog/u
+    )
+    assert.doesNotMatch(settingsStyles, /-webkit-app-region: drag/u)
 
     // 文件历史在编辑区里就地展开，头部压不到红绿灯，也不是窗口拖拽区。
     assert.match(editorPanel, /<FileHistoryView/u)
@@ -194,8 +211,7 @@ void describe('Workbench window and chat chrome details', () => {
     // 顺序只有一个主人：别处再引一次共享全局样式，就可能把它们重新排到应用模块后面。
     const otherOwners = listSourceFiles('src/renderer').filter(
       (file) =>
-        !file.endsWith('globalStyles.ts')
-        && /['"]@velaros-ai\/ui\/styles\//u.test(readSource(file))
+        !file.endsWith('globalStyles.ts') && /['"]@velaros-ai\/ui\/styles\//u.test(readSource(file))
     )
     assert.deepEqual(otherOwners, [])
   })
@@ -204,8 +220,12 @@ void describe('Workbench window and chat chrome details', () => {
     const settingsStyles = readSource('src/renderer/src/styles/14-settings.module.css')
     const overrides = readSource('src/renderer/src/styles/15-overrides.module.css')
     const chatStyles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
-    const bubble = readSource('node_modules/@velaros-ai/ui/dist/conversation/blocks/MessageBubble.module.css')
-    const pane = readSource('node_modules/@velaros-ai/ui/dist/conversation/shell/ChatConversationPane.module.css')
+    const bubble = readSource(
+      'node_modules/@velaros-ai/ui/dist/conversation/blocks/MessageBubble.module.css'
+    )
+    const pane = readSource(
+      'node_modules/@velaros-ai/ui/dist/conversation/shell/ChatConversationPane.module.css'
+    )
 
     // 按钮去阴影仍是两个类的分量（发送按钮有内容时的投影照旧压住），只给原语同分量的聚焦环与分段控件选中项的
     // 悬停投影让路；标签 / 面板里两个类的那组也不压阴影，带子选择器或元素名、特异性更高的那组一直连聚焦环一起
@@ -213,19 +233,34 @@ void describe('Workbench window and chat chrome details', () => {
     assert.match(settingsStyles, /\n\.root \[data-slot='button'\] \{\n\s*transform: none;\n\}/u)
     assert.match(
       settingsStyles,
-      /\n\.root :global\(\[data-slot='button'\]:where\(:not\(:focus-visible, \.velar-segmented-control-active:hover\)\)\) \{\n\s*box-shadow: none;\n\}/u
+      /\n\.root\s+:global\(\[data-slot='button'\]:where\(:not\(:focus-visible, \.velar-segmented-control-active:hover\)\)\) \{\n\s*box-shadow: none;\n\}/u
     )
     const primitives = 'node_modules/@velaros-ai/ui/dist/styles/components/primitives'
-    assert.match(readSource(`${primitives}/button.css`), /\n\.velar-button:focus-visible \{\n\s*box-shadow:/u)
+    assert.match(
+      readSource(`${primitives}/button.css`),
+      /\n\.velar-button:focus-visible \{\n\s*box-shadow:/u
+    )
     assert.match(
       readSource(`${primitives}/segmented-control.css`),
       /\.velar-segmented-control-active:hover \{[^}]*box-shadow:/u
     )
-    assert.doesNotMatch(ruleBody(overrides, '.workbenchShell .workbenchContextMenuItem'), /box-shadow/u)
-    assert.match(ruleBody(overrides, '.workbenchShell .editorTabContextMenu button'), /box-shadow: none;/u)
+    assert.doesNotMatch(
+      ruleBody(overrides, '.workbenchShell .workbenchContextMenuItem'),
+      /box-shadow/u
+    )
+    assert.match(
+      ruleBody(overrides, '.workbenchShell .editorTabContextMenu button'),
+      /box-shadow: none;/u
+    )
     // 共享包这两条规则还在，Workbench 的钉住才有意义；共享包改了取值就该回来重新定夺。
-    assert.match(bubble, /\n\.textContent \{[^}]*line-height: calc\(var\(--spacing, 0\.25rem\) \* 6\);/u)
-    assert.match(pane, /\n\.messageListInnerSide \{[^}]*gap: calc\(var\(--spacing, 0\.25rem\) \* 3\);/u)
+    assert.match(
+      bubble,
+      /\n\.textContent \{[^}]*line-height: calc\(var\(--spacing, 0\.25rem\) \* 6\);/u
+    )
+    assert.match(
+      pane,
+      /\n\.messageListInnerSide \{[^}]*gap: (?:calc\(var\(--spacing, 0\.25rem\) \* 3\)|var\(--chat-message-gap, var\(--ui-space-3\)\));/u
+    )
     assert.match(
       chatStyles,
       /\.workbenchChatBody :global\(\.velar-paragraph\)\[class\*='_textContent'\] \{\n\s*line-height: var\(--ui-line-default\);/u
@@ -236,7 +271,7 @@ void describe('Workbench window and chat chrome details', () => {
     )
   })
 
-  void test('places settings and run below chat in the right tool rail without a top bar', () => {
+  void test('places settings first, then chat and run in the right tool rail without a top bar', () => {
     const topStyles = readSource('src/renderer/src/styles/02-chrome-top.module.css')
     const layoutStyles = readSource('src/renderer/src/styles/03-layout.module.css')
     const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
@@ -245,11 +280,14 @@ void describe('Workbench window and chat chrome details', () => {
     assert.doesNotMatch(topStyles, /ideUnifiedTopBar/u)
     assert.match(
       presentation,
-      /className=\{styles\.rightToolWindowGroup\}>\s*<WorkbenchAgentRail[\s\S]*?<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/u
+      /className=\{styles\.rightToolWindowGroup\}>\s*<WorkbenchSettingsAction[^>]*\/>\s*<WorkbenchAgentRail[\s\S]*?<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/u
     )
     // 三个按钮共用工具条中线，尺寸由 icon-sm 预设决定，悬停说明向左弹出。
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
-    assert.match(toolbar, /function WorkbenchTopIconAction[\s\S]*<IconButton\n\s*variant="ghost"\n\s*size="icon-sm"/u)
+    assert.match(
+      toolbar,
+      /function WorkbenchTopIconAction[\s\S]*<IconButton\n\s*variant="ghost"\n\s*size="icon-sm"/u
+    )
     assert.match(toolbar, /tooltip=\{settingsLabel\}[\s\S]*<WorkbenchRunAction/u)
     assert.match(toolbar, /className=\{styles\.topRunButton\}\n\s*tooltipSide="left"/u)
     assert.doesNotMatch(topStyles, /\.topToolbarIconButton/u)
@@ -260,16 +298,17 @@ void describe('Workbench window and chat chrome details', () => {
     )
     assert.match(topStyles, /\n\.topRunButton \{\n\s*color: var\(--status-green\);\n\}/u)
     assert.match(layoutStyles, /\.rightToolStrip \{\n\s*@apply [^;]*\bitems-center\b/u)
-    assert.match(layoutStyles, /\.rightToolRail \{[^}]*width: var\(--workbench-right-rail-width\);/u)
+    assert.match(
+      layoutStyles,
+      /\.rightToolRail \{[^}]*width: var\(--workbench-right-rail-width\);/u
+    )
   })
 
   void test('keeps only the progress ring on the composer context gauge', () => {
     const indicator = readSource(
       'src/renderer/src/runtime/conversation/WorkbenchContextUsageIndicator.tsx'
     )
-    const styles = readSource(
-      'src/renderer/src/styles/WorkbenchContextUsageIndicator.module.css'
-    )
+    const styles = readSource('src/renderer/src/styles/WorkbenchContextUsageIndicator.module.css')
     const sharedGauge = readSource(
       'node_modules/@velaros-ai/ui/dist/conversation/status/ChatContextUsageGauge.module.css'
     )
@@ -301,9 +340,15 @@ void describe('Workbench window and chat chrome details', () => {
     assert.match(sharedList, /\n\.removed \{\n\s*color: var\(--status-red\);/u)
     // 行收到 30px：上下 4px + 22px 的箭头按钮；箭头按钮的 22px 由共享列表自己的 `.fileExpandButton` 给出，
     // 与它那条 22px 网格列同宽，卡片不再另外钉尺寸。
-    assert.match(styles, /\.root \[class\*='_fileButton'\] \{\n\s*min-height: 30px;\n\s*padding-block: 4px;/u)
+    assert.match(
+      styles,
+      /\.root \[class\*='_fileButton'\] \{\n\s*min-height: 30px;\n\s*padding-block: 4px;/u
+    )
     assert.doesNotMatch(styles, /_fileExpandButton/u)
-    assert.match(sharedList, /\.fileButton \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto auto 22px;/u)
+    assert.match(
+      sharedList,
+      /\.fileButton \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto auto 22px;/u
+    )
     assert.match(sharedList, /\n\.fileExpandButton \{[^}]*width: 22px;\n\s*height: 22px;/u)
   })
 })

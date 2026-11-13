@@ -96,7 +96,7 @@ apply to engine sessions.
 
 ## Development
 
-当前使用 Platform `v0.7.3` 正式发布的配套 Velaros / capabilities `0.9.2`，UI 版本为 `1.0.0`。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+当前使用 Platform `v0.7.13` 正式发布的配套 Velaros / capabilities `0.12.1`，UI 版本为 `1.1.3`。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
 
 `resources/runtime-snapshot.json` 分别记录 Platform 和 UI 正式发布的来源、版本与哈希，锁文件固定完整依赖。
 首次使用从声明的 GitHub Release 恢复归档；已有缓存时可用 `--verify-only` 离线核验：
@@ -120,7 +120,7 @@ overrides / resolutions 仅用于开发配置，正式产品清单与发布库�
 更新受控清单和快照后用 Bun 刷新锁文件，审查再提交。
 正式发布门只接受已发布来源；此前 0.9.1 的本机候选来源与消费证明保留为历史证据，不再是当前发行状态。
 源码仓库中的旧 CI 与锁文件刷新
-Actions 仍是静态停用哨兵；正式发布由 Desktop 仓库的 `release-workbench.yml` 承载，使用固定 Workbench 提交在各平台原生 runner 上检查与打包。
+Actions 仍是静态停用哨兵；正式发布由本公开仓库的 `release-workbench.yml` 承载，使用固定 Workbench 提交在各平台原生 runner 上检查与打包。
 
 Platform 的本地存储用 `node:sqlite`，bun 里没有：会话运行时的集成测试
 （`scripts/test/conversationRuntime.test.mjs`）先用 bun 打包，再在 Node 里跑，`bun run test` 已包含它。
@@ -143,8 +143,8 @@ package path); `afterPack` checks that every static import of those packages res
 `app.asar`. Release staging verifies pinned dependency snapshots and registry packages before an official build. Signing and notarization credentials are supplied by the release
 environment; they are never stored in this repository. Official packages and candidates are produced
 on matching native hosts, either locally or through the
-[Workbench release workflow](https://github.com/VelarOS-AI/VelarOS-Desktop/actions/workflows/release-workbench.yml)
-hosted in Desktop's existing signing environment. Native builds may run in parallel; platform
+[Workbench release workflow](https://github.com/VelarOS-AI/VelarOS-Workbench/actions/workflows/release-workbench.yml)
+hosted in this repository's `release-candidates` environment. Native builds may run in parallel; platform
 finalization is serialized to preserve every verified platform in the signed catalog. Electron Builder
 publishing remains disabled, and this repository's old CI sentinels remain inactive.
 

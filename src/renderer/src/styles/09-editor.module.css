@@ -1927,6 +1927,13 @@
   opacity: 1;
 }
 
+/* Other CodeMirror views register a shared active-line base theme. Reset it here
+ * before applying this editor's focus/interaction policy. */
+.codeMirrorEditor :global(.cm-editor .cm-activeLine),
+.codeMirrorEditor :global(.cm-editor .cm-activeLineGutter) {
+  background: transparent;
+}
+
 .codeMirrorEditor :global(.cm-focused:not(.cm-workbenchActiveLineSuppressed) .cm-activeLine) {
   background: var(--workbench-editor-active-line);
 }

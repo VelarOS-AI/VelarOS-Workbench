@@ -11,6 +11,7 @@ import type { WorkbenchMemoryBridge } from './workbenchMemory'
 import type { WorkbenchModelBridge } from './workbenchModel'
 import type { WorkbenchProductAnalyticsBridge } from './workbenchProductAnalytics'
 import type { WorkbenchSessionPeersBridge } from './workbenchSessionPeers'
+import type { WorkbenchSettingsWindowBridge } from './workbenchSettingsWindow'
 import type { WorkbenchTerminalBridge } from './workbenchTerminal'
 import type { WorkbenchUpdateBridge } from './workbenchUpdate'
 import type { WorkbenchWatchBridge } from './workbenchWatch'
@@ -20,6 +21,7 @@ import type { WorkbenchWorkspaceBridge } from './workbenchWorkspace'
 
 declare global {
   interface Window {
+    velarosWorkbenchSettingsWindow: WorkbenchSettingsWindowBridge
     velarosWorkbenchAccount: WorkbenchAccountBridge
     velarosWorkbenchBrowser: WorkbenchBrowserBridge
     velarosWorkbenchAgentProcesses: WorkbenchAgentProcessesBridge

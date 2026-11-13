@@ -24,10 +24,22 @@ export type WorkbenchBuiltinFilePresentationVariant =
   | 'typescript'
   | 'velarscript'
   | 'yaml'
+  | 'java'
+  | 'csharp'
+  | 'go'
+  | 'rust'
+  | 'vue'
+  | 'dart'
+  | 'swift'
+  | 'kotlin'
+  | 'webassembly'
+  | 'glsl'
+  | 'python'
+  | 'html'
+  | 'sql'
 
 export type WorkbenchFilePresentationVariant =
-  | WorkbenchBuiltinFilePresentationVariant
-  | (string & {})
+  WorkbenchBuiltinFilePresentationVariant | (string & {})
 
 export interface WorkbenchFilePresentationInput {
   fileName?: LooseOptional<string>
@@ -42,9 +54,7 @@ export interface WorkbenchFilePresentation {
 
 export interface WorkbenchFileIconContribution {
   id: string
-  resolve: (
-    input: WorkbenchFilePresentationInput
-  ) => Nullable<WorkbenchFilePresentation>
+  resolve: (input: WorkbenchFilePresentationInput) => Nullable<WorkbenchFilePresentation>
 }
 
 const FileIconContributions = new Map<string, WorkbenchFileIconContribution>()
@@ -85,26 +95,36 @@ function resolveBuiltinFilePresentation(
   if (LockFileNames.has(name)) return { variant: 'lock' }
   if (extension === 'yaml' || extension === 'yml') return { variant: 'yaml' }
   if (
-    ConfigFileNames.has(name)
-    || name.startsWith('.env')
-    || name.startsWith('.eslintrc')
-    || name.startsWith('.prettierrc')
+    ConfigFileNames.has(name) ||
+    name.startsWith('.env') ||
+    name.startsWith('.eslintrc') ||
+    name.startsWith('.prettierrc')
     // tsconfig.json 这类 JSON 写的配置用 JSON 图标，只有 .editorconfig、.npmrc 这类键值格式的用配置（INI）图标。
-  ) return { variant: extension === 'json' || extension === 'jsonc' ? 'json' : 'config' }
+  )
+    return { variant: extension === 'json' || extension === 'jsonc' ? 'json' : 'config' }
 
   switch (extension) {
     case 'java':
+      return { variant: 'java', color: '#c74634' }
     case 'cs':
     case 'csx':
+      return { variant: 'csharp', color: '#8b5cf6' }
     case 'go':
+      return { variant: 'go', color: '#0891b2' }
     case 'rs':
+      return { variant: 'rust', color: '#b45309' }
     case 'vue':
+      return { variant: 'vue', color: '#23966b' }
     case 'dart':
+      return { variant: 'dart', color: '#0284c7' }
     case 'swift':
+      return { variant: 'swift', color: '#e85d26' }
     case 'kt':
     case 'kts':
+      return { variant: 'kotlin', color: '#a855f7' }
     case 'wat':
     case 'wast':
+      return { variant: 'webassembly', color: '#654ff0' }
     case 'glsl':
     case 'vert':
     case 'frag':
@@ -114,7 +134,15 @@ function resolveBuiltinFilePresentation(
     case 'comp':
     case 'vsh':
     case 'fsh':
-      return { variant: 'code' }
+      return { variant: 'glsl', color: '#ad4d8b' }
+    case 'py':
+    case 'pyi':
+      return { variant: 'python', color: '#3876ab' }
+    case 'htm':
+    case 'html':
+      return { variant: 'html', color: '#e05a32' }
+    case 'sql':
+      return { variant: 'sql', color: '#3b82b6' }
     case 'css':
       return { variant: 'css' }
     case 'less':
@@ -156,9 +184,8 @@ function resolveBuiltinFilePresentation(
 }
 
 /**
- * Framework-specific icons stay out of Workbench core. A future renderer plugin
- * can register a contribution before the project tree is assembled and remove it
- * again during plugin teardown.
+ * Renderer contributions may override the built-in file and language icons
+ * before the project tree is assembled, and remove their overrides on teardown.
  */
 export function registerWorkbenchFileIconContribution(
   contribution: WorkbenchFileIconContribution

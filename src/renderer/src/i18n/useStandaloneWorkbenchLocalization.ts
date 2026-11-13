@@ -5,7 +5,7 @@
  * locale 状态由应用自持（localStorage 持久化，初始跟随系统语言），经
  * `WorkbenchI18nContextValue` 契约喂给单体源码内的 LocalizationProvider。
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   type WorkbenchI18nContextValue,
   type WorkbenchTranslateParams,
@@ -67,6 +67,14 @@ export function translateWorkbenchAppMessage(
 
 export function useStandaloneWorkbenchLocalization(): WorkbenchI18nContextValue {
   const [locale, setLocale] = useState<AppLocale>(readWorkbenchAppLocale)
+
+  useEffect(() => {
+    const syncLocale = (event: StorageEvent): void => {
+      if (event.key === LOCALE_STORAGE_KEY) setLocale(readWorkbenchAppLocale())
+    }
+    window.addEventListener('storage', syncLocale)
+    return () => window.removeEventListener('storage', syncLocale)
+  }, [])
 
   return useMemo<WorkbenchI18nContextValue>(
     () => ({

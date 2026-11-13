@@ -227,6 +227,30 @@ void describe('language worker client', () => {
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDiagnostics'), 90_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getProjectDiagnostics'), 30_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('projectFilesChanged'), 15_000)
+    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getHover', true), 45_000)
+    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDiagnostics', true), 90_000)
+    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('projectFilesChanged', true), 15_000)
+  })
+
+  void test('initial analysis gets a cold-start budget once per project and resets after release', async () => {
+    const initializing: boolean[] = []
+    const client = new WorkbenchLanguageServiceWorkerClient(
+      (options) => new FakeLanguageServiceWorker('respond', options),
+      (operation, cold) => {
+        if (operation === 'getDefinition') initializing.push(cold ?? false)
+        return 1_000
+      }
+    )
+    try {
+      await client.getDefinition(request)
+      await client.getDefinition(request)
+      await client.getDefinition({ ...request, projectRoot: '/another-project' })
+      await client.invalidateProject({ projectRoot: request.projectRoot })
+      await client.getDefinition(request)
+      assert.deepEqual(initializing, [true, false, true, true])
+    } finally {
+      await client.dispose()
+    }
   })
 
   void test('a queued interactive timeout preserves a worker still within its diagnostic budget', async () => {
@@ -253,6 +277,26 @@ void describe('language worker client', () => {
     await next
     assert.equal(created, 1)
     await client.dispose()
+  })
+
+  void test('a lifecycle timeout does not restart a worker still initializing a project', async () => {
+    let worker!: FakeLanguageServiceWorker
+    const client = new WorkbenchLanguageServiceWorkerClient(
+      (options) => (worker = new FakeLanguageServiceWorker('silent', options)),
+      (operation) => operation === 'projectFilesChanged' ? 15 : 200,
+      { hangTimeoutMs: 20 }
+    )
+    const initializing = client.getDefinition(request)
+    try {
+      await assert.rejects(client.projectFilesChanged({ projectRoot: request.projectRoot, paths: ['src/index.ts'] }), /请求超时/u)
+      await sleep(45)
+      assert.equal(worker.terminated, false)
+      worker.reply(worker.requests[0]!)
+      worker.replyToPing()
+      await initializing
+    } finally {
+      await client.dispose()
+    }
   })
 
   void test('a genuinely hung diagnostic is still restarted when its existing budget expires', async () => {

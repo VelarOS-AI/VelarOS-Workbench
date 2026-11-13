@@ -77,7 +77,10 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(presentation, /placement="rail"|rightToolActionGroup/)
     const embedded = readSource('src/renderer/src/components/embedded/WorkbenchEmbeddedKernel.tsx')
     const filePanel = readSource('src/renderer/src/components/files/FilePanel.tsx')
-    assert.match(presentation, /<WorkbenchEmbeddedKernel[\s\S]*projectControls=\{[\s\S]*<WorkbenchProjectControl/)
+    assert.match(
+      presentation,
+      /<WorkbenchEmbeddedKernel[\s\S]*projectControls=\{[\s\S]*<WorkbenchProjectControl/
+    )
     assert.match(embedded, /<FilePanel\s*projectControls=\{projectControls\}/)
     assert.match(filePanel, /\{projectControls \?\? \(/)
     assert.doesNotMatch(presentation, /ideUnifiedTopBar/)
@@ -314,8 +317,9 @@ void describe('pre-split Workbench shell parity', () => {
     // 运行中的展示由主进程逐条推来的会话通知落到发起那一轮的会话上；停止走会话通道的取消。
     assert.match(
       adapter,
-      /window\.velarosWorkbenchConversation\.onEvent\(\s*applyConversationEnvelope\s*\)/
+      /window\.velarosWorkbenchConversation\.onEvent\(\(envelope\) => conversationRecovery\.receive\(envelope\)\)/
     )
+    assert.match(adapter, /apply:\s*applyConversationEnvelope/)
     assert.match(adapter, /applyWorkbenchConversationNotice\(/)
     assert.match(adapter, /canStop:\s*isRunActive/)
     assert.match(adapter, /velarosWorkbenchConversation\.cancel\(/)
@@ -331,9 +335,7 @@ void describe('pre-split Workbench shell parity', () => {
     const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
     const messageHost = readSource('src/renderer/src/runtime/workbenchMessageHost.tsx')
     const progress = readSource('src/renderer/src/components/WorkbenchUpdateProgress.tsx')
-    const progressStyles = readSource(
-      'src/renderer/src/styles/WorkbenchUpdateProgress.module.css'
-    )
+    const progressStyles = readSource('src/renderer/src/styles/WorkbenchUpdateProgress.module.css')
 
     assert.match(statusBar, /<WorkbenchUpdateProgress \/>/)
     assert.doesNotMatch(messageHost, /WorkbenchUpdateProgress/)
@@ -349,7 +351,10 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(progress, /velarosWorkbenchUpdate\.pause\(\)/)
     assert.match(progress, /velarosWorkbenchUpdate\.resume\(\)/)
     assert.match(progress, /onClick=\{toggle\}/)
-    assert.match(progress, /updateLabel\(state\.phase, percent, targetVersion, t\)/)
+    assert.match(
+      progress,
+      /updateLabel\(state\.phase, percent, targetVersion, state\.retryAttempt \?\? 1, t\)/
+    )
   })
 
   void test('separates workspace snapshots, fixed overview, tab scopes, and folder state', () => {
@@ -373,12 +378,13 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(tabs, /\{tab\.onClose && \(/)
   })
 
-  void test('groups related settings into four product-level sections', () => {
+  void test('groups settings into five categories with project details inside Account', () => {
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     const sectionIds = [...settings.matchAll(/id: '([a-z]+)' as const/g)].map((match) => match[1])
 
-    assert.deepEqual(sectionIds, ['general', 'editor', 'ai', 'system'])
-    assert.match(settings, /renderGeneralSection\(\)/)
+    assert.deepEqual(sectionIds, ['appearance', 'editor', 'ai', 'system', 'account'])
+    assert.match(settings, /<WorkbenchAppearanceSettings/)
+    assert.match(settings, /renderAccountSection\(\)/)
     assert.match(settings, /renderEditorGroup\(\)/)
     assert.match(settings, /renderAiSection\(\)/)
     assert.match(settings, /renderSystemSection\(\)/)
@@ -401,7 +407,7 @@ void describe('pre-split Workbench shell parity', () => {
     )
     const updatesSection = settings.slice(
       settings.indexOf('function renderUpdatesSection'),
-      settings.indexOf('function renderGeneralSection')
+      settings.indexOf('function navigateToSection')
     )
 
     assert.doesNotMatch(languageSection, /settingsUpdateChannel/)
@@ -411,7 +417,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(updatesSection, /value: 'canary'/)
   })
 
-  void test('keeps compact settings actions on their subsection headers', () => {
+  void test('keeps account actions grouped and reset actions with their settings', () => {
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     const projectSection = settings.slice(
       settings.indexOf('function renderProjectSection'),
@@ -421,17 +427,12 @@ void describe('pre-split Workbench shell parity', () => {
       settings.indexOf('function renderAccountSection'),
       settings.indexOf('function renderEditorSection')
     )
-    const appearanceSection = settings.slice(
-      settings.indexOf('function renderAppearanceSection'),
-      settings.indexOf('function renderProjectSection')
+    const appearanceSection = readSource(
+      'src/renderer/src/components/settings/WorkbenchAppearanceSettings.tsx'
     )
     const keymapSection = settings.slice(
       settings.indexOf('function renderKeymapSection'),
-      settings.indexOf('function renderLanguageSection')
-    )
-    const generalSection = settings.slice(
-      settings.indexOf('function renderGeneralSection'),
-      settings.indexOf('function renderEditorGroup')
+      settings.indexOf('function renderAdvancedSection')
     )
     const editorSection = settings.slice(
       settings.indexOf('function renderEditorGroup'),
@@ -439,9 +440,15 @@ void describe('pre-split Workbench shell parity', () => {
     )
 
     assert.equal(projectSection.match(/<SettingRow/g)?.length, 1)
-    assert.equal(accountSection.match(/<SettingRow/g)?.length, 1)
+    assert.match(accountSection, /workbenchSettingsAccountIdentity/)
+    assert.match(accountSection, /changeAccount\(account \? 'sign-out' : 'sign-in'\)/)
+    assert.match(
+      accountSection,
+      /settingsProjectDescription[\s\S]*defaultOpen=\{false\}[\s\S]*renderProjectSection\(\)/
+    )
     assert.doesNotMatch(accountSection, /settingsAccountSignedIn/)
-    assert.doesNotMatch(appearanceSection, /settingsResetAppearance/)
+    assert.match(appearanceSection, /settingsResetAppearance/)
+    assert.match(appearanceSection, /onClick=\{onResetPreferences\}/)
     assert.doesNotMatch(keymapSection, /settingsResetKeymap/)
     const hasHeaderAction = (source: string, label: string): boolean => {
       const file = ts.createSourceFile(
@@ -467,7 +474,6 @@ void describe('pre-split Workbench shell parity', () => {
       }
       return !!visit(file)
     }
-    assert(hasHeaderAction(generalSection, 'workbench.settingsResetAppearance'))
     assert(hasHeaderAction(editorSection, 'workbench.settingsResetKeymap'))
   })
 

@@ -1,11 +1,17 @@
 import {
+  BirdIcon,
   BracketsCurlyIcon,
+  CodeBlockIcon,
+  CoffeeIcon,
+  DiamondIcon,
   FileArchiveIcon,
   FileAudioIcon,
   FileCodeIcon,
+  FileCSharpIcon,
   FileCssIcon,
   FileCsvIcon,
   FileDocIcon,
+  FileHtmlIcon,
   FileIcon,
   FileImageIcon,
   FileIniIcon,
@@ -15,15 +21,22 @@ import {
   FileMdIcon,
   FilePdfIcon,
   FilePptIcon,
+  FilePyIcon,
+  FileSqlIcon,
   FileTextIcon,
   FileTsIcon,
   FileTsxIcon,
   FileVideoIcon,
   FileXlsIcon,
+  GearSixIcon,
   GitDiffIcon,
+  HexagonIcon,
   type Icon,
   type IconProps,
+  LightningIcon,
   ProhibitIcon,
+  TriangleIcon,
+  WindIcon,
 } from '@phosphor-icons/react'
 import {
   resolveWorkbenchFilePresentation,
@@ -65,6 +78,19 @@ const BuiltinFileIcons: Partial<Record<WorkbenchBuiltinFilePresentationVariant, 
   tsx: FileTsxIcon,
   typescript: FileTsIcon,
   video: FileVideoIcon,
+  java: CoffeeIcon,
+  csharp: FileCSharpIcon,
+  go: WindIcon,
+  rust: GearSixIcon,
+  vue: TriangleIcon,
+  dart: DiamondIcon,
+  swift: BirdIcon,
+  kotlin: LightningIcon,
+  webassembly: CodeBlockIcon,
+  glsl: HexagonIcon,
+  python: FilePyIcon,
+  html: FileHtmlIcon,
+  sql: FileSqlIcon,
 }
 
 const BuiltinFileIconColors: Partial<Record<WorkbenchBuiltinFilePresentationVariant, string>> = {
@@ -104,9 +130,7 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
   const iconColor = color ?? presentation.color ?? BuiltinFileIconColors[builtinVariant]
 
   if (presentation.variant !== 'velarscript' && presentation.variant !== 'yaml') {
-    const IconComponent = presentation.icon
-      ?? BuiltinFileIcons[builtinVariant]
-      ?? FileCodeIcon
+    const IconComponent = presentation.icon ?? BuiltinFileIcons[builtinVariant] ?? FileCodeIcon
     return (
       <IconComponent
         {...iconProps}
@@ -124,33 +148,34 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
     ? [style?.transform, 'scaleX(-1)'].filter(Boolean).join(' ')
     : style?.transform
 
-  if (presentation.variant === 'yaml') return (
-    <svg
-      {...iconProps}
-      xmlns="http://www.w3.org/2000/svg"
-      data-yaml-mark="yml"
-      data-file-icon-kind="yaml"
-      width={size}
-      height={size}
-      viewBox="0 0 256 256"
-      fill={iconColor ?? 'currentColor'}
-      aria-hidden={iconProps['aria-label'] ? undefined : true}
-      style={transform ? { ...style, transform, transformOrigin: 'center' } : style}
-    >
-      {alt && <title>{alt}</title>}
-      <path d="M208 88h-56V32Z" opacity="0.2" />
-      <path d="M213.66 82.34l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v72a8 8 0 0 0 16 0V40h88v48a8 8 0 0 0 8 8h48v120h-16a8 8 0 0 0 0 16h16a16 16 0 0 0 16-16V88a8 8 0 0 0-2.34-5.66ZM160 51.31 188.69 80H160Z" />
-      <path
-        d="m28 152 22 28 22-28M50 180v28M90 208v-56l24 32 24-32v56m24-56v56h38"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="14"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ color: iconColor ?? 'currentColor' }}
-      />
-    </svg>
-  )
+  if (presentation.variant === 'yaml')
+    return (
+      <svg
+        {...iconProps}
+        xmlns="http://www.w3.org/2000/svg"
+        data-yaml-mark="yml"
+        data-file-icon-kind="yaml"
+        width={size}
+        height={size}
+        viewBox="0 0 256 256"
+        fill={iconColor ?? 'currentColor'}
+        aria-hidden={iconProps['aria-label'] ? undefined : true}
+        style={transform ? { ...style, transform, transformOrigin: 'center' } : style}
+      >
+        {alt && <title>{alt}</title>}
+        <path d="M208 88h-56V32Z" opacity="0.2" />
+        <path d="M213.66 82.34l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v72a8 8 0 0 0 16 0V40h88v48a8 8 0 0 0 8 8h48v120h-16a8 8 0 0 0 0 16h16a16 16 0 0 0 16-16V88a8 8 0 0 0-2.34-5.66ZM160 51.31 188.69 80H160Z" />
+        <path
+          d="m28 152 22 28 22-28M50 180v28M90 208v-56l24 32 24-32v56m24-56v56h38"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="14"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ color: iconColor ?? 'currentColor' }}
+        />
+      </svg>
+    )
 
   return (
     <svg

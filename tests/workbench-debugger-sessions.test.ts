@@ -105,7 +105,9 @@ void describe('starting a debug session', () => {
     try {
       // 若漏隔离，Node 会在调试器连上前因这个不存在的预加载模块退出。
       process.env.NODE_OPTIONS = '--require=./missing-host-preload.cjs'
-      const first = await project.start({ target: { kind: 'node-script', script: 'main.cjs', argv: [] } })
+      const first = await project.start({
+        target: { kind: 'node-script', script: 'main.cjs', argv: [] },
+      })
       assert.equal((await project.next('paused')).sessionId, first.sessionId)
       assert.equal(project.launched[0]!.env.NODE_OPTIONS, '')
       await project.sessions.controlDebugSession(
@@ -221,7 +223,10 @@ void describe('starting a debug session', () => {
       const launched = project.launched[0]!
       assert.match(launched.argv[0]!, /^--inspect-brk=127\.0\.0\.1:\d+$/u)
       assert.deepEqual(launched.argv.slice(1), [
-        join(project.root, 'node_modules/fake-runner/bin/run.cjs'), 'case.cjs', '--name', 'two words',
+        join(project.root, 'node_modules/fake-runner/bin/run.cjs'),
+        'case.cjs',
+        '--name',
+        'two words',
       ])
       assert.equal(started.cwd, join(project.root, 'packages/app'))
 
@@ -256,9 +261,12 @@ void describe('starting a debug session', () => {
       ] satisfies WorkbenchDebuggerLaunchTarget[]) {
         await assert.rejects(project.start({ target }), /的可执行入口/u)
       }
-      await assert.rejects(project.start({
-        target: { kind: 'node-package-bin', packageName: '../outside', argv: [] },
-      }), { code: 'VALIDATION' })
+      await assert.rejects(
+        project.start({
+          target: { kind: 'node-package-bin', packageName: '../outside', argv: [] },
+        }),
+        { code: 'VALIDATION' }
+      )
       assert.equal(project.launched.length, 1)
     } finally {
       await project.dispose()
@@ -268,17 +276,24 @@ void describe('starting a debug session', () => {
   void test('refuses targets outside the project before anything is started', async () => {
     const project = await createDebugTestProject({ 'main.js': '', 'folder/file.js': '' })
     try {
-      await assert.rejects(project.start({ target: { kind: 'node-script', script: 'missing.js', argv: [] } }))
+      await assert.rejects(
+        project.start({ target: { kind: 'node-script', script: 'missing.js', argv: [] } })
+      )
       await assert.rejects(
         project.start({ target: { kind: 'node-script', script: '../outside.js', argv: [] } })
       )
-      await assert.rejects(project.start({ target: { kind: 'node-script', script: '/etc/hosts', argv: [] } }))
       await assert.rejects(
-        project.start({ target: { kind: 'node-script', script: 'folder', argv: [] } }),
-        /要调试的脚本不是文件：folder/u
+        project.start({ target: { kind: 'node-script', script: '/etc/hosts', argv: [] } })
       )
       await assert.rejects(
-        project.start({ target: { kind: 'node-script', script: 'main.js', argv: [] }, cwd: 'main.js' }),
+        project.start({ target: { kind: 'node-script', script: 'folder', argv: [] } }),
+        /要执行的脚本不是文件：folder/u
+      )
+      await assert.rejects(
+        project.start({
+          target: { kind: 'node-script', script: 'main.js', argv: [] },
+          cwd: 'main.js',
+        }),
         /必须是目录/u
       )
       await assert.rejects(

@@ -2,23 +2,7 @@ export const WORKBENCH_IMAGE_MIN_MANUAL_ZOOM = 0.1
 export const WORKBENCH_IMAGE_MAX_MANUAL_ZOOM = 8
 
 const WORKBENCH_IMAGE_ZOOM_STEPS = [
-  0.1,
-  0.125,
-  0.25,
-  0.33,
-  0.5,
-  0.67,
-  0.75,
-  1,
-  1.25,
-  1.5,
-  2,
-  2.5,
-  3,
-  4,
-  5,
-  6,
-  8,
+  0.1, 0.125, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8,
 ] as const
 
 export type WorkbenchImageZoomDirection = 'in' | 'out'
@@ -38,10 +22,7 @@ function positiveFinite(value: number): boolean {
 export function clampWorkbenchImageManualZoom(zoom: number): number {
   if (!Number.isFinite(zoom)) return 1
 
-  return Math.min(
-    WORKBENCH_IMAGE_MAX_MANUAL_ZOOM,
-    Math.max(WORKBENCH_IMAGE_MIN_MANUAL_ZOOM, zoom)
-  )
+  return Math.min(WORKBENCH_IMAGE_MAX_MANUAL_ZOOM, Math.max(WORKBENCH_IMAGE_MIN_MANUAL_ZOOM, zoom))
 }
 
 export function stepWorkbenchImageZoom(
@@ -50,14 +31,15 @@ export function stepWorkbenchImageZoom(
 ): number {
   const current = Number.isFinite(zoom) ? zoom : 1
 
-  if (direction === 'in') return (
-      WORKBENCH_IMAGE_ZOOM_STEPS.find((candidate) => candidate > current + Number.EPSILON)
-      ?? WORKBENCH_IMAGE_MAX_MANUAL_ZOOM
+  if (direction === 'in')
+    return (
+      WORKBENCH_IMAGE_ZOOM_STEPS.find((candidate) => candidate > current + Number.EPSILON) ??
+      WORKBENCH_IMAGE_MAX_MANUAL_ZOOM
     )
 
   return (
-    WORKBENCH_IMAGE_ZOOM_STEPS.findLast((candidate) => candidate < current - Number.EPSILON)
-    ?? WORKBENCH_IMAGE_MIN_MANUAL_ZOOM
+    WORKBENCH_IMAGE_ZOOM_STEPS.findLast((candidate) => candidate < current - Number.EPSILON) ??
+    WORKBENCH_IMAGE_MIN_MANUAL_ZOOM
   )
 }
 
@@ -79,10 +61,10 @@ export function resolveWorkbenchImageFitZoom({
   viewportHeight,
 }: WorkbenchImageFitZoomInput): number {
   if (
-    !positiveFinite(naturalWidth)
-    || !positiveFinite(naturalHeight)
-    || !positiveFinite(viewportWidth)
-    || !positiveFinite(viewportHeight)
+    !positiveFinite(naturalWidth) ||
+    !positiveFinite(naturalHeight) ||
+    !positiveFinite(viewportWidth) ||
+    !positiveFinite(viewportHeight)
   )
     return 1
 
@@ -91,9 +73,7 @@ export function resolveWorkbenchImageFitZoom({
 
 export function formatWorkbenchImageZoom(zoom: number): string {
   const percentage = Math.max(0, zoom * 100)
-  const rounded = percentage < 10
-    ? Math.round(percentage * 10) / 10
-    : Math.round(percentage)
+  const rounded = percentage < 10 ? Math.round(percentage * 10) / 10 : Math.round(percentage)
 
   return `${rounded}%`
 }
@@ -113,10 +93,9 @@ export function resolveWorkbenchImageZoomShortcut(
 }
 
 export function resolveWorkbenchImageWheelZoom(
-  deltaY: number,
-  modifierActive: boolean
+  deltaY: number
 ): Nullable<WorkbenchImageZoomDirection> {
-  if (!modifierActive || deltaY === 0) return null
+  if (!Number.isFinite(deltaY) || deltaY === 0) return null
 
   return deltaY < 0 ? 'in' : 'out'
 }

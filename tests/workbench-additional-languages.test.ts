@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 
-import { ensureSyntaxTree } from '@codemirror/language'
+import { ensureSyntaxTree, HighlightStyle } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { highlightTree, tagHighlighter, tags } from '@lezer/highlight'
 import { test } from 'bun:test'
 
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import { usesWorkbenchExternalLspLanguageService } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
+import { getWorkbenchCodeHighlightSpecs } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import { resolveWorkbenchFilePresentation } from '../src/renderer/src/models/files/workbenchFilePresentation'
 import { fileLanguage } from '../src/renderer/src/models/shared/workbenchUtils'
 import { resolveBuiltinWorkbenchLanguageService } from '../src/shared/workbenchLanguageServices'
@@ -55,9 +56,19 @@ for (const [path, label, service, content] of samples) {
     assert.ok(highlighted.length > 0, `${label} should have real syntax tokens`)
     assert.equal(resolveBuiltinWorkbenchLanguageService(path.split('.').at(-1)!)?.id, service)
     assert.equal(usesWorkbenchExternalLspLanguageService(path), true)
-    assert.equal(resolveWorkbenchFilePresentation({ fileName: path }).variant, 'code')
+    const presentation = resolveWorkbenchFilePresentation({ fileName: path })
+    assert.equal(presentation.variant, service)
+    assert.match(presentation.color ?? '', /^#[\da-f]{6}$/iu)
   })
 }
+
+test('language modifiers use the keyword color in every editor theme', () => {
+  for (const theme of ['light-modern', 'warm-paper', 'dark-modern', 'midnight-blue'] as const) {
+    const style = HighlightStyle.define([...getWorkbenchCodeHighlightSpecs(theme)])
+    assert.ok(style.style([tags.modifier]), `${theme}: modifiers must have a color`)
+    assert.equal(style.style([tags.modifier]), style.style([tags.keyword]))
+  }
+})
 
 for (const [path, content] of [
   ['app.less', '@color: red; .app { color: @color; &:hover { color: blue; } }'],

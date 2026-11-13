@@ -205,7 +205,6 @@ export const FileTreeRow = memo(function FileTreeRow({
               fileName={entry.name}
               size={15}
               weight="regular"
-              color="currentColor"
             />
             {isTestFile && (
               <PlayCircleIcon

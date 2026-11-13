@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { workerData } from 'node:worker_threads'
 
 import * as ts from 'typescript'
 
@@ -39,6 +40,7 @@ interface TypeScriptProjectCacheEntry {
   cacheKey: string
   config: TypeScriptProjectConfig
   diskFiles: Map<string, string>
+  packageImportsLoaded: boolean
 }
 
 interface PooledTypeScriptProject {
@@ -107,7 +109,7 @@ interface TypeScriptProjectConfigCandidate {
 
 function resolveTypeScriptDefaultLibFilePath(
   options: ts.CompilerOptions,
-  resourcesPath: Nullable<string> = process.resourcesPath
+  resourcesPath: Nullable<string> = languageWorkerResourcesPath()
 ): string {
   if (resourcesPath) {
     const bundledLibDirectory = resolve(resourcesPath, 'typescript', 'lib')
@@ -116,6 +118,13 @@ function resolveTypeScriptDefaultLibFilePath(
   }
 
   return ts.getDefaultLibFilePath(options)
+}
+
+function languageWorkerResourcesPath(): Nullable<string> {
+  const data = workerData as { resourcesPath?: unknown } | null | undefined
+  return typeof data?.resourcesPath === 'string'
+    ? data.resourcesPath
+    : (process.resourcesPath ?? null)
 }
 
 function extensionWithDot(path: string): string {
@@ -228,7 +237,11 @@ function findTypeScriptConfigPath(
 
       nearestConfigPath ??= configPath
       const owningConfigPath = findOwningReferencedConfigPath(configPath, requestAbsolutePath)
-      if (owningConfigPath) return owningConfigPath
+      // A workspace-wide root config can overlap its narrower node/web configs.
+      // Prefer those owning configs over loading every product surface into one program.
+      if (owningConfigPath &&
+        (!typeScriptPathsEqual(directory, projectRoot) || owningConfigPath !== configPath || isJavaScript))
+        return owningConfigPath
     }
 
     if (directory === projectRoot) break
@@ -237,10 +250,7 @@ function findTypeScriptConfigPath(
     directory = parent
   }
 
-  const projectWideConfigPath = findProjectWideOwningConfigPath(
-    projectRoot,
-    requestAbsolutePath
-  )
+  const projectWideConfigPath = findProjectWideOwningConfigPath(projectRoot, requestAbsolutePath)
   if (projectWideConfigPath) return projectWideConfigPath
 
   // 新建且尚未写入 config include 的文件仍应继承最近配置；已存在并被某个配置拥有的文件
@@ -318,9 +328,9 @@ function findProjectWideOwningConfigPath(
   requestAbsolutePath: string
 ): Nullable<string> {
   const owningCandidates = collectProjectTypeScriptConfigCandidates(projectRoot)
-    .filter(({ parsed }) => parsed.fileNames.some((path) =>
-      typeScriptPathsEqual(path, requestAbsolutePath)
-    ))
+    .filter(({ parsed }) =>
+      parsed.fileNames.some((path) => typeScriptPathsEqual(path, requestAbsolutePath))
+    )
     .sort((left, right) => {
       const fileCountDifference = left.parsed.fileNames.length - right.parsed.fileNames.length
       if (fileCountDifference !== 0) return fileCountDifference
@@ -576,12 +586,6 @@ function collectTypeScriptFilesFromConfig(
 
   addFile(requestAbsolutePath)
 
-  // Standalone LanguageService 没有 tsserver 的 auto-import provider；把依赖包的类型入口作为
-  // 项目根文件注入，React/Vue/Vite 等包导出的 API 才会进入自动导入候选。
-  for (const entryPath of collectPackageTypeEntryPaths(config, requestAbsolutePath)) {
-    addFile(entryPath)
-  }
-
   if (config.fileNames.length > 0) {
     for (const fileName of config.fileNames) {
       addFile(fileName)
@@ -621,7 +625,10 @@ function resolveProjectConfig(
 }
 
 /** 这个文件归哪个 TypeScript 项目（tsconfig，或没有配置时推断的目录）；同一项目的文件得到同一个键。 */
-export function resolveTypeScriptProjectKey(projectRoot: string, requestAbsolutePath: string): string {
+export function resolveTypeScriptProjectKey(
+  projectRoot: string,
+  requestAbsolutePath: string
+): string {
   return getProjectCacheKey(resolveProjectConfig(projectRoot, requestAbsolutePath))
 }
 
@@ -695,9 +702,28 @@ function getOrCreateProjectCache(
   pooledProjects.delete(cacheKey)
 
   const diskFiles = collectTypeScriptFilesFromConfig(config, requestAbsolutePath, priorityPaths)
-  const entry: TypeScriptProjectCacheEntry = { cacheKey, config, diskFiles }
+  const entry: TypeScriptProjectCacheEntry = { cacheKey, config, diskFiles, packageImportsLoaded: false }
   projectCache.set(cacheKey, entry)
   return entry
+}
+
+/** Add unimported dependency exports only when ordinary completion candidates do not match. */
+export function includeTypeScriptPackageAutoImports(projectRoot: string, requestAbsolutePath: string): boolean {
+  const entry = getOrCreateProjectCache(projectRoot, requestAbsolutePath, [requestAbsolutePath])
+  if (entry.packageImportsLoaded) return false
+  entry.packageImportsLoaded = true
+  const project = pooledProjects.get(entry.cacheKey)
+  let changed = false
+  for (const path of collectPackageTypeEntryPaths(entry.config, requestAbsolutePath)) {
+    const fileName = normalizeTypeScriptFileName(path)
+    if (entry.diskFiles.has(fileName) || entry.diskFiles.size >= MaxTypeScriptProjectFiles) continue
+    const content = safeReadFile(fileName)
+    if (content == null) continue
+    entry.diskFiles.set(fileName, content)
+    if (project && !project.overlayPaths.has(fileName)) setPooledFile(project, fileName, content)
+    changed = true
+  }
+  return changed
 }
 
 function setPooledFile(project: PooledTypeScriptProject, inputPath: string, content: string): void {
@@ -741,7 +767,8 @@ function createLanguageServiceHost(
     // 逐个找出来、读进来、解码一遍。
     getDocumentPositionMapper: () => undefined,
     getScriptFileNames: () => [...project.liveFiles.keys()],
-    getScriptVersion: (fileName) => String(project.fileVersions.get(normalizeTypeScriptFileName(fileName)) ?? 0),
+    getScriptVersion: (fileName) =>
+      String(project.fileVersions.get(normalizeTypeScriptFileName(fileName)) ?? 0),
     getScriptSnapshot: (inputPath) => {
       const fileName = normalizeTypeScriptFileName(inputPath)
       const content =
@@ -754,8 +781,10 @@ function createLanguageServiceHost(
     // The release therefore ships the standard library declarations as an
     // app resource and the language host explicitly anchors lib resolution there.
     getDefaultLibFileName: (options) => resolveTypeScriptDefaultLibFilePath(options),
-    fileExists: (fileName) => project.liveFiles.has(normalizeTypeScriptFileName(fileName)) || ts.sys.fileExists(fileName),
-    readFile: (fileName) => project.liveFiles.get(normalizeTypeScriptFileName(fileName)) ?? ts.sys.readFile(fileName),
+    fileExists: (fileName) =>
+      project.liveFiles.has(normalizeTypeScriptFileName(fileName)) || ts.sys.fileExists(fileName),
+    readFile: (fileName) =>
+      project.liveFiles.get(normalizeTypeScriptFileName(fileName)) ?? ts.sys.readFile(fileName),
     readDirectory: ts.sys.readDirectory,
     directoryExists: ts.sys.directoryExists,
     getDirectories: ts.sys.getDirectories,
@@ -913,7 +942,8 @@ export function refreshTypeScriptProjectFilesFromDisk(
       clearTypeScriptProjectCache(projectRoot)
       return
     }
-    if (TypeScriptExtensions.has(extensionWithDot(absolutePath))) scriptPaths.add(normalizeTypeScriptFileName(absolutePath))
+    if (TypeScriptExtensions.has(extensionWithDot(absolutePath)))
+      scriptPaths.add(normalizeTypeScriptFileName(absolutePath))
   }
   if (scriptPaths.size === 0) return
 
@@ -999,9 +1029,16 @@ export function forgetMovedTypeScriptProjectPath(
  * 挪到这个位置的 JS/TS 文件与它们的磁盘正文：路径是文件就是它自己，是目录就是它下面的（node_modules、构建
  * 产物这类目录不看，自己就在这类目录里的也不看）。一个都没有说明这次移动与 TypeScript 无关。
  */
-export function readMovedTypeScriptFiles(projectRoot: string, absolutePath: string): Map<string, string> {
+export function readMovedTypeScriptFiles(
+  projectRoot: string,
+  absolutePath: string
+): Map<string, string> {
   if (!isPathInside(projectRoot, absolutePath)) return new Map()
-  if (relative(projectRoot, absolutePath).split(sep).some((segment) => SkippedDirectoryNames.has(segment)))
+  if (
+    relative(projectRoot, absolutePath)
+      .split(sep)
+      .some((segment) => SkippedDirectoryNames.has(segment))
+  )
     return new Map()
 
   const content = safeReadFile(absolutePath)
@@ -1034,9 +1071,9 @@ export function planTypeScriptFileRenameProjects(
   const keyOf = (fileName: string): string =>
     getProjectCacheKey(resolveProjectConfig(projectRoot, fileName))
   const isCandidateAnchor = (fileName: string): boolean =>
-    TypeScriptExtensions.has(extensionWithDot(fileName))
-    && !/[\\/]node_modules[\\/]/u.test(fileName)
-    && existsSync(fileName)
+    TypeScriptExtensions.has(extensionWithDot(fileName)) &&
+    !/[\\/]node_modules[\\/]/u.test(fileName) &&
+    existsSync(fileName)
   const findAnchor = (key: string, fileNames: Iterable<string>): string | undefined => {
     let probes = 0
     for (const fileName of fileNames) {
@@ -1077,7 +1114,9 @@ export function planTypeScriptFileRenameProjects(
       const key = `${prefix}${configPath}`
       if (owners.has(key) || pooledProjects.has(key)) continue
       const anchor = findAnchor(key, [
-        ...parsed.fileNames.filter((fileName) => listedBy.get(canonicalTypeScriptPath(fileName)) === 1),
+        ...parsed.fileNames.filter(
+          (fileName) => listedBy.get(canonicalTypeScriptPath(fileName)) === 1
+        ),
         ...parsed.fileNames,
       ])
       if (anchor) toBuild.set(key, anchor)
@@ -1087,8 +1126,9 @@ export function planTypeScriptFileRenameProjects(
   const built: string[] = []
   for (const [key, project] of pooledProjects) {
     if (!key.startsWith(prefix)) continue
-    const anchor = owners.get(key)
-      ?? findAnchor(key, [
+    const anchor =
+      owners.get(key) ??
+      findAnchor(key, [
         project.requestFileName,
         ...(projectCache.get(key)?.config.fileNames ?? []),
         ...project.diskFiles.keys(),

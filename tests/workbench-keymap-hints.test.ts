@@ -130,16 +130,17 @@ void describe('editor command hints', () => {
 
 void describe('command palette hints', () => {
   /** 面板里右侧提示的是编辑器命令的键的那几条，各是哪个命令。 */
-  const EditorCommands: Partial<Record<WorkbenchPaletteCommandId, WorkbenchEditorKeymapCommandId>> = {
-    'call-hierarchy': 'call-hierarchy',
-    'find-references': 'find-references',
-    'format-document': 'format-document',
-    'go-to-line': 'go-to-line',
-    'organize-imports': 'organize-imports',
-    'quick-fix': 'quick-fix',
-    refactor: 'refactor',
-    'toggle-word-wrap': 'toggle-word-wrap',
-  }
+  const EditorCommands: Partial<Record<WorkbenchPaletteCommandId, WorkbenchEditorKeymapCommandId>> =
+    {
+      'call-hierarchy': 'call-hierarchy',
+      'find-references': 'find-references',
+      'format-document': 'format-document',
+      'go-to-line': 'go-to-line',
+      'organize-imports': 'organize-imports',
+      'quick-fix': 'quick-fix',
+      refactor: 'refactor',
+      'toggle-word-wrap': 'toggle-word-wrap',
+    }
 
   void test('editor commands take their hint from the editor key table, menu keys stay fixed', () => {
     const editor: Partial<Record<WorkbenchPaletteCommandId, string>> = {}
@@ -267,14 +268,16 @@ void describe('where the hints are wired', () => {
     const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const quickOpen = readSource('src/renderer/src/components/QuickOpen.tsx')
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
+    const settingsWindow = readSource('src/renderer/src/app/StandaloneWorkbenchSettingsWindow.tsx')
 
     assert.match(presentation, /<LazyQuickOpen[\s\S]*?keymapPreset=\{workbenchKeymap\.preset\}/u)
     assert.match(quickOpen, /keymap,\s*preset: keymapPreset,/u)
     assert.match(
-      presentation,
-      /<LazyWorkbenchSettingsDialog[\s\S]*?keymapPreset=\{workbenchKeymap\.preset\}\s*presetShortcuts=\{workbenchKeymap\.presetShortcuts\}/u
+      settingsWindow,
+      /<WorkbenchSettingsDialog[\s\S]*?keymapPreset=\{keymap\.preset\}\s*presetShortcuts=\{keymap\.presetShortcuts\}/u
     )
-    assert.match(presentation, /onKeymapPresetChange=\{workbenchKeymap\.setPreset\}/u)
+    assert.match(settingsWindow, /useWorkbenchKeymapController\(\)/u)
+    assert.match(settingsWindow, /onKeymapPresetChange=\{keymap\.setPreset\}/u)
     assert.match(
       settings,
       /shortcut: formatWorkbenchEditorCommandHint\('toggle-word-wrap', keymapPreset\)/u

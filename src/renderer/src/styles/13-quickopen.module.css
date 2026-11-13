@@ -149,7 +149,7 @@
 
 .quickOpenSymbolIcon[data-kind='function'],
 .quickOpenSymbolIcon[data-kind='method'],
-.quickOpenSymbolIcon[data-kind='constructor'] {
+.quickOpenSymbolIcon[data-kind='Constructor' i] {
   background-color: var(--status-violet);
 }
 

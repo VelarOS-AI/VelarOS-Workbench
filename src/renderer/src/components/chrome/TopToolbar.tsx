@@ -89,18 +89,30 @@ export function WorkbenchTopLeading({
   )
 }
 
-export function WorkbenchTopTrailing({
+export function WorkbenchSettingsAction({
   onOpenSettings,
+}: Pick<TopToolbarProps, 'onOpenSettings'>): ReactElement {
+  const { t } = useWorkbenchI18n()
+  const settingsLabel = t('workbench.settingsTitle')
+  return (
+    <WorkbenchTopIconAction
+      tooltip={settingsLabel}
+      label={settingsLabel}
+      tooltipSide="left"
+      onClick={onOpenSettings}
+    >
+      <GearSixIcon size={17} />
+    </WorkbenchTopIconAction>
+  )
+}
+
+export function WorkbenchTopTrailing({
   topRun,
   isRunningCommand,
   hasActiveRunCommand,
-}: Pick<
-  TopToolbarProps,
-  'onOpenSettings' | 'topRun' | 'isRunningCommand' | 'hasActiveRunCommand'
->): ReactElement {
+}: Pick<TopToolbarProps, 'topRun' | 'isRunningCommand' | 'hasActiveRunCommand'>): ReactElement {
   const { t } = useWorkbenchI18n()
   const runCommandLabel = t('workbench.runCommand')
-  const settingsLabel = t('workbench.settingsTitle')
   // ▶ 指着一个 Node 程序时旁边多一个「调试」。
   const debugLabel =
     topRun.canDebugActiveConfiguration && topRun.activeConfiguration
@@ -109,14 +121,6 @@ export function WorkbenchTopTrailing({
 
   return (
     <>
-      <WorkbenchTopIconAction
-        tooltip={settingsLabel}
-        label={settingsLabel}
-        tooltipSide="left"
-        onClick={onOpenSettings}
-      >
-        <GearSixIcon size={17} />
-      </WorkbenchTopIconAction>
       <WorkbenchRunAction
         topRun={topRun}
         label={runCommandLabel}

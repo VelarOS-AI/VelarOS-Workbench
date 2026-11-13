@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { app, BrowserWindow, session, shell, webContents } from 'electron'
+import { app, BrowserWindow, ipcMain, session, shell, webContents } from 'electron'
 
 import { createElectronBrowserRuntime } from '@velaros-ai/capabilities/browser/electron'
 import { Log } from '@velaros-ai/velaros/core'
@@ -14,6 +14,10 @@ import {
   normalizeWorkbenchBrowserPageUrl,
   WorkbenchBrowserPartition,
 } from '../shared/workbenchBrowser'
+import {
+  WorkbenchSettingsWindowChannels,
+  WorkbenchSettingsWindowQuery,
+} from '../shared/workbenchSettingsWindow'
 
 import { registerWorkbenchAccountIpc } from './account/WorkbenchAccountIpc'
 import { WorkbenchAccountService } from './account/WorkbenchAccountService'
@@ -57,6 +61,7 @@ import {
   isWorkbenchAgentConsoleRequest,
 } from './projects/WorkbenchExternalNavigation'
 import { WorkbenchProjectRegistry } from './projects/WorkbenchProjectRegistry'
+import { WorkbenchSettingsWindows } from './projects/WorkbenchSettingsWindows'
 import { prepareWorkbenchWebviewAttachment } from './projects/WorkbenchWebviewSecurity'
 import { WorkbenchWindowCloseGuard } from './projects/WorkbenchWindowCloseGuard'
 import { registerWorkbenchWindowCloseIpc } from './projects/WorkbenchWindowCloseIpc'
@@ -449,6 +454,60 @@ if (hasSingleInstanceLock)
         }
       },
     })
+    const settingsWindows = new WorkbenchSettingsWindows({
+      windows: windowManager,
+      createWindow: (owner) => {
+        const settings = new BrowserWindow({
+          width: 1040,
+          height: 720,
+          minWidth: 640,
+          minHeight: 480,
+          parent: owner,
+          modal: false,
+          frame: true,
+          titleBarStyle: 'default',
+          show: false,
+          autoHideMenuBar: true,
+          backgroundColor: '#f7f7f7',
+          icon: WorkbenchApplicationIconPath,
+          title: 'VelarOS Workbench Settings',
+          webPreferences: {
+            preload: join(__dirname, '../preload/index.mjs'),
+            sandbox: false,
+            contextIsolation: true,
+            nodeIntegration: false,
+            webviewTag: false,
+          },
+        })
+        settings.setMenu(null)
+        installWorkbenchExternalNavigation(
+          (handler) => settings.webContents.setWindowOpenHandler(handler),
+          (url) => shell.openExternal(url)
+        )
+        settings.webContents.on('will-navigate', (event) => event.preventDefault())
+        return settings
+      },
+      loadWindow: (settings) => {
+        const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+        if (rendererUrl) {
+          const target = new URL(rendererUrl)
+          target.searchParams.set('view', WorkbenchSettingsWindowQuery)
+          void settings.loadURL(target.href)
+        } else
+          void settings.loadFile(join(__dirname, '../renderer/index.html'), {
+            query: { view: WorkbenchSettingsWindowQuery },
+          })
+      },
+    })
+    ipcMain.handle(WorkbenchSettingsWindowChannels.open, (event) =>
+      settingsWindows.open(event.sender)
+    )
+    ipcMain.handle(WorkbenchSettingsWindowChannels.close, (event) =>
+      settingsWindows.close(event.sender)
+    )
+    ipcMain.handle(WorkbenchSettingsWindowChannels.exitProject, (event) =>
+      settingsWindows.exitProject(event.sender)
+    )
     // 项目准入由同一个窗口 record 持有；先完成真实 owner，再注册会新建资源的入口。
     registerWorkbenchTerminalIpc(providers.parts.terminal, windowManager)
     const disposeDebugIpc = registerWorkbenchDebugIpc(providers.parts.debug, windowManager)
@@ -501,6 +560,7 @@ if (hasSingleInstanceLock)
       }
 
       shutdownStarted = true
+      settingsWindows.dispose()
       event.preventDefault()
       // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker
       // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
@@ -535,8 +595,13 @@ if (hasSingleInstanceLock)
               ? [
                   {
                     operation: [
-                      'commands', 'debug', 'terminal', 'language',
-                      'workspace', 'conversation', 'analytics',
+                      'commands',
+                      'debug',
+                      'terminal',
+                      'language',
+                      'workspace',
+                      'conversation',
+                      'analytics',
                       'searches',
                     ][index],
                     error: result.reason,

@@ -137,7 +137,7 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /const runCheckpoint = await captureRunCheckpoint\(/)
     assert.match(
       adapter,
-      /runChangeCapture: createRunChangeCapture\(projectRoot, sessionId, runCheckpoint\)/
+      /run\.runChangeCapture = createRunChangeCapture\(projectRoot, sessionId, runCheckpoint\)/
     )
     assert.match(adapter, /settle: \(\) => captureRunChanges\(projectRoot, sessionId, checkpoint\)/)
     assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
@@ -186,7 +186,10 @@ void describe('Workbench chat composer parity', () => {
     )
 
     // 两端从共享 UI 选择当前活动，宿主只提供运行态和等待说明。
-    assert.match(adapter, /readConversationLiveActivity\(\s*\{\s*runtime: chat,\s*message: activeAssistantMessage,\s*waitMessage: chat\.connectionRetryMessage,\s*locale,/)
+    assert.match(
+      adapter,
+      /readConversationLiveActivity\(\s*\{\s*runtime: chat,\s*message: activeAssistantMessage,\s*waitMessage: chat\.connectionRetryMessage,\s*locale,/
+    )
     assert.match(adapter, /hasStreamingThinkingBlock: liveActivity\.hasStreamingThinkingBlock/)
     assert.match(adapter, /liveTraceSummary: liveActivity\.liveTraceSummary/)
     // 回答末尾的约价：当前模型 + 公开价格目录。

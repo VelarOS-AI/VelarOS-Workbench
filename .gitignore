@@ -32,3 +32,4 @@ tmp/
 
 # 本地视觉核验产物
 .codex/design-qa/
+/design-qa.md

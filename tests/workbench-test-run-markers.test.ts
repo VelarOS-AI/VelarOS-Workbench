@@ -81,7 +81,9 @@ void describe('run markers of a test file', () => {
     // 第一行被一个块占着时，第一行仍是「跑整个文件」。
     const compact = parse("it('first line', () => {})\nit('second', () => {})")
     assert.deepEqual(
-      buildWorkbenchTestRunGutterLines(compact, 0, compact.doc.length).map((line) => line.target.title),
+      buildWorkbenchTestRunGutterLines(compact, 0, compact.doc.length).map(
+        (line) => line.target.title
+      ),
       ['', 'second']
     )
   })
@@ -108,7 +110,11 @@ void describe('results of tests run from the editor', () => {
       trackWorkbenchTestRun(key, 'terminal-1')
       assert.equal(readWorkbenchTestRunStatus(key), 'running')
       // 别的运行卡结束与它无关。
-      publishWorkbenchRunSessionExit({ sessionId: 'terminal-unrelated', exitCode: 1, interrupted: false })
+      publishWorkbenchRunSessionExit({
+        sessionId: 'terminal-unrelated',
+        exitCode: 1,
+        interrupted: false,
+      })
       assert.equal(readWorkbenchTestRunStatus(key), 'running')
 
       publishWorkbenchRunSessionExit({ sessionId: 'terminal-1', exitCode: 0, interrupted: false })
@@ -158,7 +164,9 @@ void describe('results of tests run from the editor', () => {
     })
     try {
       assert.equal(
-        await launchWorkbenchRunSession('npx vitest run a.test.ts', 'a.test.ts', { cwd: 'packages/a' }),
+        await launchWorkbenchRunSession('npx vitest run a.test.ts', 'a.test.ts', {
+          cwd: 'packages/a',
+        }),
         'terminal-7'
       )
       assert.deepEqual(launched, [['npx vitest run a.test.ts', 'a.test.ts', { cwd: 'packages/a' }]])
@@ -248,7 +256,7 @@ void describe('wiring of the test markers', () => {
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
     assert.match(
       pageModel,
-      /await workbench\.saveAllOpenFiles\(\)\s+return workbench\.launchRunSession\(\.\.\.launch\)/u
+      /if \(!\(await workbench\.saveAllOpenFiles\(\)\)\) return null\s+return workbench\.launchRunSession\(\.\.\.launch\)/u
     )
     assert.match(pageModel, /installWorkbenchRunSessionLauncher\(launchRunSessionFromEditor\)/u)
 

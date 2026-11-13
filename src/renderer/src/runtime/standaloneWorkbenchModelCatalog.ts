@@ -117,19 +117,37 @@ export function listStandaloneWorkbenchVisibleModelProviderPresets(
 
 export function createStandaloneWorkbenchModelProviderOptions(
   managedModels: readonly WorkbenchManagedModelProvider[],
-  disabledDescription: (providerLabel: string) => string
+  disabledDescription: (providerLabel: string) => string,
+  selectedProviderId?: string
 ): Array<{ value: ChatProviderId; label: string; description: string; disabled: boolean }> {
-  return listStandaloneWorkbenchVisibleModelProviderPresets(managedModels).map((provider) => {
-    const disabled =
-      provider.managedByCloud &&
-      !managedModels.find((entry) => entry.providerId === provider.id)?.enabled
-    return {
+  const options = listStandaloneWorkbenchVisibleModelProviderPresets(managedModels).map(
+    (provider) => {
+      const disabled =
+        provider.managedByCloud &&
+        !managedModels.find((entry) => entry.providerId === provider.id)?.enabled
+      return {
+        value: provider.id,
+        label: provider.label,
+        description: disabled ? disabledDescription(provider.label) : provider.description,
+        disabled,
+      }
+    }
+  )
+  // Keep a stored cloud selection legible while authorization is loading or unavailable.
+  // This display-only entry never grants access or silently changes the user's provider.
+  if (
+    (selectedProviderId === 'velaros' || selectedProviderId === 'velar-dev') &&
+    !options.some((option) => option.value === selectedProviderId)
+  ) {
+    const provider = getStandaloneWorkbenchModelProviderPreset(selectedProviderId)
+    options.unshift({
       value: provider.id,
       label: provider.label,
-      description: disabled ? disabledDescription(provider.label) : provider.description,
-      disabled,
-    }
-  })
+      description: disabledDescription(provider.label),
+      disabled: true,
+    })
+  }
+  return options
 }
 
 export function resolveStandaloneWorkbenchProviderModel(

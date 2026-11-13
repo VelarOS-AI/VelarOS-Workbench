@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { EditorSelection, EditorState } from '@codemirror/state'
-import type { EditorView } from '@codemirror/view'
+import { EditorView } from '@codemirror/view'
 import { describe, test } from 'bun:test'
 
 import {
@@ -9,6 +9,7 @@ import {
   isWorkbenchActiveLineSuppressed,
   revealWorkbenchActiveLine,
   suppressWorkbenchActiveLine,
+  workbenchActiveLineExtension,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorActiveLine'
 
 function stateWithSelection(anchor: number, head: number): EditorState {
@@ -33,31 +34,52 @@ void describe('Workbench active-line visibility', () => {
     const state = EditorState.create({
       doc: 'first line\nsecond line\nthird line',
       extensions: [EditorState.allowMultipleSelections.of(true)],
-      selection: EditorSelection.create([
-        EditorSelection.cursor(2),
-        EditorSelection.range(14, 28),
-      ]),
+      selection: EditorSelection.create([EditorSelection.cursor(2), EditorSelection.range(14, 28)]),
     })
 
     assert.equal(hasWorkbenchMultilineTextSelection(state), true)
   })
 
   void test('keeps a newly switched file visually idle until the editor is used', () => {
-    const classNames = new Set<string>()
+    let state = EditorState.create({
+      doc: 'first\nsecond',
+      extensions: workbenchActiveLineExtension,
+    })
     const view = {
-      dom: {
-        classList: {
-          add: (className: string) => classNames.add(className),
-          contains: (className: string) => classNames.has(className),
-          remove: (className: string) => classNames.delete(className),
-        },
+      get state() {
+        return state
+      },
+      dispatch(spec: Parameters<EditorState['update']>[0]) {
+        state = state.update(spec).state
       },
     } as unknown as EditorView
 
     suppressWorkbenchActiveLine(view)
     assert.equal(isWorkbenchActiveLineSuppressed(view), true)
+    // The class belongs to editor state, so focus/selection updates preserve it.
+    view.dispatch({ selection: { anchor: 2 } })
+    assert.equal(isWorkbenchActiveLineSuppressed(view), true)
+    assert.ok(
+      state
+        .facet(EditorView.editorAttributes)
+        .some(
+          (attributes) =>
+            typeof attributes === 'object' &&
+            attributes.class === 'cm-workbenchActiveLineSuppressed'
+        )
+    )
 
     revealWorkbenchActiveLine(view)
     assert.equal(isWorkbenchActiveLineSuppressed(view), false)
+    assert.equal(
+      state
+        .facet(EditorView.editorAttributes)
+        .some(
+          (attributes) =>
+            typeof attributes === 'object' &&
+            attributes.class === 'cm-workbenchActiveLineSuppressed'
+        ),
+      false
+    )
   })
 })

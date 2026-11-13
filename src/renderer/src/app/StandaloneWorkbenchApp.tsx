@@ -1,23 +1,29 @@
-import { lazy, type ReactElement, Suspense, useEffect, useRef, useState } from 'react'
+import { type ReactElement, Suspense, useEffect, useRef, useState } from 'react'
 import { FolderOpenIcon } from '@phosphor-icons/react'
 import { WorkbenchProductRuntimeProvider } from '@renderer/composition/WorkbenchProductRuntimeProvider'
 import { WorkbenchLocalizationProvider } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
-import { Button, Stack, Text, Title } from '@velaros-ai/ui'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Title } from '@velaros-ai/ui/primitives/display/Title'
+import { Stack } from '@velaros-ai/ui/primitives/layout/Stack'
 
 import { WorkbenchProductAnalyticsNoticeDialog } from '../components/settings/WorkbenchProductAnalyticsNoticeDialog'
 import { useProjectHubState } from '../hooks/useProjectHubState'
 import { standaloneWorkbenchProductRuntimeValue } from '../host/standaloneWorkbenchProductRuntime'
 import { useStandaloneWorkbenchLocalization } from '../i18n/useStandaloneWorkbenchLocalization'
 import { WorkbenchMessageHost } from '../runtime/workbenchMessageHost'
+import { lazyWithPreload, preloadWhenIdle } from '../support/lazyWithPreload'
 import { NewProjectDialog } from '../welcome/NewProjectDialog'
 import { WorkbenchWelcomePage } from '../welcome/WorkbenchWelcomePage'
 
+import { WorkbenchProjectLoading } from './WorkbenchProjectLoading'
+
 import '../styles/projectDrop.css'
 
-const LazyWorkbenchWorkspaceShell = lazy(async () => {
+const LazyWorkbenchWorkspaceShell = lazyWithPreload(async () => {
   const module = await import('./WorkbenchWorkspaceShell')
-  return { default: module.WorkbenchWorkspaceShell }
+  return module.WorkbenchWorkspaceShell
 })
 
 /**
@@ -33,6 +39,12 @@ export function StandaloneWorkbenchApp(): ReactElement {
   const [externalProjectDropActive, setExternalProjectDropActive] = useState(false)
   const externalDragDepthRef = useRef(0)
   const localization = useStandaloneWorkbenchLocalization()
+  const isWelcomeReady = projectHub.kind === 'ready' && !projectHub.state.currentProject
+
+  useEffect(() => {
+    if (isWelcomeReady) return preloadWhenIdle([LazyWorkbenchWorkspaceShell])
+    return undefined
+  }, [isWelcomeReady])
 
   useEffect(
     () =>
@@ -120,7 +132,11 @@ export function StandaloneWorkbenchApp(): ReactElement {
         <div className="workbench-external-project-drop-root">
           {projectHub.kind === 'ready' ? (
             projectHub.state.currentProject ? (
-              <Suspense fallback={null}>
+              <Suspense
+                fallback={
+                  <WorkbenchProjectLoading projectName={projectHub.state.currentProject.name} />
+                }
+              >
                 <LazyWorkbenchWorkspaceShell
                   project={projectHub.state.currentProject}
                   projectHubState={projectHub.state}
@@ -132,32 +148,21 @@ export function StandaloneWorkbenchApp(): ReactElement {
                 onNewProject={() => setNewProjectDialogOpen(true)}
               />
             )
+          ) : projectHub.kind === 'loading' ? (
+            <WorkbenchProjectLoading />
           ) : (
-            <main
-              className="workbench-welcome"
-              role={projectHub.kind === 'error' ? 'alert' : 'status'}
-              aria-busy={projectHub.kind === 'loading'}
-            >
+            <main className="workbench-welcome" role="alert">
               <Stack gap="sm">
-                {projectHub.kind === 'error' ? (
-                  <>
-                    <Title level={5}>{localization.t('welcome.projectStateLoadFailed')}</Title>
-                    <Text tone="secondary">{projectHub.message}</Text>
-                    <Button size="sm" variant="outline" onClick={projectHub.retry}>
-                      {localization.t('welcome.retryProjectState')}
-                    </Button>
-                  </>
-                ) : (
-                  <Text>{localization.t('common.loading')}</Text>
-                )}
+                <Title level={5}>{localization.t('welcome.projectStateLoadFailed')}</Title>
+                <Text tone="secondary">{projectHub.message}</Text>
+                <Button size="sm" variant="outline" onClick={projectHub.retry}>
+                  {localization.t('welcome.retryProjectState')}
+                </Button>
               </Stack>
             </main>
           )}
           {projectHub.kind === 'ready' && (
-            <NewProjectDialog
-              open={newProjectDialogOpen}
-              onOpenChange={setNewProjectDialogOpen}
-            />
+            <NewProjectDialog open={newProjectDialogOpen} onOpenChange={setNewProjectDialogOpen} />
           )}
           <WorkbenchMessageHost />
           {projectHub.kind === 'ready' && <WorkbenchProductAnalyticsNoticeDialog />}

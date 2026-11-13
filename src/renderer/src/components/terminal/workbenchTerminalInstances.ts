@@ -96,6 +96,14 @@ export function findWorkbenchTerminal(sessionId: string): Nullable<WorkbenchTerm
   return entries.get(sessionId) ?? null
 }
 
+/** Resize without FitAddon's extra clear, which exposes a blank canvas during pane drags. */
+export function fitWorkbenchTerminal(instance: WorkbenchTerminalInstance): void {
+  const dimensions = instance.fit.proposeDimensions()
+  if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return
+  if (instance.terminal.cols !== dimensions.cols || instance.terminal.rows !== dimensions.rows)
+    instance.terminal.resize(dimensions.cols, dimensions.rows)
+}
+
 export function acquireWorkbenchTerminal(
   sessionId: string,
   handlers: WorkbenchTerminalInstanceHandlers,

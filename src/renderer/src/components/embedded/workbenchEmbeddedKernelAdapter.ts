@@ -47,7 +47,7 @@ export function buildStandaloneWorkbenchEditorChrome(
       model.surface.setActiveLeftTool('commit')
       if (!model.surface.isFilePanelOpen) model.surface.toggleFilePanel()
     },
-    onOpenSettings: () => model.dialogs.setSettingsOpen(true),
+    onOpenSettings: model.actions.openSettings,
   }
 
   return {

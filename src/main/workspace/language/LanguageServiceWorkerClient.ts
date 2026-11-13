@@ -60,7 +60,10 @@ import {
 
 export interface WorkbenchLanguageServiceWorkerPort {
   postMessage(
-    message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale | ProjectToolEndpointResponse
+    message:
+      | WorkbenchLanguageServiceWorkerMessage
+      | WorkbenchLanguageServiceWorkerLocale
+      | ProjectToolEndpointResponse
   ): void
   on(event: 'message', listener: (message: unknown) => void): this
   on(event: 'error', listener: (error: Error) => void): this
@@ -69,6 +72,8 @@ export interface WorkbenchLanguageServiceWorkerPort {
 }
 
 export interface WorkbenchLanguageServiceWorkerFactoryOptions {
+  /** Electron's resourcesPath is not inherited by Node worker threads. */
+  resourcesPath?: string
   /** 真实 LSP 管道端点；ChildProcess 始终由 main 持有。 */
   processPort: MessagePort
   /** 取消缓冲：worker 陷在同步计算里收不到消息时，也能从这里读到自己的请求已被取消。 */
@@ -100,10 +105,12 @@ const DefaultWorkerHealth: WorkbenchLanguageServiceWorkerHealthOptions = {
 }
 
 type WorkbenchLanguageServiceRequestTimeout = (
-  operation: WorkbenchLanguageServiceWorkerOperation
+  operation: WorkbenchLanguageServiceWorkerOperation,
+  initializingProject?: boolean
 ) => number
 
 interface LanguageServiceWorkerInstance {
+  readyProjects: Set<string>
   processes: ExternalLspWorkerProcessScope
   processPort: MessagePort
   port: WorkbenchLanguageServiceWorkerPort
@@ -184,13 +191,14 @@ function createDefaultLanguageServiceWorker({
   processPort,
   cancellation,
   locale,
+  resourcesPath,
 }: WorkbenchLanguageServiceWorkerFactoryOptions): WorkbenchLanguageServiceWorkerPort {
   // 显式的堆上限让 OOM 变成可恢复的 worker 终止（error 事件），而不是 Node 直接 abort 整个主进程。
   return new Worker(resolve(__dirname, 'workbench-language-worker.js'), {
     resourceLimits: {
       maxOldGenerationSizeMb: computeWorkbenchLanguageWorkerHeapLimitMb(totalmem()),
     },
-    workerData: { cancellation, locale, processPort },
+    workerData: { cancellation, locale, processPort, resourcesPath },
     transferList: [processPort],
   })
 }
@@ -211,7 +219,9 @@ export class WorkbenchLanguageServiceWorkerClient {
   private disposed = false
   private disposal?: Promise<void>
   private readonly processes = new ExternalLspProcessHost()
-  private readonly tools = new ProjectToolWorkerHost(resolve(__dirname, 'workbench-project-tools-worker.js'))
+  private readonly tools = new ProjectToolWorkerHost(
+    resolve(__dirname, 'workbench-project-tools-worker.js')
+  )
   private readonly retiring = new Map<
     LanguageServiceWorkerInstance | ExternalLspWorkerProcessScope,
     Promise<unknown>
@@ -240,6 +250,7 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     const root = resolve(request.projectRoot)
+    this.worker?.readyProjects.delete(root)
     for (const pending of [...this.pending.values()])
       if (pending.projectLease?.projectRoot === root)
         this.cancel(pending.id, new AppError('CANCELLED', 'Language project was released'))
@@ -250,7 +261,9 @@ export class WorkbenchLanguageServiceWorkerClient {
       ),
       this.tools.closeProject(root, deadlineAt),
     ]).then((results) => {
-      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : []
+      )
       if (failures.length) throw new AggregateError(failures, 'Language project did not close')
     })
   }
@@ -538,7 +551,9 @@ export class WorkbenchLanguageServiceWorkerClient {
     worker: LanguageServiceWorkerInstance
   ): void {
     pending.worker = worker
-    const timeoutMs = Math.max(1, this.requestTimeoutMs(pending.operation))
+    const initializingProject =
+      !!pending.projectLease && !worker.readyProjects.has(pending.projectLease.projectRoot)
+    const timeoutMs = Math.max(1, this.requestTimeoutMs(pending.operation, initializingProject))
     pending.deadlineAt = Date.now() + timeoutMs
     pending.timeout = setTimeout(() => this.handleRequestTimeout(pending), timeoutMs)
     try {
@@ -564,7 +579,12 @@ export class WorkbenchLanguageServiceWorkerClient {
     if (pending.tools) {
       void pending.tools.close(pending.deadlineAt ?? Date.now(), error).then(
         () => pending.reject(error),
-        (closeError: unknown) => pending.reject(AppError.from(new AggregateError([error, closeError], 'Language request and tool close failed')))
+        (closeError: unknown) =>
+          pending.reject(
+            AppError.from(
+              new AggregateError([error, closeError], 'Language request and tool close failed')
+            )
+          )
       )
     } else pending.reject(error)
   }
@@ -602,16 +622,16 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   private probe(worker: LanguageServiceWorkerInstance): void {
     if (worker.probe) return
-    // ESLint 的类型检查会同步占用 worker。排在它后面的补全/符号请求可能先超时，
-    // 此时没收到 pong 不等于线程死了；至少等已发出的诊断用完自己的预算再判定。
+    // 首次建图、类型检查会同步占用 worker。排在它后面的生命周期请求可能先超时，
+    // 此时没收到 pong 不等于线程死了；等已发出的分析用完自己的预算再判定。
     // 只在本次探活创建时计算，不让后来排队的请求无限推迟故障恢复。
     const now = Date.now()
-    let diagnosticsDeadline = now
+    let analysisDeadline = now
     for (const pending of this.pending.values()) {
-      if (pending.worker === worker && pending.operation === 'getDiagnostics')
-        diagnosticsDeadline = Math.max(diagnosticsDeadline, pending.deadlineAt ?? now)
+      if (pending.worker === worker)
+        analysisDeadline = Math.max(analysisDeadline, pending.deadlineAt ?? now)
     }
-    const hangTimeoutMs = Math.max(this.health.hangTimeoutMs, diagnosticsDeadline - now)
+    const hangTimeoutMs = Math.max(this.health.hangTimeoutMs, analysisDeadline - now)
     const id = this.nextRequestId++
     worker.probe = {
       id,
@@ -651,6 +671,7 @@ export class WorkbenchLanguageServiceWorkerClient {
     let port: WorkbenchLanguageServiceWorkerPort
     try {
       port = this.createWorker({
+        resourcesPath: process.resourcesPath,
         cancellation: buffer,
         locale: getWorkbenchMainLocale(),
         processPort: channel.port2,
@@ -664,6 +685,7 @@ export class WorkbenchLanguageServiceWorkerClient {
       throw error
     }
     const worker: LanguageServiceWorkerInstance = {
+      readyProjects: new Set(),
       processes,
       processPort: channel.port2,
       port,
@@ -686,7 +708,12 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   private handleWorkerMessage(worker: LanguageServiceWorkerInstance, message: unknown): void {
-    if (typeof message === 'object' && message !== null && 'control' in message && message.control === 'project-tools') {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'control' in message &&
+      message.control === 'project-tools'
+    ) {
       void this.handleProjectTools(worker, message as ProjectToolEndpointRequest)
       return
     }
@@ -705,6 +732,20 @@ export class WorkbenchLanguageServiceWorkerClient {
     const pending = this.pending.get(message.id)
     if (!pending || pending.worker !== worker) return
 
+    if (
+      !message.error &&
+      pending.projectLease &&
+      [
+        'getHover',
+        'getCompletions',
+        'getDefinition',
+        'getDiagnostics',
+        'getInlayHints',
+        'getSemanticTokens',
+      ].includes(pending.operation)
+    )
+      worker.readyProjects.add(pending.projectLease.projectRoot)
+
     this.pending.delete(message.id)
     if (pending.timeout) clearTimeout(pending.timeout)
     if (pending.supersedeKey && this.supersedable.get(pending.supersedeKey) === pending.id)
@@ -716,35 +757,65 @@ export class WorkbenchLanguageServiceWorkerClient {
     if (pending.tools) {
       void pending.tools.close().then(deliver, (error: unknown) => {
         const failure = message.error
-          ? new AggregateError([AppError.fromJSON(message.error), error], 'Language request and tool close failed')
+          ? new AggregateError(
+              [AppError.fromJSON(message.error), error],
+              'Language request and tool close failed'
+            )
           : error
         pending.reject(AppError.from(failure))
       })
     } else deliver()
   }
 
-  private async handleProjectTools(worker: LanguageServiceWorkerInstance, message: ProjectToolEndpointRequest): Promise<void> {
-    const response: ProjectToolEndpointResponse = { control: 'project-tools-result', id: message.id }
+  private async handleProjectTools(
+    worker: LanguageServiceWorkerInstance,
+    message: ProjectToolEndpointRequest
+  ): Promise<void> {
+    const response: ProjectToolEndpointResponse = {
+      control: 'project-tools-result',
+      id: message.id,
+    }
     try {
       if (message.action === 'close') {
-        const pending = message.requestId === undefined ? undefined : this.pending.get(message.requestId)
-        const deadlineAt = pending && pending.worker === worker && pending.operation === 'shutdown' && pending.deadlineAt !== null
-          ? pending.deadlineAt
-          : Date.now() + getWorkbenchLanguageServiceRequestTimeoutMs('shutdown')
+        const pending =
+          message.requestId === undefined ? undefined : this.pending.get(message.requestId)
+        const deadlineAt =
+          pending &&
+          pending.worker === worker &&
+          pending.operation === 'shutdown' &&
+          pending.deadlineAt !== null
+            ? pending.deadlineAt
+            : Date.now() + getWorkbenchLanguageServiceRequestTimeoutMs('shutdown')
         await this.tools.closeOwner(worker, deadlineAt)
       } else if (message.action === 'finish') {
         await this.tools.finishRequest(worker, message.requestId)
       } else {
         const pending = this.pending.get(message.requestId)
-        if (this.disposed || this.worker !== worker || !pending || pending.worker !== worker || !pending.projectLease || pending.deadlineAt === null)
+        if (
+          this.disposed ||
+          this.worker !== worker ||
+          !pending ||
+          pending.worker !== worker ||
+          !pending.projectLease ||
+          pending.deadlineAt === null
+        )
           throw new AppError('CANCELLED', 'Project tool language request is no longer active')
-        if ((message.operation === 'lint' && pending.operation !== 'getDiagnostics') || (message.operation === 'format' && pending.operation !== 'getFormat'))
+        if (
+          (message.operation === 'lint' && pending.operation !== 'getDiagnostics') ||
+          (message.operation === 'format' && pending.operation !== 'getFormat')
+        )
           throw new AppError('INVARIANT', 'Project tool does not belong to the language operation')
         this.processes.assertProject(pending.projectLease)
-        pending.tools ??= this.tools.createRequest(worker, pending.id, pending.projectLease.projectRoot, pending.deadlineAt)
-        response.result = message.operation === 'lint'
-          ? await pending.tools.operations.lint(message.input)
-          : await pending.tools.operations.format(message.input)
+        pending.tools ??= this.tools.createRequest(
+          worker,
+          pending.id,
+          pending.projectLease.projectRoot,
+          pending.deadlineAt
+        )
+        response.result =
+          message.operation === 'lint'
+            ? await pending.tools.operations.lint(message.input)
+            : await pending.tools.operations.format(message.input)
       }
     } catch (error) {
       response.error = AppError.from(error, 'IPC').toJSON()
@@ -837,9 +908,16 @@ export class WorkbenchLanguageServiceWorkerClient {
       worker,
       Promise.resolve().then(() =>
         withinLspDeadline(
-          Promise.allSettled([worker.processes.close(deadlineAt), this.tools.closeOwner(worker, deadlineAt), worker.port.terminate()]).then((results) => {
-            const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
-            if (failures.length) throw new AggregateError(failures, 'Language worker resources did not close')
+          Promise.allSettled([
+            worker.processes.close(deadlineAt),
+            this.tools.closeOwner(worker, deadlineAt),
+            worker.port.terminate(),
+          ]).then((results) => {
+            const failures = results.flatMap((result) =>
+              result.status === 'rejected' ? [result.reason] : []
+            )
+            if (failures.length)
+              throw new AggregateError(failures, 'Language worker resources did not close')
           }),
           deadlineAt
         )

@@ -20,13 +20,12 @@ import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 shareHostReactWithLinkedUi()
 
 // 会加载共享包的模块都放在上面那一步之后再加载（静态 import 在任何代码执行之前就解析完了）。
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
-const { translateWorkbenchAppMessage } = await import(
-  '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
-)
-const { WORKBENCH_EDITOR_KEYMAP_COMMANDS } = await import(
-  '../src/renderer/src/models/editor/workbenchEditorKeymap'
-)
+const { WorkbenchLocalizationProvider } =
+  await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
+const { translateWorkbenchAppMessage } =
+  await import('../src/renderer/src/i18n/useStandaloneWorkbenchLocalization')
+const { WORKBENCH_EDITOR_KEYMAP_COMMANDS } =
+  await import('../src/renderer/src/models/editor/workbenchEditorKeymap')
 const {
   buildWorkbenchKeymapConflicts,
   getWorkbenchKeymapPresetShortcuts,
@@ -150,13 +149,13 @@ void describe('keymap preset selector', () => {
       assert.match(selector, /Keymap preset/u)
       assert.ok(decode(selector).includes(description), `${preset} description`)
       // 选择框上是方案的名字；用的是设置里别的下拉同一个控件（小号）。
-      assert.match(
-        selector,
-        new RegExp(
-          `<button[^>]*data-slot="select-trigger"[^>]*velar-select-size-sm[^>]*aria-label="${label}"`,
-          'u'
-        )
-      )
+      const trigger = selector.match(
+        /<button[^>]*data-slot="select-trigger"[^>]*>[\s\S]*?<\/button>/u
+      )?.[0]
+      assert.ok(trigger, `${preset} select trigger`)
+      assert.match(trigger, /role="combobox"/u)
+      assert.match(trigger, /velar-select-size-sm/u)
+      assert.ok(decode(trigger).includes(label), `${preset} selected label`)
     }
     assert.match(renderShortcuts({ preset: 'vscode', platform: Mac, locale: 'zh-CN' }), /键位方案/u)
     assert.match(
@@ -206,8 +205,14 @@ void describe('app-wide shortcut list', () => {
 
     // Vim 方案的全局快捷键与 Workbench 相同。
     assert.deepEqual(
-      rows(renderShortcuts({ preset: 'vim', platform: Linux })).map(({ title, keys }) => [title, keys]),
-      rows(renderShortcuts({ preset: 'workbench', platform: Linux })).map(({ title, keys }) => [title, keys])
+      rows(renderShortcuts({ preset: 'vim', platform: Linux })).map(({ title, keys }) => [
+        title,
+        keys,
+      ]),
+      rows(renderShortcuts({ preset: 'workbench', platform: Linux })).map(({ title, keys }) => [
+        title,
+        keys,
+      ])
     )
   })
 
@@ -215,7 +220,8 @@ void describe('app-wide shortcut list', () => {
     const jetbrains = renderShortcuts({ preset: 'jetbrains', platform: Mac })
     assert.deepEqual(row(jetbrains, 'Toggle AI Chat').keys, ['Not set'])
     assert.deepEqual(
-      row(renderShortcuts({ preset: 'jetbrains', platform: Mac, locale: 'zh-CN' }), '切换 AI 聊天').keys,
+      row(renderShortcuts({ preset: 'jetbrains', platform: Mac, locale: 'zh-CN' }), '切换 AI 聊天')
+        .keys,
       ['未设置']
     )
     // 没有哪一行的按钮是空的。
@@ -233,7 +239,8 @@ void describe('app-wide shortcut list', () => {
 
     // 方案的默认键：没有可重置的。
     const vscode = renderShortcuts({ preset: 'vscode', platform: Mac })
-    for (const item of rows(vscode)) assert.equal(resetDisabled(vscode, item.title), true, item.title)
+    for (const item of rows(vscode))
+      assert.equal(resetDisabled(vscode, item.title), true, item.title)
 
     // 用户另录了一个：显示录的那个，能重置。
     const changed = renderShortcuts({
@@ -294,7 +301,10 @@ void describe('read-only editor key list', () => {
     assert.deepEqual(row(windows, 'Format document').keys, ['Ctrl+Alt+L'])
     assert.deepEqual(row(windows, 'Refactor').keys, ['Ctrl+Alt+Shift+T'])
     assert.deepEqual(row(windows, 'Redo').keys, ['Ctrl+Y'])
-    assert.deepEqual(row(renderEditorKeys('workbench', Linux), 'Redo').keys, ['Ctrl+Y', 'Ctrl+Shift+Z'])
+    assert.deepEqual(row(renderEditorKeys('workbench', Linux), 'Redo').keys, [
+      'Ctrl+Y',
+      'Ctrl+Shift+Z',
+    ])
 
     const vscode = renderEditorKeys('vscode', Mac)
     assert.deepEqual(row(vscode, 'Rename symbol').keys, ['F2'])
@@ -348,7 +358,10 @@ void describe('read-only editor key list', () => {
     const source = readSource('src/renderer/src/components/settings/WorkbenchKeymapSettings.tsx')
     const styles = readSource('src/renderer/src/styles/14-settings.module.css')
     const used = [...new Set([...source.matchAll(/styles\.(\w+)/gu)].map((match) => match[1]!))]
-    assert.match(source, /import \{ SettingRow, WorkbenchSettingsPill \} from '\.\/WorkbenchSettingsParts'/u)
+    assert.match(
+      source,
+      /import \{ SettingRow, WorkbenchSettingsPill \} from '\.\/WorkbenchSettingsParts'/u
+    )
     assert.deepEqual(used.sort(), [
       'workbenchSettingsSectionPanel',
       'workbenchSettingsSelectTrigger',
@@ -402,7 +415,10 @@ void describe('read-only editor key list', () => {
       }
     )
     for (const key of Object.values(WorkbenchEditorKeysDescriptionKeys))
-      assert.notEqual(translateWorkbenchAppMessage('zh-CN', key), translateWorkbenchAppMessage('en-US', key))
+      assert.notEqual(
+        translateWorkbenchAppMessage('zh-CN', key),
+        translateWorkbenchAppMessage('en-US', key)
+      )
     // 录键的状态留在对话框手里：录键时 Esc 是取消录键，不关设置。
     assert.match(dialog, /if \(event\.key === 'Escape' && !capturingAction\)/u)
     assert.match(dialog, /capturingAction=\{capturingAction\}/u)

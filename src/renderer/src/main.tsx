@@ -2,12 +2,14 @@
 // 全局样式表必须先于一切应用模块求值，产品样式才排在共享原语之后（见 globalStyles.ts）。
 import './styles/globalStyles'
 
+import { lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import { WorkbenchRuntimeProvider } from '@renderer/composition/WorkbenchRuntimeProvider'
 import { registerWorkbenchEditorLanguage } from '@renderer/models/editor/workbenchEditorLanguageContributions'
 
 import { VelarWorkbenchLanguageService } from '@shared/contributions/velar/service'
 import { registerWorkbenchLanguageService } from '@shared/workbenchLanguageServices'
+import { WorkbenchSettingsWindowQuery } from '@shared/workbenchSettingsWindow'
 
 import { StandaloneWorkbenchApp } from './app/StandaloneWorkbenchApp'
 import { installStandaloneWorkbenchHost } from './host/standaloneWorkbenchHost'
@@ -24,8 +26,21 @@ if (!rootElement) {
   throw new Error('Missing standalone Workbench root element')
 }
 
+const SettingsWindow = lazy(async () => ({
+  default: (await import('./app/StandaloneWorkbenchSettingsWindow'))
+    .StandaloneWorkbenchSettingsWindow,
+}))
+const isSettingsWindow =
+  new URLSearchParams(window.location.search).get('view') === WorkbenchSettingsWindowQuery
+
 ReactDOM.createRoot(rootElement).render(
   <WorkbenchRuntimeProvider runtime={workbenchRuntime}>
-    <StandaloneWorkbenchApp />
+    {isSettingsWindow ? (
+      <Suspense fallback={null}>
+        <SettingsWindow />
+      </Suspense>
+    ) : (
+      <StandaloneWorkbenchApp />
+    )}
   </WorkbenchRuntimeProvider>
 )

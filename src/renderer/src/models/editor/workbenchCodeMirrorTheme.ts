@@ -3,10 +3,7 @@ import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 
-import {
-  isWorkbenchDarkTheme,
-  type WorkbenchThemeId,
-} from '../workbenchPreferences'
+import { isWorkbenchDarkTheme, type WorkbenchThemeId } from '../workbenchPreferences'
 
 export interface WorkbenchCodeTokenPalette {
   comment: string
@@ -132,6 +129,7 @@ function createWorkbenchHighlightSpecs(theme: WorkbenchThemeId): TagStyle[] {
     {
       tag: [
         tags.keyword,
+        tags.modifier,
         tags.controlKeyword,
         tags.definitionKeyword,
         tags.moduleKeyword,

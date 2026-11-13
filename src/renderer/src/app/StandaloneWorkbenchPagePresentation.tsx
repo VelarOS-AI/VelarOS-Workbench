@@ -29,7 +29,11 @@ import type { WorkbenchProjectHubState } from '@shared/projectHub'
 
 import { WorkbenchAiChangeDiffPanel } from '../components/aiChanges/WorkbenchAiChangeDiffPanel'
 import { StatusBar } from '../components/chrome/StatusBar'
-import { WorkbenchTopLeading, WorkbenchTopTrailing } from '../components/chrome/TopToolbar'
+import {
+  WorkbenchSettingsAction,
+  WorkbenchTopLeading,
+  WorkbenchTopTrailing,
+} from '../components/chrome/TopToolbar'
 import { WorkbenchProjectControl } from '../components/chrome/WorkbenchProjectControl'
 import { CodeInsightPanel } from '../components/editor/CodeInsightPanel'
 import { EditorUnsavedChangesDialog } from '../components/editor/EditorUnsavedChangesDialog'
@@ -63,14 +67,10 @@ const LazyWorkbenchLogicGraphEditor = lazy(async () => {
   return { default: module.WorkbenchLogicGraphEditor }
 })
 
-// 快速打开与命令面板（文件名打分、命令登记表）、设置对话框、底部 Git 工具窗都不进工作区外壳包：空闲时预先加载，
+// 快速打开与命令面板（文件名打分、命令登记表）、底部 Git 工具窗都不进工作区外壳包：空闲时预先加载，
 // 第一次打开不用等。
 const LazyQuickOpen = lazyWithPreload(
   async () => (await import('../components/QuickOpen')).QuickOpen
-)
-const LazyWorkbenchSettingsDialog = lazyWithPreload(
-  async () =>
-    (await import('../components/settings/WorkbenchSettingsDialog')).WorkbenchSettingsDialog
 )
 const LazyWorkbenchGitToolPanel = lazyWithPreload(
   async () => (await import('../components/git/WorkbenchGitToolPanel')).WorkbenchGitToolPanel
@@ -121,7 +121,7 @@ export function StandaloneWorkbenchPagePresentation({
     chrome,
     dialogs,
   } = model
-  const { translate, locale, t, shellStyle, macTitleInset, hostPlatform, commandStatusLabel } =
+  const { translate, t, shellStyle, macTitleInset, hostPlatform, commandStatusLabel } =
     chrome
 
   const pendingFileOpenId = projectHubState.pendingFileOpen?.id
@@ -143,9 +143,6 @@ export function StandaloneWorkbenchPagePresentation({
       ? buildWorkbenchStatusBarTextFormat(selectedEditorTab, workbench.selectedFileEditMode)
       : null
   const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
-  // 设置对话框第一次打开时才挂上，之后一直挂着（关的时候还要播退场动画）。
-  const [settingsMounted, setSettingsMounted] = useState(false)
-  if (dialogs.settingsOpen && !settingsMounted) setSettingsMounted(true)
   // 「编辑运行配置」对话框同样：打开过才挂着。
   const [runConfigurationsMounted, setRunConfigurationsMounted] = useState(false)
   if (dialogs.runConfigurationsOpen && !runConfigurationsMounted) setRunConfigurationsMounted(true)
@@ -315,7 +312,7 @@ export function StandaloneWorkbenchPagePresentation({
   }, [activeProjectId])
 
   useEffect(
-    () => preloadWhenIdle([LazyQuickOpen, LazyWorkbenchSettingsDialog, LazyWorkbenchGitToolPanel]),
+    () => preloadWhenIdle([LazyQuickOpen, LazyWorkbenchGitToolPanel]),
     []
   )
 
@@ -810,6 +807,7 @@ export function StandaloneWorkbenchPagePresentation({
           <aside className={styles.rightToolRail} aria-label={t('workbench.rightToolWindows')}>
             <div className={styles.rightToolStrip}>
               <div className={styles.rightToolWindowGroup}>
+                <WorkbenchSettingsAction onOpenSettings={editorChrome.onOpenSettings} />
                 <WorkbenchAgentRail
                   projectRoot={workbench.activeProject.rootPath}
                   isOpen={surface.isRightToolOpen}
@@ -943,32 +941,6 @@ export function StandaloneWorkbenchPagePresentation({
           saving={workbench.isResolvingCloseRequest}
           onResolve={(choice) => void workbench.resolveCloseRequest(choice)}
         />
-        {settingsMounted && (
-          <Suspense fallback={null}>
-            <LazyWorkbenchSettingsDialog
-              open={dialogs.settingsOpen}
-              preferences={workbenchPreferences.preferences}
-              keymap={workbenchKeymap.keymap}
-              keymapPreset={workbenchKeymap.preset}
-              presetShortcuts={workbenchKeymap.presetShortcuts}
-              conflicts={workbenchKeymap.conflicts}
-              locale={locale}
-              project={{
-                name: workbench.activeProject.name,
-                rootPath: workbench.activeProject.rootPath,
-              }}
-              onExitProject={model.actions.exitCurrentProject}
-              onOpenChange={dialogs.setSettingsOpen}
-              onPreferencesChange={workbenchPreferences.updatePreferences}
-              onResetPreferences={workbenchPreferences.resetPreferences}
-              onKeymapPresetChange={workbenchKeymap.setPreset}
-              onSetShortcut={workbenchKeymap.setShortcut}
-              onResetShortcut={workbenchKeymap.resetShortcut}
-              onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
-              onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
-            />
-          </Suspense>
-        )}
         {runConfigurationsMounted && (
           <Suspense fallback={null}>
             <LazyWorkbenchRunConfigurationsDialog

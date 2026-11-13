@@ -1,5 +1,5 @@
 import type { EditorState, Extension } from '@codemirror/state'
-import { RangeSet } from '@codemirror/state'
+import { RangeSet, StateEffect, StateField } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -11,18 +11,36 @@ import {
 } from '@codemirror/view'
 
 const workbenchActiveLineSuppressedClass = 'cm-workbenchActiveLineSuppressed'
+const setActiveLineSuppressed = StateEffect.define<boolean>()
+const activeLineSuppressed = StateField.define<boolean>({
+  create: () => false,
+  update: (value, transaction) => {
+    let suppressed = value
+    for (const effect of transaction.effects)
+      if (effect.is(setActiveLineSuppressed)) suppressed = effect.value
+    return suppressed
+  },
+  // CodeMirror rewrites editor classes on focus and transactions. Keep this in
+  // its attribute facet so those updates cannot drop the file's idle state.
+  provide: (field) =>
+    EditorView.editorAttributes.from(field, (suppressed) => ({
+      class: suppressed ? workbenchActiveLineSuppressedClass : '',
+    })),
+})
 
 /** 文件刚切换时暂隐合成光标产生的当前行，首次真实编辑交互后恢复。 */
 export function suppressWorkbenchActiveLine(view: EditorView): void {
-  view.dom.classList.add(workbenchActiveLineSuppressedClass)
+  if (!isWorkbenchActiveLineSuppressed(view))
+    view.dispatch({ effects: setActiveLineSuppressed.of(true) })
 }
 
 export function revealWorkbenchActiveLine(view: EditorView): void {
-  view.dom.classList.remove(workbenchActiveLineSuppressedClass)
+  if (isWorkbenchActiveLineSuppressed(view))
+    view.dispatch({ effects: setActiveLineSuppressed.of(false) })
 }
 
 export function isWorkbenchActiveLineSuppressed(view: EditorView): boolean {
-  return view.dom.classList.contains(workbenchActiveLineSuppressedClass)
+  return view.state.field(activeLineSuppressed)
 }
 
 /** 跨行文本选区已经提供了足够清晰的视觉范围，不再叠加单独的当前行。 */
@@ -109,6 +127,7 @@ const activeLineInteractionExtension = EditorView.domEventHandlers({
 
 /** 当前行和当前行号使用同一个选区策略，避免两处视觉状态分叉。 */
 export const workbenchActiveLineExtension: Extension = [
+  activeLineSuppressed,
   activeLineContentExtension,
   activeLineGutterExtension,
   activeLineInteractionExtension,

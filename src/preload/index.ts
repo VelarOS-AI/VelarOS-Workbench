@@ -39,6 +39,10 @@ import {
   WorkbenchSessionPeersChannels,
 } from '../shared/workbenchSessionPeers'
 import {
+  type WorkbenchSettingsWindowBridge,
+  WorkbenchSettingsWindowChannels,
+} from '../shared/workbenchSettingsWindow'
+import {
   type WorkbenchTerminalBridge,
   WorkbenchTerminalChannels,
 } from '../shared/workbenchTerminal'
@@ -311,6 +315,12 @@ const updateBridge: WorkbenchUpdateBridge = {
   onChanged: (listener) => subscribe(WorkbenchUpdateChannels.changed, listener),
 }
 
+const settingsWindowBridge: WorkbenchSettingsWindowBridge = {
+  open: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.open),
+  close: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.close),
+  exitProject: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.exitProject),
+}
+
 const windowStateBridge: WorkbenchWindowStateBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchWindowStateChannels.getState),
   onChanged: (listener) => subscribe(WorkbenchWindowStateChannels.changed, listener),
@@ -350,6 +360,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchBrowser', browserBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchSettingsWindow', settingsWindowBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWindowState', windowStateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWindowClose', windowCloseBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)

@@ -3,17 +3,22 @@ import {
   type ReactElement,
   type ReactNode,
   useEffect,
-  useMemo,
+  useId,
   useRef,
   useState,
 } from 'react'
 import {
   ArrowCounterClockwiseIcon,
   ArrowSquareOutIcon,
+  CodeIcon,
   DownloadSimpleIcon,
   FileTextIcon,
+  GearSixIcon,
+  MonitorIcon,
+  RobotIcon,
+  SidebarSimpleIcon,
   SignOutIcon,
-  XIcon,
+  UserCircleIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchProductAnalytics } from '@renderer/hooks/useWorkbenchProductAnalytics'
 import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchProviderModelCatalog'
@@ -30,10 +35,7 @@ import {
   WORKBENCH_EDITOR_FONT_SIZE_MAX,
   WORKBENCH_EDITOR_FONT_SIZE_MIN,
   WORKBENCH_EDITOR_FONT_SIZE_STEP,
-  type WorkbenchAccent,
-  type WorkbenchDensity,
   type WorkbenchPreferences,
-  type WorkbenchThemeId,
 } from '@renderer/models/workbenchPreferences'
 import {
   getStandaloneWorkbenchManagedProvider,
@@ -65,6 +67,7 @@ import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
+import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 import { Log } from '@velaros-ai/velaros/core'
 import { Result } from '@velaros-ai/velaros/core/result'
 
@@ -82,15 +85,25 @@ import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
 
+import { WorkbenchAppearanceSettings } from './WorkbenchAppearanceSettings'
 import {
   WorkbenchEditorKeysDescriptionKeys,
   WorkbenchEditorKeysSettings,
   WorkbenchKeymapSettings,
 } from './WorkbenchKeymapSettings'
 import { WorkbenchMemorySettings } from './WorkbenchMemorySettings'
-import { SettingRow, WorkbenchSettingsPill } from './WorkbenchSettingsParts'
+import {
+  cleanWorkbenchModelCatalogError,
+  getWorkbenchModelSignInReason,
+} from './workbenchSettingsModelFeedback'
+import {
+  SettingRow,
+  SettingsDisclosure,
+  SettingsSlider,
+  WorkbenchSettingsPill,
+} from './WorkbenchSettingsParts'
 
-type WorkbenchSettingsSectionId = 'general' | 'editor' | 'ai' | 'system'
+type WorkbenchSettingsSectionId = 'appearance' | 'editor' | 'ai' | 'system' | 'account'
 
 interface WorkbenchSettingsDialogProps {
   conflicts: WorkbenchKeymapConflict[]
@@ -123,23 +136,28 @@ function SettingsSubsection({
   description,
   action,
   children,
+  defaultOpen = true,
+  inline = false,
 }: {
   title: string
   description: string
   action?: ReactNode
   children: ReactNode
+  defaultOpen?: boolean
+  inline?: boolean
 }): ReactElement {
-  return (
-    <section className={styles.workbenchSettingsGroup}>
-      <header className={styles.workbenchSettingsGroupHeader}>
-        <div className={styles.workbenchSettingsGroupCopy}>
-          <Text className={styles.workbenchSettingsGroupTitle}>{title}</Text>
-          <Text tone="caption">{description}</Text>
-        </div>
-        {!!action && <div className={styles.workbenchSettingsGroupAction}>{action}</div>}
-      </header>
+  const content = (
+    <section className={styles.workbenchSettingsGroup} aria-label={title}>
+      {action && <div className={styles.workbenchSettingsGroupAction}>{action}</div>}
       {children}
     </section>
+  )
+  return inline ? (
+    content
+  ) : (
+    <SettingsDisclosure title={title} description={description} defaultOpen={defaultOpen}>
+      {content}
+    </SettingsDisclosure>
   )
 }
 
@@ -181,10 +199,18 @@ export function WorkbenchSettingsDialog({
     getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
   const modelProviderOptions = createStandaloneWorkbenchModelProviderOptions(
     managedModels,
-    (provider) => t('workbench.settingsModelProviderDisabled', { provider })
+    (provider) => t('workbench.settingsModelProviderDisabled', { provider }),
+    modelConfig.provider
   )
   const timers = useTimerScope('WorkbenchSettingsDialog')
-  const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('general')
+  const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('appearance')
+  const isAccountSectionActive = activeSection === 'account'
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+  )
+  const navigationId = useId()
+  const sidebarToggleRef = useRef<HTMLButtonElement>(null)
+  const [projectRulesExpanded, setProjectRulesExpanded] = useState(false)
   const [accountState, setAccountState] = useState<WorkbenchAccountState>({
     status: 'signed-out',
   })
@@ -224,6 +250,11 @@ export function WorkbenchSettingsDialog({
   ]
   const selectedManagedProviderDisabled =
     !!selectedManagedProvider && !selectedManagedProvider.enabled
+  const managedCatalogError =
+    isStandaloneWorkbenchManagedProviderId(modelConfig.provider) && providerModelCatalogError
+  const managedCatalogSignInReason = managedCatalogError
+    ? getWorkbenchModelSignInReason(managedCatalogError)
+    : null
   const modelCatalogDescription = selectedManagedProviderDisabled
     ? t('workbench.settingsModelProviderDisabled', { provider: modelProviderPreset.label })
     : isLoadingProviderModels
@@ -233,44 +264,66 @@ export function WorkbenchSettingsDialog({
             provider: modelProviderPreset.label,
             count: activeProviderModelCatalog.models.length,
           })
-        : providerModelCatalogError
-          ? !modelConfig.apiKey.trim() &&
-            !modelProviderPreset.apiKeyOptional &&
-            modelProviderPreset.validationKind !== 'openrouter-key'
-            ? t('workbench.settingsModelCatalogNeedsKey', {
-                provider: modelProviderPreset.label,
-              })
-            : t('workbench.settingsModelCatalogError', {
-                provider: modelProviderPreset.label,
-                error: providerModelCatalogError,
-              })
-          : t('workbench.settingsModelCatalogEmpty', { provider: modelProviderPreset.label })
+        : managedCatalogError
+          ? ''
+          : providerModelCatalogError
+            ? !modelConfig.apiKey.trim() &&
+              !modelProviderPreset.apiKeyOptional &&
+              modelProviderPreset.validationKind !== 'openrouter-key'
+              ? t('workbench.settingsModelCatalogNeedsKey', {
+                  provider: modelProviderPreset.label,
+                })
+              : t('workbench.settingsModelCatalogError', {
+                  provider: modelProviderPreset.label,
+                  error: cleanWorkbenchModelCatalogError(providerModelCatalogError),
+                })
+            : t('workbench.settingsModelCatalogEmpty', { provider: modelProviderPreset.label })
 
-  const sections = useMemo(
-    () => [
-      {
-        id: 'general' as const,
-        label: t('workbench.settingsGeneral'),
-        description: t('workbench.settingsGeneralDescription'),
-      },
-      {
-        id: 'editor' as const,
-        label: t('workbench.settingsEditor'),
-        description: t('workbench.settingsEditorGroupDescription'),
-      },
-      {
-        id: 'ai' as const,
-        label: t('workbench.settingsAi'),
-        description: t('workbench.settingsAiDescription'),
-      },
-      {
-        id: 'system' as const,
-        label: t('workbench.settingsSystem'),
-        description: t('workbench.settingsSystemDescription'),
-      },
-    ],
-    [t]
-  )
+  const sections = [
+    {
+      id: 'appearance' as const,
+      label: t('workbench.settingsAppearance'),
+      description: t('workbench.settingsAppearanceDescription'),
+      icon: MonitorIcon,
+    },
+    {
+      id: 'editor' as const,
+      label: t('workbench.settingsEditor'),
+      description: t('workbench.settingsEditorGroupDescription'),
+      icon: CodeIcon,
+    },
+    {
+      id: 'ai' as const,
+      label: t('workbench.settingsAi'),
+      description: t('workbench.settingsAiDescription'),
+      icon: RobotIcon,
+    },
+    {
+      id: 'system' as const,
+      label: t('workbench.settingsSystem'),
+      description: t('workbench.settingsSystemDescription'),
+      icon: GearSixIcon,
+    },
+    {
+      id: 'account' as const,
+      label: t('workbench.settingsAccount'),
+      description: t('workbench.settingsAccountDescription'),
+      icon: UserCircleIcon,
+    },
+  ]
+  const selectedSection = sections.find((section) => section.id === activeSection) ?? sections[0]!
+
+  useEffect(() => {
+    const compactViewport = window.matchMedia('(max-width: 900px)')
+    const updateLayout = (event: MediaQueryListEvent): void => setSidebarCollapsed(event.matches)
+    compactViewport.addEventListener('change', updateLayout)
+    return () => compactViewport.removeEventListener('change', updateLayout)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    dialogRef.current?.querySelector<HTMLHeadingElement>('#workbench-settings-title')?.focus()
+  }, [activeSection, open])
 
   useEffect(() => {
     if (!open) {
@@ -290,8 +343,10 @@ export function WorkbenchSettingsDialog({
   }, [modelConfig.apiKey, modelConfig.baseURL, modelConfig.provider, open])
 
   useEffect(() => {
-    if (!open || activeSection !== 'general') return
+    if (!open) return
 
+    // A failed model request may invalidate the session after Settings first opens.
+    // Read it again on Account navigation so the sign-in action is up to date.
     let active = true
     setIsLoadingAccount(true)
     setAccountError(null)
@@ -316,7 +371,7 @@ export function WorkbenchSettingsDialog({
       active = false
       dispose()
     }
-  }, [activeSection, open])
+  }, [isAccountSectionActive, open])
 
   useEffect(() => {
     if (!open || activeSection !== 'ai') return
@@ -367,7 +422,7 @@ export function WorkbenchSettingsDialog({
 
   useEffect(() => {
     const projectRoot = project?.rootPath
-    if (!open || activeSection !== 'ai' || !projectRoot) {
+    if (!open || activeSection !== 'ai' || !projectRulesExpanded || !projectRoot) {
       setIsLoadingProjectAiRules(false)
       return
     }
@@ -391,7 +446,19 @@ export function WorkbenchSettingsDialog({
     return () => {
       active = false
     }
-  }, [activeSection, hostRuntime, open, project?.rootPath])
+  }, [activeSection, hostRuntime, open, project?.rootPath, projectRulesExpanded])
+
+  useEffect(() => {
+    if (!open) return
+    const persistDrafts = (): void => {
+      const patch: Partial<StandaloneWorkbenchModelConfig> = {}
+      if (modelBaseURLDraft !== modelConfig.baseURL) patch.baseURL = modelBaseURLDraft
+      if (modelApiKeyDraft !== modelConfig.apiKey) patch.apiKey = modelApiKeyDraft
+      if (Object.keys(patch).length) updateStandaloneWorkbenchModelConfig(patch)
+    }
+    window.addEventListener('beforeunload', persistDrafts)
+    return () => window.removeEventListener('beforeunload', persistDrafts)
+  }, [open, modelBaseURLDraft, modelApiKeyDraft, modelConfig.baseURL, modelConfig.apiKey])
 
   if (!open) return null
 
@@ -433,9 +500,17 @@ export function WorkbenchSettingsDialog({
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     event.stopPropagation()
-    if (event.key === 'Escape' && !capturingAction) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'w' && !capturingAction) {
       event.preventDefault()
       closeDialog()
+      return
+    }
+    if (event.key === 'Escape' && !capturingAction) {
+      event.preventDefault()
+      if (!sidebarCollapsed && window.matchMedia('(max-width: 760px)').matches) {
+        setSidebarCollapsed(true)
+        sidebarToggleRef.current?.focus()
+      } else closeDialog()
     }
   }
 
@@ -468,108 +543,6 @@ export function WorkbenchSettingsDialog({
           </span>
         </button>
         {isExpanded && <pre className={styles.workbenchSettingsAiRuleContent}>{file.content}</pre>}
-      </div>
-    )
-  }
-
-  function renderAppearanceSection(): ReactElement {
-    const themeOptions: Array<{
-      label: string
-      value: WorkbenchThemeId
-      description: string
-    }> = [
-      {
-        value: 'light-modern',
-        label: t('workbench.settingsThemeLightModern'),
-        description: t('workbench.settingsThemeLightModernDescription'),
-      },
-      {
-        value: 'dark-modern',
-        label: t('workbench.settingsThemeDarkModern'),
-        description: t('workbench.settingsThemeDarkModernDescription'),
-      },
-      {
-        value: 'warm-paper',
-        label: t('workbench.settingsThemeWarmPaper'),
-        description: t('workbench.settingsThemeWarmPaperDescription'),
-      },
-      {
-        value: 'midnight-blue',
-        label: t('workbench.settingsThemeMidnightBlue'),
-        description: t('workbench.settingsThemeMidnightBlueDescription'),
-      },
-    ]
-
-    return (
-      <div className={styles.workbenchSettingsSectionPanel}>
-        <div className={styles.workbenchSettingsStackedField}>
-          <div className={styles.workbenchSettingsRowMeta}>
-            <Text className={styles.workbenchSettingsRowTitle}>{t('workbench.settingsTheme')}</Text>
-            <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-              {t('workbench.settingsThemeDescription')}
-            </Text>
-          </div>
-          <div className={styles.workbenchSettingsThemeGrid}>
-            {themeOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={styles.workbenchSettingsThemeButton}
-                data-active={preferences.theme === option.value}
-                data-theme-option={option.value}
-                onClick={() => onPreferencesChange({ theme: option.value })}
-              >
-                <span className={styles.workbenchSettingsThemeSwatch} aria-hidden="true" />
-                <span className={styles.workbenchSettingsThemeCopy}>
-                  <Text className={styles.workbenchSettingsThemeLabel}>{option.label}</Text>
-                  <Text tone="caption" className={styles.workbenchSettingsThemeDescription}>
-                    {option.description}
-                  </Text>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <SettingRow title={t('workbench.settingsDensity')}>
-          <Select<WorkbenchDensity>
-            size="sm"
-            className={styles.workbenchSettingsSelectTrigger}
-            value={preferences.density}
-            options={[
-              {
-                value: 'compact',
-                label: t('workbench.settingsDensityCompact'),
-              },
-              {
-                value: 'balanced',
-                label: t('workbench.settingsDensityBalanced'),
-              },
-              {
-                value: 'comfortable',
-                label: t('workbench.settingsDensityComfortable'),
-              },
-            ]}
-            onChange={(density) => onPreferencesChange({ density })}
-          />
-        </SettingRow>
-        <SettingRow title={t('workbench.settingsAccent')}>
-          <Select<WorkbenchAccent>
-            size="sm"
-            className={styles.workbenchSettingsSelectTrigger}
-            value={preferences.accent}
-            options={[
-              { value: 'blue', label: t('workbench.settingsAccentBlue') },
-              { value: 'teal', label: t('workbench.settingsAccentTeal') },
-              { value: 'green', label: t('workbench.settingsAccentGreen') },
-              { value: 'amber', label: t('workbench.settingsAccentAmber') },
-              { value: 'orange', label: t('workbench.settingsAccentOrange') },
-              { value: 'rose', label: t('workbench.settingsAccentRose') },
-              { value: 'violet', label: t('workbench.settingsAccentViolet') },
-              { value: 'slate', label: t('workbench.settingsAccentSlate') },
-            ]}
-            onChange={(accent) => onPreferencesChange({ accent })}
-          />
-        </SettingRow>
       </div>
     )
   }
@@ -614,40 +587,65 @@ export function WorkbenchSettingsDialog({
   }
 
   function renderAccountSection(): ReactElement {
-    const signedIn = accountState.status === 'signed-in'
-    const accountTitle = signedIn
-      ? accountState.account.displayName
-      : isLoadingAccount
+    const account = accountState.status === 'signed-in' ? accountState.account : null
+    const displayName =
+      account?.displayName ||
+      (isLoadingAccount
         ? t('workbench.settingsAccountLoading')
-        : t('workbench.settingsAccountSignedOut')
-    const accountDescription = signedIn
-      ? accountState.account.email
-      : t('workbench.settingsAccountSignedOutDescription')
-
+        : t('workbench.settingsAccountSignedOut'))
+    const initials = account
+      ? account.displayName
+          .trim()
+          .split(/\s+/u)
+          .map((part) => part[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase() || account.email.slice(0, 2).toUpperCase()
+      : null
     return (
-      <div className={styles.workbenchSettingsSectionPanel}>
-        <SettingRow title={accountTitle} description={accountDescription}>
-          <div className={styles.workbenchSettingsShortcutControls}>
+      <div
+        className={`${styles.workbenchSettingsSectionPanel} ${styles.workbenchSettingsCombinedPanel}`}
+      >
+        <SettingsDisclosure
+          title={t('workbench.settingsAccountInfo')}
+          description={t('workbench.settingsAccountInfoDescription')}
+          defaultOpen
+        >
+          <div className={styles.workbenchSettingsAccountIdentity}>
+            <span className={styles.workbenchSettingsAccountAvatar}>
+              {initials || <UserCircleIcon size={28} />}
+            </span>
+            <strong>{displayName}</strong>
+            {account && (
+              <span className={styles.workbenchSettingsAccountEmail}>{account.email}</span>
+            )}
             <Button
               size="sm"
-              variant={signedIn ? 'destructiveOutline' : 'outline'}
+              variant="ghost"
               disabled={isLoadingAccount || isChangingAccount}
-              onClick={() => void changeAccount(signedIn ? 'sign-out' : 'sign-in')}
+              onClick={() => void changeAccount(account ? 'sign-out' : 'sign-in')}
             >
-              {signedIn ? <SignOutIcon size={14} /> : <ArrowSquareOutIcon size={14} />}
+              {account ? <SignOutIcon size={15} /> : <ArrowSquareOutIcon size={15} />}
               {isChangingAccount
                 ? t('workbench.settingsAccountChanging')
-                : signedIn
+                : account
                   ? t('workbench.settingsAccountSignOutAction')
                   : t('workbench.settingsAccountSignInAction')}
             </Button>
           </div>
-        </SettingRow>
-        {!!accountError && (
-          <Text tone="caption" className={styles.workbenchSettingsPluginError} role="alert">
-            {t('workbench.settingsAccountError', { error: accountError })}
-          </Text>
-        )}
+          {!!accountError && (
+            <Text className={styles.workbenchSettingsPluginError} role="alert">
+              {t('workbench.settingsAccountError', { error: accountError })}
+            </Text>
+          )}
+        </SettingsDisclosure>
+        <SettingsSubsection
+          title={t('workbench.settingsProject')}
+          description={t('workbench.settingsProjectDescription')}
+          defaultOpen={false}
+        >
+          {renderProjectSection()}
+        </SettingsSubsection>
       </div>
     )
   }
@@ -655,95 +653,94 @@ export function WorkbenchSettingsDialog({
   function renderEditorSection(): ReactElement {
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
-        <SettingRow title={t('workbench.settingsEditorFontSize')}>
-          <div className={styles.workbenchSettingsRangeControl}>
-            <input
-              type="range"
-              min={WORKBENCH_EDITOR_FONT_SIZE_MIN}
-              max={WORKBENCH_EDITOR_FONT_SIZE_MAX}
-              step={WORKBENCH_EDITOR_FONT_SIZE_STEP}
-              value={preferences.editorFontSize}
-              onChange={(event) =>
-                onPreferencesChange({
-                  editorFontSize: +event.currentTarget.value,
-                })
-              }
+        <SettingsDisclosure
+          title={t('workbench.settingsEditorDisplay')}
+          description={t('workbench.settingsEditorDescription')}
+          defaultOpen
+        >
+          <SettingRow title={t('workbench.settingsEditorFontSize')}>
+            <div className={styles.workbenchSettingsRangeControl}>
+              <SettingsSlider
+                min={WORKBENCH_EDITOR_FONT_SIZE_MIN}
+                max={WORKBENCH_EDITOR_FONT_SIZE_MAX}
+                step={WORKBENCH_EDITOR_FONT_SIZE_STEP}
+                value={preferences.editorFontSize}
+                label={t('workbench.settingsEditorFontSize')}
+                onChange={(value) => onPreferencesChange({ editorFontSize: value })}
+              />
+              <span>{preferences.editorFontSize}px</span>
+            </div>
+          </SettingRow>
+          <SettingRow title={t('workbench.settingsEditorLineHeight')}>
+            <div className={styles.workbenchSettingsRangeControl}>
+              <SettingsSlider
+                min={17}
+                max={28}
+                step={0.25}
+                value={preferences.editorLineHeight}
+                label={t('workbench.settingsEditorLineHeight')}
+                onChange={(value) => onPreferencesChange({ editorLineHeight: value })}
+              />
+              <span>{preferences.editorLineHeight}px</span>
+            </div>
+          </SettingRow>
+          <SettingRow
+            title={t('workbench.settingsEditorWordWrap')}
+            description={t('workbench.settingsEditorWordWrapHint', {
+              shortcut: formatWorkbenchEditorCommandHint('toggle-word-wrap', keymapPreset),
+            })}
+          >
+            <Switch
+              checked={preferences.editorWordWrap}
+              onCheckedChange={(editorWordWrap) => onPreferencesChange({ editorWordWrap })}
             />
-            <span>{preferences.editorFontSize}px</span>
-          </div>
-        </SettingRow>
-        <SettingRow title={t('workbench.settingsEditorLineHeight')}>
-          <div className={styles.workbenchSettingsRangeControl}>
-            <input
-              type="range"
-              min={17}
-              max={28}
-              step={0.25}
-              value={preferences.editorLineHeight}
-              onChange={(event) =>
-                onPreferencesChange({
-                  editorLineHeight: +event.currentTarget.value,
-                })
-              }
+          </SettingRow>
+          <SettingRow
+            title={t('workbench.settingsEditorFormatOnSave')}
+            description={t('workbench.settingsEditorFormatOnSaveHint')}
+          >
+            <Switch
+              checked={preferences.editorFormatOnSave}
+              onCheckedChange={(editorFormatOnSave) => onPreferencesChange({ editorFormatOnSave })}
             />
-            <span>{preferences.editorLineHeight}px</span>
-          </div>
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsEditorWordWrap')}
-          description={t('workbench.settingsEditorWordWrapHint', {
-            shortcut: formatWorkbenchEditorCommandHint('toggle-word-wrap', keymapPreset),
-          })}
+          </SettingRow>
+        </SettingsDisclosure>
+        <SettingsDisclosure
+          title={t('workbench.settingsEditorMore')}
+          description={t('workbench.settingsEditorMoreDescription')}
         >
-          <Switch
-            checked={preferences.editorWordWrap}
-            onCheckedChange={(editorWordWrap) => onPreferencesChange({ editorWordWrap })}
-          />
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsEditorFormatOnSave')}
-          description={t('workbench.settingsEditorFormatOnSaveHint')}
-        >
-          <Switch
-            checked={preferences.editorFormatOnSave}
-            onCheckedChange={(editorFormatOnSave) => onPreferencesChange({ editorFormatOnSave })}
-          />
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsEditorPreviewTabs')}
-          description={t('workbench.settingsEditorPreviewTabsHint')}
-        >
-          <Switch
-            checked={preferences.editorPreviewTabs}
-            onCheckedChange={(editorPreviewTabs) => onPreferencesChange({ editorPreviewTabs })}
-          />
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsLocalHistoryThrottle')}
-          description={t('workbench.settingsLocalHistoryThrottleHint')}
-        >
-          <div className={styles.workbenchSettingsRangeControl}>
-            <input
-              type="range"
-              min={0}
-              max={600}
-              step={15}
-              value={preferences.localHistoryThrottleSeconds}
-              onChange={(event) =>
-                onPreferencesChange({
-                  localHistoryThrottleSeconds: +event.currentTarget.value,
-                })
-              }
+          <SettingRow
+            title={t('workbench.settingsEditorPreviewTabs')}
+            description={t('workbench.settingsEditorPreviewTabsHint')}
+          >
+            <Switch
+              checked={preferences.editorPreviewTabs}
+              onCheckedChange={(editorPreviewTabs) => onPreferencesChange({ editorPreviewTabs })}
             />
-            <span>
-              {preferences.localHistoryThrottleSeconds === 0
-                ? t('workbench.settingsLocalHistoryThrottleEveryChange')
-                : t('workbench.settingsLocalHistoryThrottleValue', {
-                    seconds: preferences.localHistoryThrottleSeconds,
-                  })}
-            </span>
-          </div>
-        </SettingRow>
+          </SettingRow>
+          <SettingRow
+            title={t('workbench.settingsLocalHistoryThrottle')}
+            description={t('workbench.settingsLocalHistoryThrottleHint')}
+          >
+            <div className={styles.workbenchSettingsRangeControl}>
+              <SettingsSlider
+                min={0}
+                max={600}
+                step={15}
+                value={preferences.localHistoryThrottleSeconds}
+                label={t('workbench.settingsLocalHistoryThrottle')}
+                onChange={(value) => onPreferencesChange({ localHistoryThrottleSeconds: value })}
+              />
+              <span>
+                {preferences.localHistoryThrottleSeconds === 0
+                  ? t('workbench.settingsLocalHistoryThrottleEveryChange')
+                  : t('workbench.settingsLocalHistoryThrottleValue', {
+                      seconds: preferences.localHistoryThrottleSeconds,
+                    })}
+              </span>
+            </div>
+          </SettingRow>
+        </SettingsDisclosure>
       </div>
     )
   }
@@ -785,7 +782,7 @@ export function WorkbenchSettingsDialog({
           <Select
             size="sm"
             className={styles.workbenchSettingsSelectTrigger}
-            value={managedSelectionVisible ? modelConfig.provider : undefined}
+            value={modelConfig.provider}
             options={modelProviderOptions}
             onChange={(providerId) => {
               if (
@@ -807,23 +804,31 @@ export function WorkbenchSettingsDialog({
             }}
           />
         </SettingRow>
-        {managedSelectionVisible && modelProviderPreset.baseURLConfigurable && (
-          <SettingRow
-            title={t('workbench.settingsModelBaseUrl')}
-            description={t('workbench.settingsModelBaseUrlDescription')}
-          >
-            <Input
+        {managedCatalogError && (
+          <div className={styles.workbenchSettingsModelFeedback} role="status">
+            <span>
+              {t(
+                managedCatalogSignInReason === 'expired'
+                  ? 'workbench.settingsModelSessionExpired'
+                  : managedCatalogSignInReason === 'signed-out'
+                    ? 'workbench.settingsModelSignInRequired'
+                    : 'workbench.settingsModelCatalogUnavailable',
+                { provider: modelProviderPreset.label }
+              )}
+            </span>
+            {managedCatalogSignInReason && (
+              <Button size="sm" variant="ghost" onClick={() => navigateToSection('account')}>
+                {t('workbench.settingsModelOpenAccount')}
+              </Button>
+            )}
+            <Button
               size="sm"
-              type="url"
-              autoComplete="url"
-              spellCheck={false}
-              value={modelBaseURLDraft}
-              placeholder={t('workbench.settingsModelBaseUrlPlaceholder')}
-              onChange={(event) => setModelBaseURLDraft(event.currentTarget.value)}
-              onBlur={commitModelBaseURLDraft}
-              onKeyDown={handleModelConnectionDraftKeyDown}
-            />
-          </SettingRow>
+              variant="ghost"
+              onClick={() => void refreshStandaloneWorkbenchManagedModels().catch(() => undefined)}
+            >
+              {t('workbench.settingsModelCatalogRetry')}
+            </Button>
+          </div>
         )}
         {managedSelectionVisible && (
           <>
@@ -849,23 +854,51 @@ export function WorkbenchSettingsDialog({
             </SettingRow>
           </>
         )}
-        {managedSelectionVisible && !modelProviderPreset.apiKeyOptional && (
-          <SettingRow
-            title={t('workbench.settingsModelApiKey')}
-            description={t('workbench.settingsModelApiKeyDescription')}
-          >
-            <Input
-              size="sm"
-              type="password"
-              autoComplete="off"
-              value={modelApiKeyDraft}
-              placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
-              onChange={(event) => setModelApiKeyDraft(event.currentTarget.value)}
-              onBlur={commitModelApiKeyDraft}
-              onKeyDown={handleModelConnectionDraftKeyDown}
-            />
-          </SettingRow>
-        )}
+        {(modelProviderPreset.baseURLConfigurable || !modelProviderPreset.apiKeyOptional) &&
+          managedSelectionVisible && (
+            <SettingsDisclosure
+              key={modelConfig.provider}
+              title={t('workbench.settingsConnection')}
+              description={t('workbench.settingsConnectionDescription')}
+              defaultOpen={!modelProviderPreset.apiKeyOptional && !modelConfig.apiKey.trim()}
+            >
+              {managedSelectionVisible && modelProviderPreset.baseURLConfigurable && (
+                <SettingRow
+                  title={t('workbench.settingsModelBaseUrl')}
+                  description={t('workbench.settingsModelBaseUrlDescription')}
+                >
+                  <Input
+                    size="sm"
+                    type="url"
+                    autoComplete="url"
+                    spellCheck={false}
+                    value={modelBaseURLDraft}
+                    placeholder={t('workbench.settingsModelBaseUrlPlaceholder')}
+                    onChange={(event) => setModelBaseURLDraft(event.currentTarget.value)}
+                    onBlur={commitModelBaseURLDraft}
+                    onKeyDown={handleModelConnectionDraftKeyDown}
+                  />
+                </SettingRow>
+              )}
+              {managedSelectionVisible && !modelProviderPreset.apiKeyOptional && (
+                <SettingRow
+                  title={t('workbench.settingsModelApiKey')}
+                  description={t('workbench.settingsModelApiKeyDescription')}
+                >
+                  <Input
+                    size="sm"
+                    type="password"
+                    autoComplete="off"
+                    value={modelApiKeyDraft}
+                    placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
+                    onChange={(event) => setModelApiKeyDraft(event.currentTarget.value)}
+                    onBlur={commitModelApiKeyDraft}
+                    onKeyDown={handleModelConnectionDraftKeyDown}
+                  />
+                </SettingRow>
+              )}
+            </SettingsDisclosure>
+          )}
       </div>
     )
   }
@@ -883,39 +916,6 @@ export function WorkbenchSettingsDialog({
         onResetShortcut={onResetShortcut}
         onSetShortcut={onSetShortcut}
       />
-    )
-  }
-
-  function renderLanguageSection(): ReactElement {
-    return (
-      <div className={styles.workbenchSettingsSectionPanel}>
-        <SettingRow
-          title={t('workbench.settingsWorkbenchLanguage')}
-          description={t('workbench.settingsWorkbenchLanguageDescription')}
-        >
-          <Select<AppLocale>
-            size="sm"
-            className={styles.workbenchSettingsSelectTrigger}
-            value={locale}
-            options={[
-              { value: 'zh-CN', label: t('common.chinese') },
-              { value: 'en-US', label: t('common.english') },
-            ]}
-            onChange={(nextLocale) => void onLocaleChange(nextLocale)}
-          />
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsPrimaryLanguages')}
-          description={t('workbench.settingsPrimaryLanguagesDescription')}
-        >
-          <div className={styles.workbenchSettingsShortcutControls}>
-            <WorkbenchSettingsPill tone="success">VelarScript</WorkbenchSettingsPill>
-            <WorkbenchSettingsPill>JS / TS / JSX</WorkbenchSettingsPill>
-            <WorkbenchSettingsPill>Python</WorkbenchSettingsPill>
-            <WorkbenchSettingsPill>Web</WorkbenchSettingsPill>
-          </div>
-        </SettingRow>
-      </div>
     )
   }
 
@@ -1013,42 +1013,6 @@ export function WorkbenchSettingsDialog({
 
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
-        <SettingRow
-          title={t('workbench.settingsUpdateChannel')}
-          description={t('workbench.settingsUpdateChannelDescription')}
-        >
-          <Select<WorkbenchUpdateChannel>
-            size="sm"
-            className={styles.workbenchSettingsSelectTrigger}
-            value={updateState.channel}
-            options={[
-              { value: 'stable', label: t('workbench.settingsUpdateChannelStable') },
-              { value: 'beta', label: t('workbench.settingsUpdateChannelBeta') },
-              { value: 'canary', label: t('workbench.settingsUpdateChannelPreview') },
-            ]}
-            onChange={(channel) => {
-              void window.velarosWorkbenchUpdate.setChannel(channel).catch((error: unknown) => {
-                reportSettingSaveFailure('workbench.settingsUpdateChannel', error)
-              })
-            }}
-          />
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsAutomaticUpdates')}
-          description={t('workbench.settingsAutomaticUpdatesDescription')}
-        >
-          <Switch
-            size="sm"
-            checked={updateState.automaticDownloads}
-            onCheckedChange={(enabled) => {
-              void window.velarosWorkbenchUpdate
-                .setAutomaticDownloads(enabled)
-                .catch((error: unknown) => {
-                  reportSettingSaveFailure('workbench.settingsAutomaticUpdates', error)
-                })
-            }}
-          />
-        </SettingRow>
         <SettingRow title={t('workbench.settingsCurrentVersion')} description={status}>
           <div className={styles.workbenchSettingsPluginActions}>
             <WorkbenchSettingsPill>{updateState.currentVersion}</WorkbenchSettingsPill>
@@ -1085,51 +1049,113 @@ export function WorkbenchSettingsDialog({
             </Button>
           </div>
         </SettingRow>
+        <SettingsDisclosure
+          title={t('workbench.settingsUpdatePreferences')}
+          description={t('workbench.settingsUpdatePreferencesDescription')}
+        >
+          <SettingRow
+            title={t('workbench.settingsUpdateChannel')}
+            description={t('workbench.settingsUpdateChannelDescription')}
+          >
+            <Select<WorkbenchUpdateChannel>
+              size="sm"
+              className={styles.workbenchSettingsSelectTrigger}
+              value={updateState.channel}
+              options={[
+                { value: 'stable', label: t('workbench.settingsUpdateChannelStable') },
+                { value: 'beta', label: t('workbench.settingsUpdateChannelBeta') },
+                { value: 'canary', label: t('workbench.settingsUpdateChannelPreview') },
+              ]}
+              onChange={(channel) => {
+                void window.velarosWorkbenchUpdate.setChannel(channel).catch((error: unknown) => {
+                  reportSettingSaveFailure('workbench.settingsUpdateChannel', error)
+                })
+              }}
+            />
+          </SettingRow>
+          <SettingRow
+            title={t('workbench.settingsAutomaticUpdates')}
+            description={t('workbench.settingsAutomaticUpdatesDescription')}
+          >
+            <Switch
+              size="sm"
+              checked={updateState.automaticDownloads}
+              onCheckedChange={(enabled) => {
+                void window.velarosWorkbenchUpdate
+                  .setAutomaticDownloads(enabled)
+                  .catch((error: unknown) => {
+                    reportSettingSaveFailure('workbench.settingsAutomaticUpdates', error)
+                  })
+              }}
+            />
+          </SettingRow>
+        </SettingsDisclosure>
       </div>
     )
   }
 
-  function renderGeneralSection(): ReactElement {
+  function navigateToSection(section: WorkbenchSettingsSectionId): void {
+    if (section !== activeSection) {
+      commitModelConnectionDrafts()
+      setCapturingAction(null)
+      setProjectRulesExpanded(false)
+      setActiveSection(section)
+    }
+    if (window.matchMedia('(max-width: 760px)').matches) setSidebarCollapsed(true)
+  }
+
+  function renderSettingsNavigation(): ReactElement {
     return (
-      <div
-        className={`${styles.workbenchSettingsSectionPanel} ${styles.workbenchSettingsCombinedPanel}`}
+      <nav
+        id={navigationId}
+        className={styles.workbenchSettingsNavigation}
+        aria-label={t('workbench.settingsNavigation')}
       >
-        <SettingsSubsection
-          title={t('workbench.settingsProject')}
-          description={t('workbench.settingsProjectDescription')}
-        >
-          {renderProjectSection()}
-        </SettingsSubsection>
-        <SettingsSubsection
-          title={t('workbench.settingsAccount')}
-          description={t('workbench.settingsAccountDescription')}
-        >
-          {renderAccountSection()}
-        </SettingsSubsection>
-        <SettingsSubsection
-          title={t('workbench.settingsAppearance')}
-          description={t('workbench.settingsAppearanceDescription')}
-          action={
-            <IconButton
-              size="icon-sm"
-              variant="outline"
-              label={t('workbench.settingsResetAppearance')}
-              title={t('workbench.settingsResetAppearance')}
-              onClick={onResetPreferences}
+        {sections.map((section, index) => {
+          const SectionIcon = section.icon
+          const account =
+            section.id === 'account' && accountState.status === 'signed-in'
+              ? accountState.account
+              : null
+          const accountInitials =
+            account?.displayName
+              .trim()
+              .split(/\s+/u)
+              .map((part) => part[0])
+              .join('')
+              .slice(0, 2)
+              .toUpperCase() || account?.email.slice(0, 2).toUpperCase()
+          return (
+            <BubbleTooltip
+              key={section.id}
+              content={account?.displayName || section.label}
+              disabled={!sidebarCollapsed}
+              side="right"
             >
-              <ArrowCounterClockwiseIcon size={14} />
-            </IconButton>
-          }
-        >
-          {renderAppearanceSection()}
-        </SettingsSubsection>
-        <SettingsSubsection
-          title={t('workbench.settingsLanguage')}
-          description={t('workbench.settingsLanguageDescription')}
-        >
-          {renderLanguageSection()}
-        </SettingsSubsection>
-      </div>
+              <button
+                type="button"
+                className={styles.workbenchSettingsNavItem}
+                aria-label={section.label}
+                aria-current={activeSection === section.id ? 'page' : undefined}
+                data-active={activeSection === section.id}
+                data-secondary={index >= 4}
+                onClick={() => navigateToSection(section.id)}
+              >
+                {account ? (
+                  <span className={styles.workbenchSettingsNavAvatar} aria-hidden="true">
+                    {accountInitials}
+                  </span>
+                ) : (
+                  <SectionIcon size={18} aria-hidden="true" />
+                )}
+                <span className={styles.workbenchSettingsNavLabel}>
+                  {account?.displayName || section.label}
+                </span>
+              </button>
+            </BubbleTooltip>
+          )
+        })}
+      </nav>
     )
   }
 
@@ -1138,35 +1164,40 @@ export function WorkbenchSettingsDialog({
       <div
         className={`${styles.workbenchSettingsSectionPanel} ${styles.workbenchSettingsCombinedPanel}`}
       >
-        <SettingsSubsection
-          title={t('workbench.settingsEditor')}
-          description={t('workbench.settingsEditorDescription')}
-        >
-          {renderEditorSection()}
-        </SettingsSubsection>
-        <SettingsSubsection
+        {renderEditorSection()}
+        <SettingsDisclosure
+          onExpandedChange={(expanded) => {
+            if (!expanded) setCapturingAction(null)
+          }}
           title={t('workbench.settingsKeymap')}
-          description={t('workbench.settingsKeymapDescription')}
-          action={
-            <IconButton
-              size="icon-sm"
-              variant="outline"
-              label={t('workbench.settingsResetKeymap')}
-              title={t('workbench.settingsResetKeymap')}
-              onClick={onResetAllShortcuts}
-            >
-              <ArrowCounterClockwiseIcon size={14} />
-            </IconButton>
-          }
+          description={t('workbench.settingsKeymapSummary')}
         >
-          {renderKeymapSection()}
-        </SettingsSubsection>
-        <SettingsSubsection
-          title={t('workbench.settingsEditorKeys')}
-          description={t(WorkbenchEditorKeysDescriptionKeys[keymapPreset])}
-        >
-          <WorkbenchEditorKeysSettings preset={keymapPreset} />
-        </SettingsSubsection>
+          <SettingsSubsection
+            inline
+            title={t('workbench.settingsKeymap')}
+            description={t('workbench.settingsKeymapDescription')}
+            action={
+              <IconButton
+                size="icon-sm"
+                variant="outline"
+                label={t('workbench.settingsResetKeymap')}
+                title={t('workbench.settingsResetKeymap')}
+                onClick={onResetAllShortcuts}
+              >
+                <ArrowCounterClockwiseIcon size={14} />
+              </IconButton>
+            }
+          >
+            {renderKeymapSection()}
+          </SettingsSubsection>
+          <SettingsSubsection
+            title={t('workbench.settingsEditorKeys')}
+            description={t(WorkbenchEditorKeysDescriptionKeys[keymapPreset])}
+            defaultOpen={false}
+          >
+            <WorkbenchEditorKeysSettings preset={keymapPreset} />
+          </SettingsSubsection>
+        </SettingsDisclosure>
       </div>
     )
   }
@@ -1245,15 +1276,15 @@ export function WorkbenchSettingsDialog({
         >
           {renderModelSection()}
         </SettingsSubsection>
-        <SettingsSubsection
+        <SettingsDisclosure
           title={t('workbench.settingsPermissions')}
-          description={t('workbench.settingsPermissionsDescription')}
+          description={t('workbench.settingsPermissionsSummary')}
         >
           {renderPermissionsSection()}
-        </SettingsSubsection>
-        <SettingsSubsection
+        </SettingsDisclosure>
+        <SettingsDisclosure
           title={t('workbench.settingsWebSearch')}
-          description={t('workbench.settingsWebSearchDescription')}
+          description={t('workbench.settingsWebSearchSummary')}
         >
           <div className={styles.workbenchSettingsSectionPanel}>
             <SettingRow
@@ -1272,10 +1303,10 @@ export function WorkbenchSettingsDialog({
               />
             </SettingRow>
           </div>
-        </SettingsSubsection>
-        <SettingsSubsection
+        </SettingsDisclosure>
+        <SettingsDisclosure
           title={t('workbench.settingsMemory')}
-          description={t('workbench.settingsMemoryDescription')}
+          description={t('workbench.settingsMemorySummary')}
         >
           <div className={styles.workbenchSettingsSectionPanel}>
             <SettingRow
@@ -1290,13 +1321,14 @@ export function WorkbenchSettingsDialog({
             </SettingRow>
           </div>
           <WorkbenchMemorySettings projectRoot={project?.rootPath ?? null} />
-        </SettingsSubsection>
-        <SettingsSubsection
+        </SettingsDisclosure>
+        <SettingsDisclosure
+          onExpandedChange={setProjectRulesExpanded}
           title={t('workbench.settingsAiRules')}
-          description={t('workbench.settingsAiRulesDescription')}
+          description={t('workbench.settingsAiRulesSummary')}
         >
           {renderAiRulesSection()}
-        </SettingsSubsection>
+        </SettingsDisclosure>
       </div>
     )
   }
@@ -1312,30 +1344,36 @@ export function WorkbenchSettingsDialog({
         >
           {renderUpdatesSection()}
         </SettingsSubsection>
-        <SettingsSubsection
+        <SettingsDisclosure
           title={t('workbench.settingsAdvanced')}
           description={t('workbench.settingsAdvancedDescription')}
         >
           {renderAdvancedSection()}
-        </SettingsSubsection>
+        </SettingsDisclosure>
       </div>
     )
   }
 
   function renderActiveSection(): ReactElement {
     switch (activeSection) {
-      case 'general': {
-        return renderGeneralSection()
-      }
-      case 'editor': {
+      case 'appearance':
+        return (
+          <WorkbenchAppearanceSettings
+            preferences={preferences}
+            locale={locale}
+            onPreferencesChange={onPreferencesChange}
+            onLocaleChange={onLocaleChange}
+            onResetPreferences={onResetPreferences}
+          />
+        )
+      case 'editor':
         return renderEditorGroup()
-      }
-      case 'ai': {
+      case 'ai':
         return renderAiSection()
-      }
-      default: {
+      case 'system':
         return renderSystemSection()
-      }
+      case 'account':
+        return renderAccountSection()
     }
   }
 
@@ -1353,50 +1391,57 @@ export function WorkbenchSettingsDialog({
         aria-labelledby="workbench-settings-title"
         tabIndex={-1}
       >
-        <header className={styles.workbenchSettingsHeader}>
-          <div className={styles.workbenchSettingsTitleGroup}>
-            <Title
-              level={4}
-              className={styles.workbenchSettingsTitle}
-              id="workbench-settings-title"
-            >
-              {t('workbench.settingsTitle')}
-            </Title>
-          </div>
-          <IconButton
-            variant="ghost"
-            size="icon-sm"
-            className={styles.workbenchSettingsCloseButton}
-            label={t('common.cancel')}
-            title={t('common.cancel')}
-            onClick={closeDialog}
-          >
-            <XIcon size={16} />
-          </IconButton>
-        </header>
-        <div className={styles.workbenchSettingsBody}>
-          <nav
-            className={styles.workbenchSettingsSidebar}
-            aria-label={t('workbench.settingsTitle')}
-          >
-            {sections.map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                className={styles.workbenchSettingsNavItem}
-                data-active={activeSection === section.id}
-                onClick={() => setActiveSection(section.id)}
+        <div className={styles.workbenchSettingsBody} data-sidebar-collapsed={sidebarCollapsed}>
+          <aside className={styles.workbenchSettingsSidebar}>
+            <div className={styles.workbenchSettingsSidebarHeader}>
+              <IconButton
+                ref={sidebarToggleRef}
+                variant="ghost"
+                size="icon-sm"
+                className={styles.workbenchSettingsSidebarToggle}
+                label={t(
+                  sidebarCollapsed
+                    ? 'workbench.settingsExpandNavigation'
+                    : 'workbench.settingsCollapseNavigation'
+                )}
+                aria-expanded={!sidebarCollapsed}
+                aria-controls={navigationId}
+                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
               >
-                <span className={styles.workbenchSettingsNavCopy}>
-                  <span className={styles.workbenchSettingsNavLabel}>{section.label}</span>
-                  <span className={styles.workbenchSettingsNavDescription}>
-                    {section.description}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </nav>
-          <section className={styles.workbenchSettingsContent}>{renderActiveSection()}</section>
+                <SidebarSimpleIcon size={19} />
+              </IconButton>
+            </div>
+            {renderSettingsNavigation()}
+          </aside>
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              className={styles.workbenchSettingsSidebarBackdrop}
+              aria-label={t('workbench.settingsCollapseNavigation')}
+              onClick={() => {
+                setSidebarCollapsed(true)
+                sidebarToggleRef.current?.focus()
+              }}
+            />
+          )}
+          <div className={styles.workbenchSettingsContent} key={activeSection}>
+            <section className={styles.workbenchSettingsPage} data-settings-page={activeSection}>
+              <div className={styles.workbenchSettingsPageHeading}>
+                <Title
+                  level={1}
+                  id="workbench-settings-title"
+                  className={styles.workbenchSettingsPageTitle}
+                  tabIndex={-1}
+                >
+                  {selectedSection.label}
+                </Title>
+                <Text className={styles.workbenchSettingsPageDescription}>
+                  {selectedSection.description}
+                </Text>
+              </div>
+              {renderActiveSection()}
+            </section>
+          </div>
         </div>
       </div>
     </div>

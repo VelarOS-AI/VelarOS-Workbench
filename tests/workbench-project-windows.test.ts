@@ -344,7 +344,8 @@ void describe('Workbench project window ownership', () => {
     assert.match(presentation, /openProjectPathInNewWindow\(path\)/u)
     assert.match(presentation, /cloneProjectInNewWindow\(remoteUrl\)/u)
     assert.match(settings, /settingsExitProjectAction/u)
-    assert.match(presentation, /onExitProject=\{model\.actions\.exitCurrentProject\}/u)
+    assert.doesNotMatch(presentation, /LazyWorkbenchSettingsDialog/u)
+    assert.match(await readFile('src/renderer/src/app/StandaloneWorkbenchSettingsWindow.tsx', 'utf8'), /velarosWorkbenchSettingsWindow\.exitProject\(\)/u)
     assert.match(
       await readFile('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx', 'utf8'),
       /exitCurrentProject[\s\S]*velarosWorkbenchProjectHub\.returnToEntry\(\)/u

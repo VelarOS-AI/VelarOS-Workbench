@@ -47,6 +47,7 @@ type WorkbenchWindowManagerListener = () => void
 export class WorkbenchWindowManager {
   private readonly store: RecentProjectsStore
   private readonly records = new Map<number, WorkbenchWindowRecord>()
+  private readonly auxiliaryWindows = new Map<number, { ownerId: number; window: BrowserWindow }>()
   private readonly listeners = new Set<WorkbenchWindowManagerListener>()
 
   constructor(
@@ -110,12 +111,35 @@ export class WorkbenchWindowManager {
   }
 
   public getHubForWebContents(sender: WebContents): Nullable<WorkbenchProjectHub> {
-    return this.records.get(sender.id)?.hub ?? null
+    return this.getRecord(sender)?.hub ?? null
+  }
+
+  /** Attach a trusted application surface to the owner's existing project, without a second runtime. */
+  public registerAuxiliaryWindow(owner: WebContents, window: BrowserWindow): void {
+    const record = this.getRecord(owner)
+    if (!record || record.window.isDestroyed())
+      throw new AppError('PERMISSION', 'Missing owner window')
+    const id = window.webContents.id
+    this.auxiliaryWindows.set(id, { ownerId: record.window.webContents.id, window })
+    const unsubscribe = record.hub.onStateChanged((state) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.send(WorkbenchProjectHubChannels.stateChanged, state)
+      }
+    })
+    const closeWithOwner = (): void => {
+      if (!window.isDestroyed()) window.close()
+    }
+    record.window.once('closed', closeWithOwner)
+    window.once('closed', () => {
+      this.auxiliaryWindows.delete(id)
+      unsubscribe()
+      record.window.removeListener('closed', closeWithOwner)
+    })
   }
 
   /** 新资源必须在自身 pending 登记之前同步通过本窗的唯一项目准入。 */
   public assertProjectForWebContents(sender: WebContents, requestedRoot: string): void {
-    const record = this.records.get(sender.id)
+    const record = this.getRecord(sender)
     const project = record?.hub.getCurrentProject()
     if (!record || !project || record.window.isDestroyed() || sender.isDestroyed())
       throw new AppError('PERMISSION', 'The window has no active project')
@@ -126,7 +150,7 @@ export class WorkbenchWindowManager {
   }
 
   public getWindowForWebContents(sender: WebContents): Nullable<BrowserWindow> {
-    return this.records.get(sender.id)?.window ?? null
+    return this.getRecord(sender)?.window ?? null
   }
 
   public getFocusedWindow(): Nullable<BrowserWindow> {
@@ -450,6 +474,11 @@ export class WorkbenchWindowManager {
     target: Nullable<BaseWindow>,
     command: WorkbenchProjectHubMenuCommand
   ): void {
+    const auxiliary = [...this.auxiliaryWindows.values()].find((entry) => entry.window === target)
+    if (auxiliary) {
+      if (command === 'close-editor' && !auxiliary.window.isDestroyed()) auxiliary.window.close()
+      return
+    }
     const record = [...this.records.values()].find((candidate) => candidate.window === target)
     if (!record || record.window.isDestroyed()) return
 
@@ -469,7 +498,8 @@ export class WorkbenchWindowManager {
   }
 
   private getRecord(sender: Nullable<WebContents>): Nullable<WorkbenchWindowRecord> {
-    return sender ? (this.records.get(sender.id) ?? null) : null
+    if (!sender) return null
+    return this.records.get(this.auxiliaryWindows.get(sender.id)?.ownerId ?? sender.id) ?? null
   }
 
   private getFocusedRecord(): Nullable<WorkbenchWindowRecord> {

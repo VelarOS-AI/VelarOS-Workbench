@@ -79,6 +79,12 @@ body {
   background-color: var(--scrollbar-thumb-hover, rgb(127 127 127 / 28%));
 }
 
+/* Popper may flip above its trigger in a short native window. Keep its scrollable
+ * menu inside the available side instead of sizing it against the entire viewport. */
+.velar-select-content {
+  max-height: min(420px, var(--radix-select-content-available-height, calc(100dvh - 24px)));
+}
+
 /*
  * Radix Select 的 Presence 会根据 animation-name 判断关闭动画是否结束。共享 Select
  * 在 open / closed 两个状态都声明 rise-in，关闭时因此等不到新的 animationend，连带

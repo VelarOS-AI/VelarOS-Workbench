@@ -3,10 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
-import {
-  isWorkbenchImagePreviewPath,
-  resolveWorkbenchImageMediaType,
-} from '@shared/workbenchImage'
+import { isWorkbenchImagePreviewPath, resolveWorkbenchImageMediaType } from '@shared/workbenchImage'
 
 import {
   hasFileSnapshotChanged,
@@ -48,7 +45,10 @@ function createFile(
 void describe('Workbench image preview editor state', () => {
   void test('recognizes only the supported image extensions and media types', () => {
     assert.equal(resolveWorkbenchImageMediaType('assets/ICON.PNG'), 'image/png')
-    assert.equal(resolveWorkbenchImageMediaType('attachment', 'image/svg+xml; charset=utf-8'), 'image/svg+xml')
+    assert.equal(
+      resolveWorkbenchImageMediaType('attachment', 'image/svg+xml; charset=utf-8'),
+      'image/svg+xml'
+    )
     assert.equal(resolveWorkbenchImageMediaType('photo.webp'), 'image/webp')
     assert.equal(isWorkbenchImagePreviewPath('photo.jpeg'), false)
     assert.equal(isWorkbenchImagePreviewPath('notes.constructor'), false)
@@ -165,7 +165,7 @@ void describe('Workbench image preview editor state', () => {
     assert.equal(formatWorkbenchImageZoom(0.054), '5.4%')
   })
 
-  void test('reserves plain preview shortcuts and modifier-wheel gestures for image zoom', () => {
+  void test('zooms with plain preview shortcuts and the wheel without requiring modifiers', () => {
     assert.equal(resolveWorkbenchImageZoomShortcut('+', false), 'in')
     assert.equal(resolveWorkbenchImageZoomShortcut('=', false), 'in')
     assert.equal(resolveWorkbenchImageZoomShortcut('-', false), 'out')
@@ -173,9 +173,10 @@ void describe('Workbench image preview editor state', () => {
     assert.equal(resolveWorkbenchImageZoomShortcut('F', false), 'fit')
     assert.equal(resolveWorkbenchImageZoomShortcut('+', true), null)
     assert.equal(resolveWorkbenchImageZoomShortcut('ArrowRight', false), null)
-    assert.equal(resolveWorkbenchImageWheelZoom(-1, true), 'in')
-    assert.equal(resolveWorkbenchImageWheelZoom(1, true), 'out')
-    assert.equal(resolveWorkbenchImageWheelZoom(1, false), null)
-    assert.equal(resolveWorkbenchImageWheelZoom(0, true), null)
+    assert.equal(resolveWorkbenchImageWheelZoom(-1), 'in')
+    assert.equal(resolveWorkbenchImageWheelZoom(1), 'out')
+    assert.equal(resolveWorkbenchImageWheelZoom(0), null)
+    assert.equal(resolveWorkbenchImageWheelZoom(Number.NaN), null)
+    assert.equal(resolveWorkbenchImageWheelZoom(Number.POSITIVE_INFINITY), null)
   })
 })

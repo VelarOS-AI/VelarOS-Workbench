@@ -385,11 +385,11 @@ void describe('Workbench Git refresh on workspace changes', () => {
     assert.match(gitState, /refreshLineStats: \(\) => refreshLineStatsLatest\.current\(\),/u)
     assert.match(gitState, /refreshSummary: \(\) => refreshSummaryLatest\.current\(\),/u)
     assert.match(gitState, /isGitSurfaceActive: \(\) => gitSurfacesActiveLatest\.current,/u)
-    // 项目绑定好就拉完整快照，不等 Git 界面打开。
-    assert.match(
-      gitState,
-      /void refreshLineStatsLatest\.current\(\)\n\s*void refreshSummaryLatest\.current\(\)/u
-    )
+    // 项目绑定后的首次拉取由各读取 Hook 完成，不等 Git 界面打开。
+    for (const source of [summaries, lineStats]) {
+      assert.match(source, /refreshOnMount = true/u)
+      assert.match(source, /if \(refreshOnMount\) void refresh\(\)/u)
+    }
     // Git 操作之后、手动刷新、一轮 Agent 结束共用一个 refresh，不再是三份一样的实现。
     assert.match(gitState, /await Promise\.all\(\[refreshSummary\(\), refreshLineStats\(\)\]\)/u)
     assert.doesNotMatch(gitState, /refreshAfterGitAction|refreshAfterAgentRun|refreshGitPanel/u)

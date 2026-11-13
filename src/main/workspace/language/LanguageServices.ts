@@ -126,6 +126,7 @@ import {
   describeTypeScriptProjects,
   forgetMovedTypeScriptProjectPath,
   freezeTypeScriptProgramWhile,
+  includeTypeScriptPackageAutoImports,
   isPathInside,
   normalizeTypeScriptFileName,
   planTypeScriptFileRenameProjects,
@@ -678,13 +679,28 @@ class WorkbenchLanguageServices {
 
     const snapshot = await this.createTypeScriptProjectSnapshot(request)
     const content = snapshot.files.get(snapshot.requestAbsolutePath) ?? ''
-    const { items, isIncomplete } = buildTypeScriptCompletionItems({
+    const offset = this.offsetFromPosition(content, request.position)
+    const completionRequest = {
       service: snapshot.service,
       fileName: snapshot.requestAbsolutePath,
-      offset: this.offsetFromPosition(content, request.position),
+      offset,
       content,
       format: request.format,
-    })
+    }
+    let { items, isIncomplete } = buildTypeScriptCompletionItems(completionRequest)
+    const prefix = content.slice(0, offset)
+    const word = /[\w$]*$/u.exec(prefix)?.[0] ?? ''
+    const memberCompletion = prefix.slice(0, prefix.length - word.length).trimEnd().endsWith('.')
+    const hasMatchingCandidate = word && items.some((item) =>
+      item.label.toLowerCase().startsWith(word.toLowerCase())
+    )
+    if (!memberCompletion && !hasMatchingCandidate &&
+      includeTypeScriptPackageAutoImports(snapshot.projectRoot, snapshot.requestAbsolutePath)) {
+      ({ items, isIncomplete } = buildTypeScriptCompletionItems(completionRequest))
+    } else if (!memberCompletion && hasMatchingCandidate) {
+      // Retry as the prefix narrows instead of eagerly loading all development dependency types.
+      isIncomplete = true
+    }
 
     return {
       projectRoot: snapshot.projectRoot,

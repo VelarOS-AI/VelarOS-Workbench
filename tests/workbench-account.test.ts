@@ -67,7 +67,10 @@ void describe('Workbench shared VelarOS account', () => {
       'utf8'
     )
     const settings = readFileSync(
-      new URL('../src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx', import.meta.url),
+      new URL(
+        '../src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx',
+        import.meta.url
+      ),
       'utf8'
     )
     const submitStart = chatAdapter.indexOf('  async function submit(')
@@ -80,7 +83,10 @@ void describe('Workbench shared VelarOS account', () => {
     )
     assert.ok(submit.indexOf('ensureSignedIn()') < submit.indexOf('velarosWorkbenchConversation'))
     assert.equal(chatAdapter.match(/velarosWorkbenchAccount\.ensureSignedIn\(\)/gu)?.length, 1)
-    assert.match(submit, /shouldBlockStandaloneRunSubmission\(chat\.status, hasActiveRun, accountSignInPending\)/u)
+    assert.match(
+      submit,
+      /shouldBlockStandaloneRunSubmission\(\s*currentSession\.status,\s*!!currentRun,\s*accountSignInPending\s*\)/u
+    )
     assert.match(settings, /velarosWorkbenchAccount\.signOut\(\)/u)
     assert.match(settings, /velarosWorkbenchProjectHub\.returnToEntry\(\)/u)
   })
@@ -146,19 +152,19 @@ void describe('Workbench shared VelarOS account', () => {
   })
 
   void test('derives managed providers only from the online managedModels list', () => {
-    const authorized = parseWorkbenchManagedModelAccessSnapshot(
-      usageSnapshot([VelarDevAccess])
-    )
-    assert.deepEqual(authorized.managedModels, [{
-      providerId: 'velar-dev',
-      displayName: 'VelarOS-Dev',
-      enabled: true,
-      defaultModel: DevModelId,
-      models: [
-        { id: DevModelId, label: 'GPT 5.6 Sol', status: 'available' },
-        { id: 'velar-dev/dW5wcmljZWQ', label: 'Unpriced', status: 'not-configured' },
-      ],
-    }])
+    const authorized = parseWorkbenchManagedModelAccessSnapshot(usageSnapshot([VelarDevAccess]))
+    assert.deepEqual(authorized.managedModels, [
+      {
+        providerId: 'velar-dev',
+        displayName: 'VelarOS-Dev',
+        enabled: true,
+        defaultModel: DevModelId,
+        models: [
+          { id: DevModelId, label: 'GPT 5.6 Sol', status: 'available' },
+          { id: 'velar-dev/dW5wcmljZWQ', label: 'Unpriced', status: 'not-configured' },
+        ],
+      },
+    ])
 
     const roleOnly = parseWorkbenchManagedModelAccessSnapshot({
       ...usageSnapshot([]),
@@ -184,8 +190,10 @@ void describe('Workbench shared VelarOS account', () => {
             authorization: new Headers(init?.headers).get('authorization'),
             method: init?.method ?? (input instanceof Request ? input.method : 'GET'),
           })
-          if (url.endsWith('/v1/account/usage')) return Response.json(usageSnapshot([VelarDevAccess]))
-          if (url.endsWith('/v1/velar-dev/models')) return Response.json({
+          if (url.endsWith('/v1/account/usage'))
+            return Response.json(usageSnapshot([VelarDevAccess]))
+          if (url.endsWith('/v1/velar-dev/models'))
+            return Response.json({
               object: 'list',
               data: [
                 { id: DevModelId, display_name: 'GPT 5.6 Sol' },
@@ -198,11 +206,16 @@ void describe('Workbench shared VelarOS account', () => {
 
       const catalog = await service.listManagedProviderModels('velar-dev')
       assert.deepEqual(catalog.models, [{ id: DevModelId, label: 'GPT 5.6 Sol' }])
-      assert.deepEqual(requests.map((request) => request.url), [
-        'https://cloud.example.com/api/v1/account/usage',
-        'https://cloud.example.com/api/v1/velar-dev/models',
-      ])
-      assert.ok(requests.every((request) => request.authorization === 'Bearer access-internal-account'))
+      assert.deepEqual(
+        requests.map((request) => request.url),
+        [
+          'https://cloud.example.com/api/v1/account/usage',
+          'https://cloud.example.com/api/v1/velar-dev/models',
+        ]
+      )
+      assert.ok(
+        requests.every((request) => request.authorization === 'Bearer access-internal-account')
+      )
       assert.ok(requests.every((request) => request.method === 'GET'))
     } finally {
       await rm(rootDir, { recursive: true, force: true })
@@ -213,8 +226,7 @@ void describe('Workbench shared VelarOS account', () => {
     const rootDir = await mkdtemp(join(tmpdir(), 'velaros-managed-chat-'))
     const store = new WorkbenchSharedAccountStore({ rootDir })
     let chatRequest:
-      | { url: string; authorization: string | null; idempotencyKey: string | null }
-      | undefined
+      { url: string; authorization: string | null; idempotencyKey: string | null } | undefined
     try {
       await store.save(session('internal-account'))
       const service = new WorkbenchAccountService(
@@ -223,7 +235,8 @@ void describe('Workbench shared VelarOS account', () => {
         'https://cloud.example.com/api',
         (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
           const url = input instanceof Request ? input.url : input.toString()
-          if (url.endsWith('/v1/account/usage')) return Response.json(usageSnapshot([VelarDevAccess]))
+          if (url.endsWith('/v1/account/usage'))
+            return Response.json(usageSnapshot([VelarDevAccess]))
           const headers = new Headers(init?.headers)
           chatRequest = {
             url,
@@ -279,17 +292,26 @@ void describe('Workbench shared VelarOS account', () => {
     let chatRequests = 0
     try {
       await store.save(session('internal-account'))
-      const service = new WorkbenchAccountService(store, async () => {}, 'https://cloud.example.com', (async input => {
-        const url = String(input)
-        if (url.endsWith('/v1/account/usage')) {
-          store.pauseNextDeviceId = true
-          return Response.json(usageSnapshot([VelarDevAccess]))
-        }
-        if (url.endsWith('/logout')) return Response.json({})
-        chatRequests += 1
-        return Response.json({ id: 'unexpected-chat' })
-      }) as typeof fetch)
-      request = service.fetchManagedModel('velar-dev', `${service.getManagedModelBaseUrl('velar-dev')}/chat/completions`, { method: 'POST' })
+      const service = new WorkbenchAccountService(
+        store,
+        async () => {},
+        'https://cloud.example.com',
+        (async (input) => {
+          const url = String(input)
+          if (url.endsWith('/v1/account/usage')) {
+            store.pauseNextDeviceId = true
+            return Response.json(usageSnapshot([VelarDevAccess]))
+          }
+          if (url.endsWith('/logout')) return Response.json({})
+          chatRequests += 1
+          return Response.json({ id: 'unexpected-chat' })
+        }) as typeof fetch
+      )
+      request = service.fetchManagedModel(
+        'velar-dev',
+        `${service.getManagedModelBaseUrl('velar-dev')}/chat/completions`,
+        { method: 'POST' }
+      )
       const rejectedRequest = assert.rejects(request)
       await deviceEntered.promise
       await service.signOut()
@@ -355,8 +377,20 @@ void describe('Workbench shared VelarOS account', () => {
             updatedAt: '2026-09-10T00:00:00.000Z',
             expiresAt: '2000-01-01T00:00:00.000Z',
             entries: [
-              { provider: 'openai', model: 'gpt-5', aliases: ['gpt-5-latest', 7], inputUsdPerMillion: 1.25, outputUsdPerMillion: 10, source: 'openai' },
-              { provider: 'openai', model: 'broken', inputUsdPerMillion: -1, outputUsdPerMillion: 2 },
+              {
+                provider: 'openai',
+                model: 'gpt-5',
+                aliases: ['gpt-5-latest', 7],
+                inputUsdPerMillion: 1.25,
+                outputUsdPerMillion: 10,
+                source: 'openai',
+              },
+              {
+                provider: 'openai',
+                model: 'broken',
+                inputUsdPerMillion: -1,
+                outputUsdPerMillion: 2,
+              },
               'garbage',
             ],
           })
@@ -394,23 +428,34 @@ void test('expired access is refreshed once for concurrent model catalog request
   const rootDir = await mkdtemp(join(tmpdir(), 'workbench-refresh-'))
   const store = new WorkbenchSharedAccountStore({ rootDir })
   const old = { ...session('refresh'), accessExpiresAt: new Date(0).toISOString() }
-  const fresh = { ...session('refresh'), accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }
+  const fresh = {
+    ...session('refresh'),
+    accessToken: 'fresh-access',
+    refreshToken: 'fresh-refresh',
+  }
   let refreshes = 0
   try {
     await store.save(old)
-    const service = new WorkbenchAccountService(store, async () => {}, 'https://cloud.example.com', async (url, init) => {
-      if (String(url).endsWith('/refresh')) {
-        refreshes++
-        await new Promise(resolve => setTimeout(resolve, 20))
-        return Response.json(fresh)
+    const service = new WorkbenchAccountService(
+      store,
+      async () => {},
+      'https://cloud.example.com',
+      async (url, init) => {
+        if (String(url).endsWith('/refresh')) {
+          refreshes++
+          await new Promise((resolve) => setTimeout(resolve, 20))
+          return Response.json(fresh)
+        }
+        assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer fresh-access')
+        return Response.json(usageSnapshot([VelarDevAccess]))
       }
-      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer fresh-access')
-      return Response.json(usageSnapshot([VelarDevAccess]))
-    })
+    )
     await Promise.all([service.getManagedModelAccess(), service.getManagedModelAccess()])
     assert.equal(refreshes, 1)
     assert.equal((await store.load())?.refreshToken, 'fresh-refresh')
-  } finally { await rm(rootDir, { recursive: true, force: true }) }
+  } finally {
+    await rm(rootDir, { recursive: true, force: true })
+  }
 })
 
 void test('a late refresh does not overwrite another product or restore a signed-out account', async () => {
@@ -422,12 +467,17 @@ void test('a late refresh does not overwrite another product or restore a signed
   try {
     await store.save(original)
     await desktop.save(next)
-    assert.equal((await store.replaceSession(original, { ...original, refreshToken: 'late' }))?.refreshToken, 'rotated')
+    assert.equal(
+      (await store.replaceSession(original, { ...original, refreshToken: 'late' }))?.refreshToken,
+      'rotated'
+    )
     await store.disconnect()
     assert.equal(await store.replaceSession(next, original), null)
     assert.equal((await desktop.load())?.refreshToken, 'rotated')
     await store.save(session('different-account'))
     assert.equal(await store.replaceSession(next, original), null)
     assert.equal((await store.load())?.account.id, 'different-account')
-  } finally { await rm(rootDir, { recursive: true, force: true }) }
+  } finally {
+    await rm(rootDir, { recursive: true, force: true })
+  }
 })

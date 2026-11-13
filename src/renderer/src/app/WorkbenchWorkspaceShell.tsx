@@ -32,6 +32,7 @@ import { standaloneWorkbenchChatAdapter } from '../runtime/standaloneWorkbenchCh
 
 import { StandaloneWorkbenchPagePresentation } from './StandaloneWorkbenchPagePresentation'
 import { WorkbenchPageModelProvider } from './WorkbenchPageModelContext'
+import { WorkbenchProjectLoading } from './WorkbenchProjectLoading'
 
 import '../styles/workspaceShell.css'
 
@@ -85,7 +86,8 @@ function WorkbenchRegisteredProjectStage({
     }
   }, [])
 
-  if (registration.kind === 'loading') return null
+  if (registration.kind === 'loading')
+    return <WorkbenchProjectLoading projectName={projectHubState.currentProject?.name} />
   if (registration.kind === 'error')
     return (
       <div role="alert">

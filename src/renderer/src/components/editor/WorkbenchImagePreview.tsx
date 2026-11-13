@@ -149,22 +149,24 @@ export function WorkbenchImagePreview({
       : null
   const currentLoadState = loadState?.data === preview.data ? loadState : null
   const failed = currentLoadState?.status === 'failed'
-  const fitZoom = currentLoadState?.status === 'loaded'
-    ? resolveWorkbenchImageFitZoom({
-        naturalWidth: currentLoadState.width,
-        naturalHeight: currentLoadState.height,
-        viewportWidth: viewport.width,
-        viewportHeight: viewport.height,
-      })
-    : 1
+  const fitZoom =
+    currentLoadState?.status === 'loaded'
+      ? resolveWorkbenchImageFitZoom({
+          naturalWidth: currentLoadState.width,
+          naturalHeight: currentLoadState.height,
+          viewportWidth: viewport.width,
+          viewportHeight: viewport.height,
+        })
+      : 1
   const zoom = zoomMode === 'fit' ? fitZoom : manualZoom
   const zoomLabel = formatWorkbenchImageZoom(zoom)
-  const scaledSize = currentLoadState?.status === 'loaded'
-    ? {
-        height: currentLoadState.height * zoom,
-        width: currentLoadState.width * zoom,
-      }
-    : null
+  const scaledSize =
+    currentLoadState?.status === 'loaded'
+      ? {
+          height: currentLoadState.height * zoom,
+          width: currentLoadState.width * zoom,
+        }
+      : null
   const fileName = fileNameFromPath(path)
   const metadata = [
     ImageFormatLabels[preview.mediaType],
@@ -195,12 +197,14 @@ export function WorkbenchImagePreview({
     const imageBounds = image.getBoundingClientRect()
     const viewportX = clientX === undefined ? canvas.clientWidth / 2 : clientX - canvasBounds.left
     const viewportY = clientY === undefined ? canvas.clientHeight / 2 : clientY - canvasBounds.top
-    const imageX = imageBounds.width > 0
-      ? (canvasBounds.left + viewportX - imageBounds.left) / imageBounds.width
-      : 0.5
-    const imageY = imageBounds.height > 0
-      ? (canvasBounds.top + viewportY - imageBounds.top) / imageBounds.height
-      : 0.5
+    const imageX =
+      imageBounds.width > 0
+        ? (canvasBounds.left + viewportX - imageBounds.left) / imageBounds.width
+        : 0.5
+    const imageY =
+      imageBounds.height > 0
+        ? (canvasBounds.top + viewportY - imageBounds.top) / imageBounds.height
+        : 0.5
 
     zoomAnchorRef.current = {
       imageX: Math.min(1, Math.max(0, imageX)),
@@ -222,17 +226,16 @@ export function WorkbenchImagePreview({
     setZoomMode('manual')
   }, [captureZoomAnchor])
 
-  const zoomBy = useCallback((
-    direction: WorkbenchImageZoomDirection,
-    clientX?: number,
-    clientY?: number
-  ): void => {
-    if (!canStepWorkbenchImageZoom(zoom, direction)) return
+  const zoomBy = useCallback(
+    (direction: WorkbenchImageZoomDirection, clientX?: number, clientY?: number): void => {
+      if (!canStepWorkbenchImageZoom(zoom, direction)) return
 
-    captureZoomAnchor(clientX, clientY)
-    setManualZoom(stepWorkbenchImageZoom(zoom, direction))
-    setZoomMode('manual')
-  }, [captureZoomAnchor, zoom])
+      captureZoomAnchor(clientX, clientY)
+      setManualZoom(stepWorkbenchImageZoom(zoom, direction))
+      setZoomMode('manual')
+    },
+    [captureZoomAnchor, zoom]
+  )
 
   const cancelDrag = useCallback((pointerId?: number): void => {
     const canvas = canvasRef.current
@@ -245,21 +248,24 @@ export function WorkbenchImagePreview({
     setIsDragging(false)
   }, [])
 
-  const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>): void => {
-    event.currentTarget.focus()
-    if (event.button !== 0 || !isPannable || dragStateRef.current) return
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>): void => {
+      event.currentTarget.focus()
+      if (event.button !== 0 || !isPannable || dragStateRef.current) return
 
-    event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startScrollLeft: event.currentTarget.scrollLeft,
-      startScrollTop: event.currentTarget.scrollTop,
-    }
-    setIsDragging(true)
-  }, [isPannable])
+      event.preventDefault()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startScrollLeft: event.currentTarget.scrollLeft,
+        startScrollTop: event.currentTarget.scrollTop,
+      }
+      setIsDragging(true)
+    },
+    [isPannable]
+  )
 
   const handlePointerMove = useCallback((event: PointerEvent<HTMLDivElement>): void => {
     const dragState = dragStateRef.current
@@ -272,28 +278,28 @@ export function WorkbenchImagePreview({
       dragState.startScrollTop - (event.clientY - dragState.startClientY)
   }, [])
 
-  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>): void => {
-    const action = resolveWorkbenchImageZoomShortcut(
-      event.key,
-      event.metaKey || event.ctrlKey || event.altKey
-    )
-    if (!action) return
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>): void => {
+      const action = resolveWorkbenchImageZoomShortcut(
+        event.key,
+        event.metaKey || event.ctrlKey || event.altKey
+      )
+      if (!action) return
 
-    event.preventDefault()
-    if (action === 'fit') setFitZoom()
-    else if (action === 'actual') setActualSize()
-    else zoomBy(action)
-  }, [setActualSize, setFitZoom, zoomBy])
+      event.preventDefault()
+      if (action === 'fit') setFitZoom()
+      else if (action === 'actual') setActualSize()
+      else zoomBy(action)
+    },
+    [setActualSize, setFitZoom, zoomBy]
+  )
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
     const handleWheel = (event: WheelEvent): void => {
-      const direction = resolveWorkbenchImageWheelZoom(
-        event.deltaY,
-        event.metaKey || event.ctrlKey
-      )
+      const direction = resolveWorkbenchImageWheelZoom(event.deltaY)
       if (!direction) return
 
       event.preventDefault()
@@ -322,11 +328,9 @@ export function WorkbenchImagePreview({
     const canvasBounds = canvas.getBoundingClientRect()
     const imageBounds = image.getBoundingClientRect()
     canvas.scrollLeft +=
-      imageBounds.left + imageBounds.width * anchor.imageX
-      - (canvasBounds.left + anchor.viewportX)
+      imageBounds.left + imageBounds.width * anchor.imageX - (canvasBounds.left + anchor.viewportX)
     canvas.scrollTop +=
-      imageBounds.top + imageBounds.height * anchor.imageY
-      - (canvasBounds.top + anchor.viewportY)
+      imageBounds.top + imageBounds.height * anchor.imageY - (canvasBounds.top + anchor.viewportY)
   }, [scaledSize?.height, scaledSize?.width])
 
   useEffect(() => {
@@ -334,8 +338,7 @@ export function WorkbenchImagePreview({
       const canvas = canvasRef.current
       if (!canvas) return
       setIsPannable(
-        canvas.scrollWidth > canvas.clientWidth + 1
-        || canvas.scrollHeight > canvas.clientHeight + 1
+        canvas.scrollWidth > canvas.clientWidth + 1 || canvas.scrollHeight > canvas.clientHeight + 1
       )
     })
 

@@ -24,6 +24,7 @@ import {
   closeWorkbenchTerminalFind,
   findInWorkbenchTerminal,
   findWorkbenchTerminal,
+  fitWorkbenchTerminal,
   mountWorkbenchTerminal,
   stepWorkbenchTerminalFind,
   unmountWorkbenchTerminal,
@@ -125,9 +126,12 @@ export function WorkbenchTerminalView({
 
     let lastSize = ''
     let frame: Nullable<number> = null
+    let focusPending = true
     const fitNow = (): void => {
       if (container.clientWidth === 0 || container.clientHeight === 0) return
-      instance.fit.fit()
+      // Keep the existing screen while dragging; fit once the pane reaches its final size.
+      if (container.closest('[data-pane-resizing]')) return
+      fitWorkbenchTerminal(instance)
       const size = `${instance.terminal.cols}x${instance.terminal.rows}`
       if (size === lastSize) return
       lastSize = size
@@ -138,15 +142,24 @@ export function WorkbenchTerminalView({
       frame = requestAnimationFrame(() => {
         frame = null
         fitNow()
+        // Theme/disableStdin effects recreate WebGL's blink manager. Focusing in
+        // the mount effect races its cached focus state and leaves it paused.
+        if (focusPending && container.clientWidth > 0 && container.clientHeight > 0) {
+          focusPending = false
+          instance.terminal.focus()
+        }
       })
     }
     const observer = new ResizeObserver(scheduleFit)
     observer.observe(container)
+    window.addEventListener('pointerup', scheduleFit)
+    window.addEventListener('pointercancel', scheduleFit)
     scheduleFit()
-    instance.terminal.focus()
 
     return () => {
       observer.disconnect()
+      window.removeEventListener('pointerup', scheduleFit)
+      window.removeEventListener('pointercancel', scheduleFit)
       if (frame !== null) cancelAnimationFrame(frame)
       unmountWorkbenchTerminal(sessionId)
     }

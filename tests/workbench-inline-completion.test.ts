@@ -40,8 +40,14 @@ describe('Workbench inline completion', () => {
     const openAI = getStandaloneWorkbenchModelProviderPreset('openai')
     expect(openAI.defaultBaseURL).toBe('https://api.openai.com/v1')
     expect(openAI.baseURLConfigurable).toBe(false)
-    expect(openAI.models).toContain(openAI.defaultModel)
-    expect(openAI.models).toContain(openAI.completionModel)
+    if (openAI.models.length) {
+      expect(openAI.models).toContain(openAI.defaultModel)
+      expect(openAI.models).toContain(openAI.completionModel)
+    } else {
+      // 未加载在线目录时不编造模型名；用户仍可明确填写远端模型。
+      expect(openAI.defaultModel).toBe('')
+      expect(openAI.completionModel).toBe('')
+    }
     expect(resolveStandaloneWorkbenchProviderModel('openai', 'remote-model-next', 'agent')).toBe(
       'remote-model-next'
     )

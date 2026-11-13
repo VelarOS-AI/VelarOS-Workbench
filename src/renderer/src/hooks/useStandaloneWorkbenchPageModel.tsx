@@ -235,7 +235,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
   const namedRunConfigurations = useWorkbenchNamedRunConfigurations(workbench.activeProject?.id)
   const [runConfigurationsOpen, setRunConfigurationsOpen] = useState(false)
   const workbenchKeymap = useWorkbenchKeymapController()
-  const [settingsOpen, setSettingsOpen] = useState(false)
   // ⌘W / Ctrl+W 菜单命令的序号：编辑区看到它变了就关掉当前那个标签（它才知道哪个标签在前台）。
   const [closeActiveEditorTabRequestId, setCloseActiveEditorTabRequestId] = useState(0)
   const [velarLogicGraphOpen, setVelarLogicGraphOpen] = useState(false)
@@ -253,7 +252,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
 
     try {
       await window.velarosWorkbenchProjectHub.returnToEntry()
-      setSettingsOpen(false)
       return true
     } catch (error) {
       translate.messageLatest.current.error({
@@ -543,7 +541,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
 
   useWorkbenchKeyboardShortcuts({
     activeRightTool: surface.activeRightTool,
-    enabled: !settingsOpen,
+    enabled: true,
     isQuickOpenOpen: surface.isQuickOpenOpen,
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
@@ -563,7 +561,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     onToggleRightTool: surface.toggleRightTool,
   })
   useWorkbenchDebugShortcuts({
-    enabled: !settingsOpen,
+    enabled: true,
     keymap: workbenchKeymap.keymap,
   })
   useEffect(() => {
@@ -636,8 +634,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
       window.velarosWorkbenchProjectHub.onMenuCommand((command) => {
         switch (command) {
           case 'close-editor': {
-            // 设置页盖在编辑区上时不去关背后看不见的标签。
-            if (!settingsOpen) setCloseActiveEditorTabRequestId((requestId) => requestId + 1)
+            setCloseActiveEditorTabRequestId((requestId) => requestId + 1)
             return
           }
           case 'close-project': {
@@ -657,7 +654,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
           }
         }
       }),
-    [exitCurrentProject, settingsOpen, zoomEditor]
+    [exitCurrentProject, zoomEditor]
   )
   const workspaceFileRefreshInFlightRef = useRef(false)
   const workspaceFileRefreshQueuedRef = useRef(false)
@@ -1200,6 +1197,12 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     await navigate({ target: 'file', path: WORKBENCH_NATIVE_AI_RULES_PATH })
   }
 
+  const openSettings = useMemoizedFn((): void => {
+    void window.velarosWorkbenchSettingsWindow.open().catch((error: unknown) => {
+      translate.messageLatest.current.error({ title: translate.tLatest.current('workbench.settingsTitle'), description: AppError.getMessage(error) })
+    })
+  })
+
   // 命令面板（⇧⌘P）：各条命令接到上面这些已有的动作上。
   const commandPalette = useWorkbenchCommandPalette({
     workbench,
@@ -1213,7 +1216,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     splitEditorRight,
     navigateBack: editorNavigation.goBack,
     navigateForward: editorNavigation.goForward,
-    openSettings: () => setSettingsOpen(true),
+    openSettings,
     editRunConfigurations: () => setRunConfigurationsOpen(true),
     debugStatus,
     canDebugConfiguration: topRunControl.canDebugActiveConfiguration,
@@ -1285,8 +1288,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     },
     /** 对话框 / 浮层开关状态。 */
     dialogs: {
-      settingsOpen,
-      setSettingsOpen,
       runConfigurationsOpen,
       setRunConfigurationsOpen,
       velarLogicGraphOpen,
@@ -1296,6 +1297,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     },
     /** 交互动作。 */
     actions: {
+      openSettings,
       refreshGitPanel: gitState.refresh,
       refreshProjectAndGit,
       handleRepositoryChanged,

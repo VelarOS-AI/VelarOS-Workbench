@@ -2,6 +2,10 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, test } from 'bun:test'
 
+import {
+  cleanWorkbenchModelCatalogError,
+  getWorkbenchModelSignInReason,
+} from '../src/renderer/src/components/settings/workbenchSettingsModelFeedback'
 import { useWorkbenchProviderModelCatalog } from '../src/renderer/src/hooks/useWorkbenchProviderModelCatalog'
 import {
   getStandaloneWorkbenchManagedModelState,
@@ -9,7 +13,10 @@ import {
   refreshStandaloneWorkbenchManagedModels,
   type StandaloneWorkbenchManagedModelState,
 } from '../src/renderer/src/runtime/standaloneWorkbenchManagedModels'
-import { createStandaloneWorkbenchModelSelectorProviders } from '../src/renderer/src/runtime/standaloneWorkbenchModelCatalog'
+import {
+  createStandaloneWorkbenchModelProviderOptions,
+  createStandaloneWorkbenchModelSelectorProviders,
+} from '../src/renderer/src/runtime/standaloneWorkbenchModelCatalog'
 import type { StandaloneWorkbenchModelConfig } from '../src/renderer/src/runtime/standaloneWorkbenchModelConfig'
 import type { WorkbenchManagedModelAccessSnapshot } from '../src/shared/workbenchModel'
 
@@ -55,7 +62,9 @@ describe('managed catalog feedback shared by settings and composer', () => {
         velarosWorkbenchAccount: {
           onChanged: (listener: unknown) => {
             accountListeners.add(listener)
-            return () => { expect(accountListeners.delete(listener)).toBe(true) }
+            return () => {
+              expect(accountListeners.delete(listener)).toBe(true)
+            }
           },
         },
         addEventListener: (event: string, listener: unknown) => {
@@ -97,6 +106,17 @@ describe('managed catalog feedback shared by settings and composer', () => {
       expect(settings.catalog).toBeNull()
       expect(settings.loading).toBe(false)
       expect(settings.error).toContain('Sign in again')
+      const failedOptions = createStandaloneWorkbenchModelProviderOptions(
+        failedState.managedModels,
+        (label) => `${label} unavailable`,
+        config.provider
+      )
+      expect(failedOptions.find((option) => option.value === config.provider)).toMatchObject({
+        label: 'VelarOS-Dev',
+        disabled: true,
+      })
+      expect(failedOptions.find((option) => option.value === 'openrouter')?.disabled).toBe(false)
+      expect(failedOptions.some((option) => option.value === 'velaros')).toBe(false)
       const unavailable = createStandaloneWorkbenchModelSelectorProviders(
         config.provider,
         config.model,
@@ -127,6 +147,15 @@ describe('managed catalog feedback shared by settings and composer', () => {
       expect(managedCalls).toBe(2)
       const recovered = readCatalog(getStandaloneWorkbenchManagedModelState())
       expect(recovered.error).toBeNull()
+      const recoveredOptions = createStandaloneWorkbenchModelProviderOptions(
+        getStandaloneWorkbenchManagedModelState().managedModels,
+        () => 'unavailable',
+        config.provider
+      )
+      expect(recoveredOptions.filter((option) => option.value === config.provider)).toHaveLength(1)
+      expect(recoveredOptions.find((option) => option.value === config.provider)?.disabled).toBe(
+        false
+      )
       expect(recovered.loading).toBe(false)
       expect(recovered.catalog?.models).toEqual([
         { id: 'available-model', label: 'Available model' },
@@ -153,5 +182,25 @@ describe('managed catalog feedback shared by settings and composer', () => {
       loading: true,
       error: null,
     })
+  })
+
+  test('settings recognize expired sessions through the Electron wrapper and preserve other error details', () => {
+    const wrapped =
+      "Error invoking remote method 'workbench-app:model:list-managed-providers': Error: VelarOS 登录已失效，请在设置中重新登录后刷新模型列表。"
+    expect(getWorkbenchModelSignInReason(wrapped)).toBe('expired')
+    expect(cleanWorkbenchModelCatalogError(wrapped)).toBe(
+      'VelarOS 登录已失效，请在设置中重新登录后刷新模型列表。'
+    )
+    expect(getWorkbenchModelSignInReason('Error: Your VelarOS session has expired.')).toBe(
+      'expired'
+    )
+    expect(getWorkbenchModelSignInReason('请先登录 VelarOS。')).toBe('signed-out')
+    expect(getWorkbenchModelSignInReason('Sign in to VelarOS first.')).toBe('signed-out')
+    expect(getWorkbenchModelSignInReason('Connection timed out')).toBeNull()
+    expect(
+      cleanWorkbenchModelCatalogError(
+        "Error invoking remote method 'list-provider-models': Error: Invalid API key"
+      )
+    ).toBe('Invalid API key')
   })
 })

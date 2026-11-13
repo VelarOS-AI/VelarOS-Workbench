@@ -73,7 +73,10 @@ void describe('Workbench editor text format', () => {
 
   void test('choosing the format already on disk is no conversion, unless the file cannot round-trip', () => {
     const file = createFile()
-    assert.equal(resolveWorkbenchTextConversion(file, { encoding: 'gb18030', eol: 'crlf' }), undefined)
+    assert.equal(
+      resolveWorkbenchTextConversion(file, { encoding: 'gb18030', eol: 'crlf' }),
+      undefined
+    )
     assert.deepEqual(resolveWorkbenchTextConversion(file, { encoding: 'gb18030', eol: 'lf' }), {
       encoding: 'gb18030',
       eol: 'lf',
@@ -150,7 +153,9 @@ void describe('Workbench editor text format', () => {
     )
     assert.deepEqual(
       resolveWorkbenchTextFormatNotice(
-        createTab(createFile(), { unencodableSaveError: '第 1 行第 5 列的「😀」无法用 GB18030 表示。' })
+        createTab(createFile(), {
+          unencodableSaveError: '第 1 行第 5 列的「😀」无法用 GB18030 表示。',
+        })
       ),
       {
         kind: 'unencodable',
@@ -199,11 +204,17 @@ void describe('Workbench editor text format', () => {
     // 手动保存当前文件时带上标签上选过的转换。
     assert.match(
       controller,
-      /const saveSelectedFile = [\s\S]*?const tab = targetPath \? openTabsByPath\.get\(targetPath\) : undefined[\s\S]*?textConversion: tab\.textConversion,/u
+      /const saveSelectedFile = [\s\S]*?const tab = targetPath \? openTabsByPathLatest\.current\.get\(targetPath\) : undefined[\s\S]*?textConversion: tab\.textConversion,/u
     )
     // 从磁盘读来的预览标签带着格式保存；本地历史取回的正文先统一成 LF。
-    assert.match(pageModel, /encoding: file\.encoding,\n\s*eol: file\.eol,\n\s*textIssue: file\.textIssue,/u)
-    assert.match(lightEditor, /encoding: toOptional\(tab\.encoding\),\n\s*eol: toOptional\(tab\.eol\),/u)
+    assert.match(
+      pageModel,
+      /encoding: file\.encoding,\n\s*eol: file\.eol,\n\s*textIssue: file\.textIssue,/u
+    )
+    assert.match(
+      lightEditor,
+      /encoding: toOptional\(tab\.encoding\),\n\s*eol: toOptional\(tab\.eol\),/u
+    )
     assert.match(editorPanel, /onEditorContentChange\(normalizeWorkbenchTextEol\(content\)\)/u)
   })
 
@@ -215,7 +226,10 @@ void describe('Workbench editor text format', () => {
       statusBar,
       /\{t\('workbench\.cursorPosition', cursorPosition\)\}\n\s*<\/Text>\n\s*\{!!indentation && \(\n\s*<StatusBarIndentation[\s\S]*?\/>\n\s*\)\}\n\s*\{!!textFormat && <StatusBarTextFormat/u
     )
-    assert.match(statusBar, /const StatusBarEolOptions: readonly WorkbenchTextEol\[\] = \['lf', 'crlf'\]/u)
+    assert.match(
+      statusBar,
+      /const StatusBarEolOptions: readonly WorkbenchTextEol\[\] = \['lf', 'crlf'\]/u
+    )
     assert.match(
       presentation,
       /void workbench\.convertSelectedFileTextFormat\(\{\n\s*encoding: selectedTextFormat\.encoding,\n\s*eol,/u

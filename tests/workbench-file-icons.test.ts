@@ -49,10 +49,12 @@ void describe('Workbench file icon surface', () => {
       ['styles/app.sass', 'sass', '--workbench-file-scss'],
       ['styles/app.scss', 'scss', '--workbench-file-scss'],
     ] as const) {
-      const markup = renderToStaticMarkup(createElement(WorkbenchFileTypeIcon, {
-        fileName,
-        size: 16,
-      }))
+      const markup = renderToStaticMarkup(
+        createElement(WorkbenchFileTypeIcon, {
+          fileName,
+          size: 16,
+        })
+      )
 
       assert.match(markup, new RegExp(`data-file-icon-kind="${variant}"`, 'u'))
       assert.match(markup, new RegExp(`var\\(${color}\\)`, 'u'))
@@ -76,9 +78,9 @@ void describe('Workbench file icon surface', () => {
     }
   })
 
-  void test('keeps framework-specific icons outside core and exposes a contribution seam', () => {
-    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'App.vue' }), 'code')
-    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'main.py' }), 'code')
+  void test('lets registered contributions override the built-in language icons', () => {
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'App.vue' }), 'vue')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'main.py' }), 'python')
 
     const contribution = {
       id: 'fixture-framework-icons',
@@ -98,6 +100,34 @@ void describe('Workbench file icon surface', () => {
       remove()
     }
 
-    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'App.vue' }), 'code')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'App.vue' }), 'vue')
+  })
+
+  void test('renders distinct colored icons for supported programming languages', () => {
+    const paths = [
+      'Main.java',
+      'Main.cs',
+      'main.go',
+      'main.rs',
+      'App.vue',
+      'main.dart',
+      'main.swift',
+      'main.kt',
+      'module.wat',
+      'shader.frag',
+      'main.py',
+      'index.html',
+      'query.sql',
+    ]
+    const variants = new Set<string>()
+    for (const fileName of paths) {
+      const presentation = resolveWorkbenchFilePresentation({ fileName })
+      variants.add(presentation.variant)
+      const markup = renderToStaticMarkup(createElement(WorkbenchFileTypeIcon, { fileName }))
+      assert.match(presentation.color ?? '', /^#[\da-f]{6}$/iu)
+      assert.ok(markup.includes(presentation.color!), fileName)
+      assert.match(markup, new RegExp(`data-file-icon-kind="${presentation.variant}"`, 'u'))
+    }
+    assert.equal(variants.size, paths.length)
   })
 })

@@ -176,9 +176,14 @@ export function getWorkbenchLanguageServiceWorkerPriority(
 
 /** 排队、冷工具启动/执行/退出共用调用方这一张预算，不在下层续期。 */
 export function getWorkbenchLanguageServiceRequestTimeoutMs(
-  operation: WorkbenchLanguageServiceWorkerOperation
+  operation: WorkbenchLanguageServiceWorkerOperation,
+  initializingProject = false
 ): number {
   if (operation === 'getDiagnostics') return 90_000
+  // Cold TypeScript projects can spend tens of seconds loading dependency declarations.
+  // Let the first analysis finish rather than repeatedly cancelling its type checker.
+  if (initializingProject && getWorkbenchLanguageServiceWorkerPriority(operation) !== 'lifecycle')
+    return 45_000
   switch (getWorkbenchLanguageServiceWorkerPriority(operation)) {
     case 'background':
       return 30_000

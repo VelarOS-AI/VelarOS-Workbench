@@ -1,0 +1,603 @@
+name: Release Workbench (all platforms)
+run-name: Workbench · ${{ inputs.source_commit }} · ${{ inputs.dry_run && 'build only' || 'publish' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Full 40-character Workbench main commit, already tagged v<version>
+        type: string
+        required: true
+      channel:
+        description: Release channel
+        type: choice
+        options: [stable, beta, canary]
+        default: stable
+      dry_run:
+        description: Check, build and notarize without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+
+# All catalog mutations for Workbench use this workflow and one serialized run.
+concurrency:
+  group: workbench-all-platforms-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_SOURCE_SHA: ${{ inputs.source_commit }}
+  VELAROS_UPDATE_CHANNEL: ${{ inputs.channel }}
+  CI: 'true'
+  HUSKY: '0'
+
+jobs:
+  source:
+    name: Workbench source
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+      node: ${{ steps.identity.outputs.node }}
+      bun: ${{ steps.identity.outputs.bun }}
+    steps:
+      - name: Validate immutable source input
+        shell: bash
+        run: '[[ "$RELEASE_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: VelarOS-AI/VelarOS-Workbench
+          ref: ${{ inputs.source_commit }}
+          token: ${{ github.token }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify main, annotated tag and pinned tool versions
+        id: identity
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_SOURCE_SHA"
+          git merge-base --is-ancestor "$RELEASE_SOURCE_SHA" origin/main
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+          const version = manifest.version;
+          const bun = manifest.packageManager?.match(/^bun@(\d+\.\d+\.\d+)$/)?.[1];
+          const node = manifest.optionalDependencies?.['node-bin-darwin-arm64'];
+          if (!/^\d+\.\d+\.\d+$/.test(version) || !bun || !/^\d+\.\d+\.\d+$/.test(node)) throw new Error('Missing pinned release versions');
+          for (const name of ['node-win-x64', 'node-linux-x64']) {
+            if (manifest.optionalDependencies[name] !== node) throw new Error(`Node version differs for ${name}`);
+          }
+          const tag = `refs/tags/v${version}`;
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          if (git('cat-file', '-t', tag) !== 'tag' || git('rev-parse', `${tag}^{commit}`) !== process.env.RELEASE_SOURCE_SHA) throw new Error('Annotated release tag must identify the requested source');
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nnode=${node}\nbun=${bun}\n`);
+          NODE
+
+  native:
+    name: Workbench ${{ matrix.platform }}
+    needs: source
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: linux
+            platform: linux
+            platform_key: linux-x64
+            arch: x64
+          - runner: windows-2022
+            target: win
+            platform: windows
+            platform_key: win32-x64
+            arch: x64
+          - runner: macos-15
+            target: mac
+            platform: macos
+            platform_key: darwin-arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    environment: release-candidates
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TAG: v${{ needs.source.outputs.version }}
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      RELEASE_PLATFORM: ${{ matrix.platform }}
+      RELEASE_PLATFORM_KEY: ${{ matrix.platform_key }}
+      PACKAGE_TARGET: ${{ matrix.target }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Preserve source bytes
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: VelarOS-AI/VelarOS-Workbench
+          ref: ${{ inputs.source_commit }}
+          token: ${{ github.token }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ needs.source.outputs.node }}
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ needs.source.outputs.bun }}
+      - name: Use Windows native archive tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archiveTools = Join-Path $env:RUNNER_TEMP 'native-archive-tools'
+          New-Item -ItemType Directory -Path $archiveTools -Force | Out-Null
+          Copy-Item -LiteralPath "$env:WINDIR\System32\tar.exe" -Destination (Join-Path $archiveTools 'tar.exe')
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $archiveTools
+      - name: Install Linux runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libnss3 libasound2 libgbm1 libfuse2 xvfb
+      - name: Restore verified Platform snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/platformSnapshot.mjs
+      - name: Install frozen dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: bun install --frozen-lockfile
+      - name: Verify source identity
+        run: node scripts/release/releaseArtifacts.mjs validate-source
+      - name: Reuse an already published verified platform
+        id: reuse
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+          RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+          VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS: ${{ vars.VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash, createPublicKey } from 'node:crypto';
+          import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+          import { assertCatalogMatchesCompletion, completionManifest } from './scripts/release/publishUpdateCatalog.mjs';
+          import { loadWorkbenchReleaseNote } from './scripts/release/releaseNotes.mjs';
+          const version = process.env.RELEASE_VERSION, channel = process.env.VELAROS_UPDATE_CHANNEL;
+          const tag = `workbench-v${version}`, repository = process.env.RELEASE_REPOSITORY;
+          async function request(route, accept = 'application/vnd.github+json') {
+            const response = await fetch(`https://api.github.com/repos/${repository}/${route}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: accept }, signal: AbortSignal.timeout(30000) });
+            if (response.status === 404 && route.startsWith('releases/tags/')) return null;
+            if (!response.ok) throw new Error(`Release API failed: HTTP ${response.status}`);
+            return response.json();
+          }
+          const release = await request(`releases/tags/${tag}`);
+          if (release) {
+            assert.equal(release.draft, false); assert.equal(release.prerelease, true);
+            const assets = [];
+            for (let page = 1; ; page++) { const batch = await request(`releases/${release.id}/assets?per_page=100&page=${page}`); assets.push(...batch); if (batch.length < 100) break; }
+            const catalogAsset = assets.find(asset => asset.name === `catalog-${tag}-${channel}.json`);
+            const completionAsset = assets.find(asset => asset.name === `candidate-${tag}-${channel}.json`);
+            let covered = false;
+            if (completionAsset && !catalogAsset) throw new Error('Completion receipt has no signed catalog');
+            if (catalogAsset) {
+              const catalog = await request(`releases/assets/${catalogAsset.id}`, 'application/octet-stream');
+              const trustedKeys = new Map(process.env.VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS.split(',').filter(Boolean).map(entry => { const separator = entry.indexOf(':'); return [entry.slice(0, separator), createPublicKey({ key: Buffer.from(entry.slice(separator + 1), 'base64'), format: 'der', type: 'spki' })]; }));
+              const identity = { version, channel, tag, sourceCommit: process.env.RELEASE_SOURCE_SHA, releaseNote: await loadWorkbenchReleaseNote(version) };
+              const completion = completionAsset ? await request(`releases/assets/${completionAsset.id}`, 'application/octet-stream') : completionManifest(catalog.artifacts, identity);
+              assert.equal(catalog.schemaVersion, 2);
+              assert.equal(assertCatalogMatchesCompletion(catalog, completion, identity, { trustedKeys }), true);
+              if (completion.platforms?.includes(process.env.RELEASE_PLATFORM_KEY)) {
+                covered = true;
+                for (const artifact of catalog.artifacts) {
+                  const asset = assets.find(item => String(item.id) === artifact.assetId);
+                  assert.ok(asset, `Missing asset ${artifact.fileName}`);
+                  assert.equal(asset.name, artifact.fileName); assert.equal(asset.size, artifact.sizeBytes);
+                  assert.equal(asset.digest, `sha256:${artifact.sha256}`);
+                }
+                if (completionAsset) {
+                  appendFileSync(process.env.GITHUB_OUTPUT, 'available=true\ncomplete=true\n');
+                  console.log(`Reusing verified published platform ${process.env.RELEASE_PLATFORM_KEY}`);
+                } else {
+                  // An interrupted additive publication may have removed the receipt.
+                  // Re-stage the exact signed bytes, never notarize different replacements.
+                  mkdirSync('artifacts/release-existing', { recursive: true });
+                  for (const artifact of catalog.artifacts.filter(item => `${item.platform}-${item.arch}` === process.env.RELEASE_PLATFORM_KEY)) {
+                    assert.match(artifact.fileName, /^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+                    const response = await fetch(`https://api.github.com/repos/${repository}/releases/assets/${artifact.assetId}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/octet-stream' }, signal: AbortSignal.timeout(300000) });
+                    if (!response.ok) throw new Error(`Artifact download failed: HTTP ${response.status}`);
+                    const bytes = Buffer.from(await response.arrayBuffer());
+                    assert.equal(bytes.length, artifact.sizeBytes);
+                    assert.equal(createHash('sha256').update(bytes).digest('hex'), artifact.sha256);
+                    writeFileSync(`artifacts/release-existing/${artifact.fileName}`, bytes, { flag: 'wx' });
+                  }
+                  appendFileSync(process.env.GITHUB_OUTPUT, 'available=true\nrestage=true\n');
+                  console.log(`Restoring the original signed bytes for ${process.env.RELEASE_PLATFORM_KEY}`);
+                }
+              }
+            }
+            const metadata = { linux: /^latest-linux(?:-[^.]+)?\.ya?ml$/i, windows: /^latest\.ya?ml$/i, macos: /^latest-mac(?:-[^.]+)?\.ya?ml$/i }[process.env.RELEASE_PLATFORM];
+            if (!covered && assets.some(asset => asset.name.startsWith(`VelarOS-Workbench-${version}-${process.env.PACKAGE_TARGET}-`) || metadata.test(asset.name))) {
+              throw new Error('Published platform bytes are not covered by the signed catalog; recover that publication before rebuilding');
+            }
+          }
+          NODE
+      - name: Prepare browser for native interaction tests
+        if: steps.reuse.outputs.available != 'true'
+        run: bunx --no-install playwright install --with-deps chromium
+      - name: Run native checks and runtime probes
+        if: steps.reuse.outputs.available != 'true'
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a bun run check
+          else
+            bun run check
+          fi
+      - name: Prepare Apple signing and notarization
+        if: runner.os == 'macOS' && steps.reuse.outputs.available != 'true'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in CSC_LINK APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            test -n "${!name}" || { echo "Missing release-candidates secret: $name"; exit 1; }
+          done
+          test "$(uname -m)" = arm64
+          test "$APPLE_TEAM_ID" = BQLV66VD9C
+          umask 077
+          certificate="$RUNNER_TEMP/workbench-signing.p12"
+          keychain="$RUNNER_TEMP/workbench-signing.keychain-db"
+          password="$(openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          printf '%s' "$CSC_LINK" | base64 --decode > "$certificate"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$certificate" -P "$CSC_KEY_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" "$HOME/Library/Keychains/login.keychain-db"
+          security find-identity -v -p codesigning "$keychain" | grep -F 'Developer ID Application: zhenglian zhang (BQLV66VD9C)'
+          xcrun notarytool store-credentials velaros-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --keychain "$keychain"
+          echo "CSC_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          echo "APPLE_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          echo 'APPLE_KEYCHAIN_PROFILE=velaros-notary' >> "$GITHUB_ENV"
+          rm -f "$certificate"
+      - name: Recover transient Apple ticket connections
+        if: runner.os == 'macOS' && steps.reuse.outputs.complete != 'true'
+        run: |
+          test -x /usr/bin/xcrun
+          directory="$RUNNER_TEMP/workbench-apple-tools"
+          mkdir -p "$directory"
+          cat > "$directory/xcrun.mjs" <<'NODE'
+          // BEGIN WORKBENCH APPLE RECOVERY
+          import { execFile } from 'node:child_process';
+          import { promisify } from 'node:util';
+          import { setTimeout as delay } from 'node:timers/promises';
+          const executeFile = promisify(execFile);
+          export function isAppleTicketCommand(command, args) {
+            return command === 'xcrun' && args[0] === 'stapler' && ['staple', 'validate'].includes(args[1]);
+          }
+          export function isAppleConnectionLost(message) {
+            return typeof message === 'string'
+              && /NSURLErrorDomain Code=-1005\b/.test(message)
+              && message.includes('https://api.apple-cloudkit.com/database/1/com.apple.gk.ticket-delivery/production/public/records/lookup');
+          }
+          export async function executeAppleValidation(command, args, { execute = executeFile, wait = delay } = {}) {
+            const ticketCommand = isAppleTicketCommand(command, args);
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const { stdout, stderr } = await execute(command, args, { timeout: 120000, maxBuffer: 1024 * 1024 });
+                if (stdout) process.stdout.write(stdout);
+                if (stderr) process.stderr.write(stderr);
+                return;
+              } catch (error) {
+                if (!ticketCommand || error?.code !== 68 || !isAppleConnectionLost(`${error?.stdout ?? ''}\n${error?.stderr ?? ''}`) || attempt === 2) throw error;
+                console.warn(`Apple ticket connection interrupted; retrying ${args[1]} (${attempt + 1}/2)`);
+                await wait((attempt + 1) * 15000);
+              }
+            }
+          }
+          // END WORKBENCH APPLE RECOVERY
+          import { spawn } from 'node:child_process';
+          const args = process.argv.slice(2);
+          if (isAppleTicketCommand('xcrun', args)) {
+            try {
+              await executeAppleValidation('xcrun', args, { execute: (_command, values, options) => executeFile('/usr/bin/xcrun', values, options) });
+            } catch (error) {
+              if (error.stdout) process.stdout.write(error.stdout);
+              if (error.stderr) process.stderr.write(error.stderr);
+              if (!error.stdout && !error.stderr) console.error(error.message);
+              process.exitCode = typeof error.code === 'number' ? error.code : 1;
+            }
+          } else {
+            // Preserve all other Apple commands, including notarytool and its stdio.
+            const child = spawn('/usr/bin/xcrun', args, { stdio: 'inherit' });
+            child.once('error', error => { console.error(error.message); process.exitCode = 1; });
+            child.once('exit', code => { process.exitCode = code ?? 1; });
+          }
+          NODE
+          cat > "$directory/xcrun" <<'SH'
+          #!/bin/bash
+          exec node "$(dirname "$0")/xcrun.mjs" "$@"
+          SH
+          chmod +x "$directory/xcrun"
+          echo "$directory" >> "$GITHUB_PATH"
+      - name: Build native package
+        if: steps.reuse.outputs.available != 'true'
+        run: |
+          if [ "$RUNNER_OS" != macOS ]; then export CSC_IDENTITY_AUTO_DISCOVERY=false; fi
+          bun run "package:$PACKAGE_TARGET" -- "--$PACKAGE_ARCH"
+      - name: Verify Windows archive update and rollback
+        if: runner.os == 'Windows' && steps.reuse.outputs.available != 'true'
+        run: |
+          node --test tests/windows-update.test.mjs
+          node scripts/release/verifyWindowsArchiveUpdate.mjs artifacts/desktop/win-unpacked "artifacts/desktop/VelarOS-Workbench-$RELEASE_VERSION-win-x64.zip" src/main/updates/WindowsArchiveUpdater.ts
+          node scripts/release/verifyWindowsArchiveUpdate.mjs artifacts/desktop/win-unpacked "artifacts/desktop/VelarOS-Workbench-$RELEASE_VERSION-win-x64.zip" src/main/updates/WindowsArchiveUpdater.ts on-quit
+      - name: Cold-start packaged Workbench
+        if: steps.reuse.outputs.available != 'true'
+        run: |
+          cat > "$RUNNER_TEMP/workbench-smoke.mjs" <<'NODE'
+          // BEGIN WORKBENCH SMOKE
+          import { spawn, spawnSync } from 'node:child_process';
+          import { join, resolve } from 'node:path';
+          import { setTimeout as delay } from 'node:timers/promises';
+          const running = child => child.exitCode === null && child.signalCode === null;
+          function forceStopSmokeProcess(child) {
+            if (!child.pid) return;
+            if (process.platform !== 'win32') {
+              try { process.kill(-child.pid, 'SIGKILL'); }
+              catch (error) { if (error.code !== 'ESRCH') throw error; }
+            } else if (running(child)) {
+              const result = spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', timeout: 5000, windowsHide: true });
+              if (result.error) throw result.error;
+              // 同步 taskkill 返回时 exit 回调可能尚未派发，由调用者等待后确认退出。
+            }
+          }
+          export async function stopSmokeProcess(child, { graceMs = 5000, killMs = 3000 } = {}) {
+            const exited = new Promise(ok => { child.once('exit', ok); child.once('error', ok); });
+            try {
+              try {
+                if (process.platform !== 'win32' && child.pid && running(child)) {
+                  child.kill('SIGTERM');
+                  await Promise.race([exited, delay(graceMs)]);
+                }
+              } finally {
+                // 主进程已退出时，其独立进程组里仍可能有持有管道的 Electron helper。
+                forceStopSmokeProcess(child);
+              }
+              if (child.pid && running(child)) await Promise.race([exited, delay(killMs)]);
+              if (child.pid && running(child)) throw new Error('Packaged Workbench did not stop after SIGKILL');
+            } finally {
+              child.stdout?.destroy();
+              child.stderr?.destroy();
+              child.unref();
+            }
+          }
+          async function inspectRenderer({ child, port, deadline, setSocket, launchError }) {
+            let target;
+            while (Date.now() < deadline) {
+              if (launchError()) throw launchError();
+              if (!running(child)) throw new Error(`Workbench exited with ${child.exitCode ?? child.signalCode}`);
+              try { target = (await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2000) })).json()).find(page => page.type === 'page' && page.url.startsWith('file:')); } catch {}
+              if (target) break;
+              await delay(500);
+            }
+            if (!target) throw new Error('Packaged renderer did not open');
+            const socket = new WebSocket(target.webSocketDebuggerUrl);
+            setSocket(socket);
+            await new Promise((ok, bad) => { socket.addEventListener('open', ok, { once: true }); socket.addEventListener('error', bad, { once: true }); });
+            let id = 0;
+            const pending = new Map();
+            socket.addEventListener('message', event => { const message = JSON.parse(event.data); const request = pending.get(message.id); if (request) { pending.delete(message.id); message.error ? request.bad(new Error(JSON.stringify(message.error))) : request.ok(message.result); } });
+            const call = (method, params) => new Promise((ok, bad) => { const request = ++id; pending.set(request, { ok, bad }); socket.send(JSON.stringify({ id: request, method, params })); });
+            let rendered = false;
+            while (Date.now() < deadline) {
+              const response = await call('Runtime.evaluate', { expression: '({text:document.body?.innerText??"",buttons:document.querySelectorAll("button").length})', returnByValue: true });
+              const page = response.result.value;
+              if (page?.text.trim().length > 30 && page.buttons > 0) { rendered = true; break; }
+              await delay(500);
+            }
+            if (!rendered) throw new Error('Packaged renderer stayed blank');
+            return true;
+          }
+          export async function runWorkbenchSmoke({ executable, args, port = 9338, inspect = inspectRenderer, startupMs = 90000, watchdogMs = 100000, graceMs = 5000, killMs = 3000 }) {
+            const child = spawn(executable, args, { detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+            let output = '', childError, socket, failure, exitCode = 1;
+            child.on('error', error => { childError = error; });
+            for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => { output = (output + chunk).slice(-20000); });
+            const watchdog = setTimeout(() => {
+              console.error('Packaged Workbench smoke exceeded its hard deadline', output);
+              try { forceStopSmokeProcess(child); } catch (error) { console.error(error.message); }
+              child.stdout?.destroy(); child.stderr?.destroy();
+              process.exit(1);
+            }, watchdogMs);
+            try {
+              const rendered = await inspect({ child, port, deadline: Date.now() + startupMs, setSocket: value => { socket = value; }, launchError: () => childError });
+              if (rendered !== true) throw new Error('Packaged renderer stayed blank');
+              exitCode = 0;
+            } catch (error) { failure = error; }
+            finally {
+              try { socket?.close(); } catch (error) { failure ??= error; exitCode = 1; }
+              try { await stopSmokeProcess(child, { graceMs, killMs }); } catch (error) { failure ??= error; exitCode = 1; }
+              // 清理完成后才撤销总时限；显式退出避免 WebSocket 关闭握手等残留句柄拖住 CI。
+              clearTimeout(watchdog);
+            }
+            if (exitCode !== 0) { console.error(failure, output); process.exit(1); }
+            console.log('Packaged Workbench opened, rendered and stopped successfully');
+            process.exit(0);
+          }
+          // END WORKBENCH SMOKE
+          const executables = { linux: 'linux-unpacked/velaros-workbench', windows: 'win-unpacked/VelarOS Workbench.exe', macos: 'mac-arm64/VelarOS Workbench.app/Contents/MacOS/VelarOS Workbench' };
+          const port = 9338;
+          await runWorkbenchSmoke({ executable: resolve('artifacts/desktop', executables[process.env.RELEASE_PLATFORM]), args: [`--remote-debugging-port=${port}`, `--user-data-dir=${join(process.env.RUNNER_TEMP, 'workbench-release-smoke')}`], port });
+          NODE
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a node "$RUNNER_TEMP/workbench-smoke.mjs"
+          else
+            node "$RUNNER_TEMP/workbench-smoke.mjs"
+          fi
+      - name: Verify and stage immutable package
+        if: steps.reuse.outputs.available != 'true'
+        run: |
+          node scripts/release/releaseArtifacts.mjs validate-source
+          bun run release:local:stage -- "$RELEASE_PLATFORM" artifacts/desktop "artifacts/release-stage/$RELEASE_PLATFORM"
+          bun run release:local:verify -- "$RELEASE_PLATFORM" "artifacts/release-stage/$RELEASE_PLATFORM"
+      - name: Re-verify and stage original published bytes
+        if: steps.reuse.outputs.restage == 'true'
+        run: |
+          node scripts/release/releaseArtifacts.mjs reuse "$RELEASE_PLATFORM" artifacts/release-existing "artifacts/release-stage/$RELEASE_PLATFORM"
+          bun run release:local:verify -- "$RELEASE_PLATFORM" "artifacts/release-stage/$RELEASE_PLATFORM"
+      # Do not upload/download Actions artifacts: each native runner retains its own
+      # verified stage. Only the catalog writers wait, in Linux -> Windows -> Mac order.
+      - name: Wait for preceding catalog writers
+        if: ${{ !inputs.dry_run && steps.reuse.outputs.complete != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { setTimeout as delay } from 'node:timers/promises';
+          const order = ['linux', 'windows', 'macos'];
+          const current = process.env.RELEASE_PLATFORM;
+          const index = order.indexOf(current);
+          if (index < 0) throw new Error('Unknown release platform');
+          const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+          if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error('Invalid run attempt');
+          const endpoint = `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          async function jobsForAttempt(number) {
+            const jobs = [];
+            let expected;
+            for (let page = 1; page <= 100; page++) {
+              const response = await fetch(`${endpoint}/attempts/${number}/jobs?per_page=100&page=${page}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, signal: AbortSignal.timeout(30000) });
+              if (!response.ok) throw new Error(`Jobs API failed: HTTP ${response.status}`);
+              const body = await response.json();
+              if (!Array.isArray(body.jobs) || !Number.isSafeInteger(body.total_count)) throw new Error('Invalid jobs API response');
+              expected ??= body.total_count;
+              if (expected !== body.total_count) throw new Error('Job list changed during pagination; retry the job');
+              jobs.push(...body.jobs);
+              if (jobs.length === expected) {
+                if (jobs.some(job => job.run_attempt !== number)) throw new Error('Jobs API returned another attempt');
+                return jobs;
+              }
+              if (jobs.length > expected) throw new Error('Unexpected jobs API count');
+              if (body.jobs.length === 0) throw new Error('Incomplete jobs API pagination');
+            }
+            throw new Error('Jobs API pagination exceeded its limit');
+          }
+          const historical = new Map();
+          for (let previous = attempt - 1; previous >= 1; previous--) {
+            for (const job of await jobsForAttempt(previous)) if (!historical.has(job.name)) historical.set(job.name, job);
+          }
+          const deadline = Date.now() + 120 * 60 * 1000;
+          while (Date.now() < deadline) {
+            const jobs = await jobsForAttempt(attempt);
+            const self = jobs.filter(job => job.name === `Workbench ${current}`);
+            if (self.length !== 1 || self[0].status !== 'in_progress') throw new Error('Current native job is missing or ambiguous');
+            const fullRerun = jobs.some(job => job.name === 'Workbench source');
+            const ready = order.slice(0, index).every(platform => {
+              const matches = jobs.filter(job => job.name === `Workbench ${platform}`);
+              if (matches.length > 1) throw new Error('Duplicate native jobs');
+              if (matches[0]) return matches[0].status === 'completed';
+              // Failed/cancelled predecessors may still be scheduled in this attempt.
+              // Only a successful job omitted by a partial rerun can be reused.
+              const previous = historical.get(`Workbench ${platform}`);
+              return !fullRerun && previous?.status === 'completed' && previous.conclusion === 'success';
+            });
+            if (ready) { console.log(`Catalog publication turn: ${current}`); break; }
+            await delay(15000);
+          }
+          if (Date.now() >= deadline) throw new Error('Timed out waiting for preceding catalog writers');
+          NODE
+      - name: Publish verified native release
+        if: ${{ !inputs.dry_run && steps.reuse.outputs.complete != 'true' }}
+        env:
+          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+          VELAROS_RELEASE_ATTESTATION_KEY_ID: ${{ vars.VELAROS_RELEASE_ATTESTATION_KEY_ID }}
+          VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY: ${{ secrets.VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY }}
+          VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS: ${{ vars.VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS }}
+        run: bun run release:local:finalize -- "$RELEASE_PLATFORM" "artifacts/release-stage/$RELEASE_PLATFORM"
+      - name: Remove Apple signing material
+        if: ${{ always() && runner.os == 'macOS' }}
+        run: |
+          keychain="$RUNNER_TEMP/workbench-signing.keychain-db"
+          if [ -f "$keychain" ]; then security delete-keychain "$keychain"; fi
+          rm -f "$RUNNER_TEMP/workbench-signing.p12"
+
+  verify:
+    needs: [source, native]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.source.result == 'success' }}
+    runs-on: ubuntu-22.04
+    environment: release-candidates
+    timeout-minutes: 15
+    env:
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      GH_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+      RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+      VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS: ${{ vars.VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: VelarOS-AI/VelarOS-Workbench
+          ref: ${{ inputs.source_commit }}
+          token: ${{ github.token }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ needs.source.outputs.node }}
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ needs.source.outputs.bun }}
+      - name: Restore verification dependencies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/release/platformSnapshot.mjs
+          bun install --frozen-lockfile
+      - name: Verify complete signed candidate for all three platforms
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { createPublicKey } from 'node:crypto';
+          import { appendFileSync } from 'node:fs';
+          import { assertCatalogMatchesCompletion } from './scripts/release/publishUpdateCatalog.mjs';
+          import { loadWorkbenchReleaseNote } from './scripts/release/releaseNotes.mjs';
+          const version = process.env.RELEASE_VERSION, channel = process.env.VELAROS_UPDATE_CHANNEL;
+          const tag = `workbench-v${version}`, repository = process.env.RELEASE_REPOSITORY;
+          const api = route => JSON.parse(execFileSync('gh', ['api', route], { encoding: 'utf8' }));
+          const release = api(`repos/${repository}/releases/tags/${tag}`);
+          assert.equal(release.draft, false); assert.equal(release.prerelease, true);
+          const assets = [];
+          for (let page = 1; ; page++) { const batch = api(`repos/${repository}/releases/${release.id}/assets?per_page=100&page=${page}`); assets.push(...batch); if (batch.length < 100) break; }
+          const read = name => {
+            const asset = assets.find(item => item.name === name);
+            assert.ok(asset, `Missing ${name}`);
+            return JSON.parse(execFileSync('gh', ['api', `repos/${repository}/releases/assets/${asset.id}`, '-H', 'Accept: application/octet-stream'], { encoding: 'utf8' }));
+          };
+          const catalog = read(`catalog-${tag}-${channel}.json`), completion = read(`candidate-${tag}-${channel}.json`);
+          const trustedKeys = new Map(process.env.VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS.split(',').filter(Boolean).map(entry => { const separator = entry.indexOf(':'); return [entry.slice(0, separator), createPublicKey({ key: Buffer.from(entry.slice(separator + 1), 'base64'), format: 'der', type: 'spki' })]; }));
+          const identity = { version, channel, tag, sourceCommit: process.env.RELEASE_SOURCE_SHA, releaseNote: await loadWorkbenchReleaseNote(version) };
+          assert.equal(catalog.schemaVersion, 2);
+          assert.equal(assertCatalogMatchesCompletion(catalog, completion, identity, { trustedKeys }), true);
+          assert.deepEqual(completion.platforms, ['darwin-arm64', 'linux-x64', 'win32-x64']);
+          for (const artifact of catalog.artifacts) {
+            const asset = assets.find(item => String(item.id) === artifact.assetId);
+            assert.ok(asset, `Missing asset ${artifact.fileName}`);
+            assert.equal(asset.name, artifact.fileName); assert.equal(asset.size, artifact.sizeBytes);
+            assert.equal(asset.digest, `sha256:${artifact.sha256}`);
+          }
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Verified Workbench ${version} (${channel}) on macOS ARM64, Windows x64 and Linux x64.\n\nSource: ${identity.sourceCommit}\n\n[Signed candidate](${release.html_url})\n\nCloud stable promotion is a separate operation.\n`);
+          NODE

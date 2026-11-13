@@ -234,51 +234,6 @@
     flex-direction: column;
   }
 
-  .workbenchSettingsOverlay {
-    padding: 10px;
-  }
-
-  .workbenchSettingsDialog {
-    width: calc(100vw - 20px);
-    height: calc(100vh - 20px);
-    min-height: 0;
-  }
-
-  .workbenchSettingsBody {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .workbenchSettingsSidebar {
-    display: flex;
-    gap: 4px;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--workbench-border);
-  }
-
-  .workbenchSettingsNavItem {
-    width: auto;
-    min-width: 132px;
-  }
-
-  .workbenchSettingsNavDescription {
-    display: none;
-  }
-
-  .workbenchSettingsRow {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .workbenchSettingsRowControl {
-    justify-content: flex-start;
-  }
-
-  .workbenchSettingsThemeGrid {
-    grid-template-columns: 1fr;
-  }
-
   .workbenchSettingsShortcutRow,
   .workbenchSettingsPluginRow {
     grid-template-columns: 1fr;

@@ -27,12 +27,16 @@ describe('Workbench appearance preferences', () => {
     expect(isWorkbenchDarkTheme('warm-paper')).toBe(false)
     expect(isWorkbenchDarkTheme('midnight-blue')).toBe(true)
 
-    expect(normalizeWorkbenchPreferences({
-      theme: 'light-plus' as WorkbenchThemeId,
-    }).theme).toBe('light-modern')
-    expect(normalizeWorkbenchPreferences({
-      theme: 'dark-plus' as WorkbenchThemeId,
-    }).theme).toBe('dark-modern')
+    expect(
+      normalizeWorkbenchPreferences({
+        theme: 'light-plus' as WorkbenchThemeId,
+      }).theme
+    ).toBe('light-modern')
+    expect(
+      normalizeWorkbenchPreferences({
+        theme: 'dark-plus' as WorkbenchThemeId,
+      }).theme
+    ).toBe('dark-modern')
 
     const shellStyles = source('src/renderer/src/styles/01-shell.module.css')
     expect(shellStyles).toContain("data-workbench-theme='warm-paper'")
@@ -45,7 +49,7 @@ describe('Workbench appearance preferences', () => {
     expect(getWorkbenchFileTreeRowHeight('comfortable')).toBe(27)
 
     const shellStyles = source('src/renderer/src/styles/01-shell.module.css')
-    const chromeStyles = source('src/renderer/src/styles/02-chrome-top.module.css')
+    const layoutStyles = source('src/renderer/src/styles/03-layout.module.css')
     const settingsStyles = source('src/renderer/src/styles/14-settings.module.css')
     const embeddedKernel = source(
       'src/renderer/src/components/embedded/WorkbenchEmbeddedKernel.tsx'
@@ -53,7 +57,7 @@ describe('Workbench appearance preferences', () => {
 
     expect(shellStyles).toContain('--workbench-topbar-height: 32px')
     expect(shellStyles).toContain('--workbench-topbar-height: 42px')
-    expect(chromeStyles).toContain('min-height: var(--workbench-topbar-height)')
+    expect(layoutStyles).toContain('min-height: var(--workbench-topbar-height)')
     expect(settingsStyles).toContain('min-height: var(--workbench-settings-row-height)')
     expect(embeddedKernel).toContain('data-workbench-density={embeddedChrome.density}')
     expect(embeddedKernel).not.toContain('data-workbench-density="compact"')
@@ -61,11 +65,17 @@ describe('Workbench appearance preferences', () => {
 
   test('merges preference patches with the latest durable values before notifying readers', () => {
     const key = 'velaros.workbench.preferences.v1'
-    const values = new Map([[key, JSON.stringify({ ...DEFAULT_WORKBENCH_PREFERENCES, memoryEnabled: false })]])
+    const values = new Map([
+      [key, JSON.stringify({ ...DEFAULT_WORKBENCH_PREFERENCES, memoryEnabled: false })],
+    ])
     const storage: StorageLike = {
       getItem: (name) => values.get(name) ?? null,
-      setItem: (name, value) => { values.set(name, value) },
-      removeItem: (name) => { values.delete(name) },
+      setItem: (name, value) => {
+        values.set(name, value)
+      },
+      removeItem: (name) => {
+        values.delete(name)
+      },
     }
     const target = new EventTarget()
     const observed: WorkbenchPreferences[] = []
@@ -73,9 +83,19 @@ describe('Workbench appearance preferences', () => {
       observed.push(readWorkbenchPreferences(storage))
     })
 
-    expect(updateWorkbenchPreferences({ theme: 'dark-modern' }, storage, target as unknown as Window).ok).toBe(true)
-    expect(updateWorkbenchPreferences({ diffLayout: 'split' }, storage, target as unknown as Window).ok).toBe(true)
-    expect(updateWorkbenchPreferences((current) => ({ editorWordWrap: !current.editorWordWrap }), storage, target as unknown as Window).ok).toBe(true)
+    expect(
+      updateWorkbenchPreferences({ theme: 'dark-modern' }, storage, target as unknown as Window).ok
+    ).toBe(true)
+    expect(
+      updateWorkbenchPreferences({ diffLayout: 'split' }, storage, target as unknown as Window).ok
+    ).toBe(true)
+    expect(
+      updateWorkbenchPreferences(
+        (current) => ({ editorWordWrap: !current.editorWordWrap }),
+        storage,
+        target as unknown as Window
+      ).ok
+    ).toBe(true)
 
     const saved = readWorkbenchPreferences(storage)
     expect(saved.theme).toBe('dark-modern')
@@ -94,17 +114,30 @@ describe('Workbench appearance preferences', () => {
     const values = new Map([[key, original]])
     const storage: StorageLike = {
       getItem: (name) => values.get(name) ?? null,
-      setItem: () => { throw new Error('quota rejected') },
-      removeItem: (name) => { values.delete(name) },
+      setItem: () => {
+        throw new Error('quota rejected')
+      },
+      removeItem: (name) => {
+        values.delete(name)
+      },
     }
     const target = new EventTarget()
     let changes = 0
-    target.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, () => { changes += 1 })
+    target.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, () => {
+      changes += 1
+    })
 
-    const result = updateWorkbenchPreferences({ diffLayout: 'split' }, storage, target as unknown as Window)
+    const result = updateWorkbenchPreferences(
+      { diffLayout: 'split' },
+      storage,
+      target as unknown as Window
+    )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.message).toContain('quota rejected')
-    expect(saveWorkbenchPreferences(DEFAULT_WORKBENCH_PREFERENCES, storage, target as unknown as Window).ok).toBe(false)
+    expect(
+      saveWorkbenchPreferences(DEFAULT_WORKBENCH_PREFERENCES, storage, target as unknown as Window)
+        .ok
+    ).toBe(false)
     expect(changes).toBe(0)
     expect(values.get(key)).toBe(original)
     expect(readWorkbenchPreferences(storage).diffLayout).toBe('unified')
@@ -114,9 +147,14 @@ describe('Workbench appearance preferences', () => {
   test('refuses unreadable preference patches while allowing an explicit reset', () => {
     const key = 'velaros.workbench.preferences.v1'
     for (const failure of ['read', 'parse', 'shape', 'empty'] as const) {
-      let raw = failure === 'parse'
-        ? '{"theme":'
-        : failure === 'shape' ? '[]' : failure === 'empty' ? '' : JSON.stringify({ theme: 'midnight-blue' })
+      let raw =
+        failure === 'parse'
+          ? '{"theme":'
+          : failure === 'shape'
+            ? '[]'
+            : failure === 'empty'
+              ? ''
+              : JSON.stringify({ theme: 'midnight-blue' })
       const original = raw
       let writes = 0
       const storage: StorageLike = {
@@ -133,14 +171,24 @@ describe('Workbench appearance preferences', () => {
       }
       const target = new EventTarget()
       let changes = 0
-      target.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, () => { changes += 1 })
+      target.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, () => {
+        changes += 1
+      })
 
-      expect(updateWorkbenchPreferences({ theme: 'warm-paper' }, storage, target as unknown as Window).ok).toBe(false)
+      expect(
+        updateWorkbenchPreferences({ theme: 'warm-paper' }, storage, target as unknown as Window).ok
+      ).toBe(false)
       expect(writes).toBe(0)
       expect(changes).toBe(0)
       expect(raw).toBe(original)
 
-      expect(saveWorkbenchPreferences(DEFAULT_WORKBENCH_PREFERENCES, storage, target as unknown as Window).ok).toBe(true)
+      expect(
+        saveWorkbenchPreferences(
+          DEFAULT_WORKBENCH_PREFERENCES,
+          storage,
+          target as unknown as Window
+        ).ok
+      ).toBe(true)
       expect(writes).toBe(1)
       expect(changes).toBe(1)
       expect(JSON.parse(raw)).toEqual(DEFAULT_WORKBENCH_PREFERENCES)
