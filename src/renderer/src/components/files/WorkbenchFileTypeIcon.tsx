@@ -1,13 +1,8 @@
 import {
-  BirdIcon,
   BracketsCurlyIcon,
-  CodeBlockIcon,
-  CoffeeIcon,
-  DiamondIcon,
   FileArchiveIcon,
   FileAudioIcon,
   FileCodeIcon,
-  FileCSharpIcon,
   FileCssIcon,
   FileCsvIcon,
   FileDocIcon,
@@ -15,33 +10,46 @@ import {
   FileIcon,
   FileImageIcon,
   FileIniIcon,
-  FileJsIcon,
-  FileJsxIcon,
   FileLockIcon,
   FileMdIcon,
   FilePdfIcon,
   FilePptIcon,
-  FilePyIcon,
   FileSqlIcon,
   FileTextIcon,
-  FileTsIcon,
-  FileTsxIcon,
   FileVideoIcon,
   FileXlsIcon,
-  GearSixIcon,
   GitDiffIcon,
-  HexagonIcon,
   type Icon,
   type IconProps,
-  LightningIcon,
   ProhibitIcon,
-  TriangleIcon,
-  WindIcon,
 } from '@phosphor-icons/react'
 import {
   resolveWorkbenchFilePresentation,
   type WorkbenchBuiltinFilePresentationVariant,
 } from '@renderer/models/files/workbenchFilePresentation'
+import BashPlain from 'devicons-react/icons/BashPlain'
+import COriginal from 'devicons-react/icons/COriginal'
+import CplusplusPlain from 'devicons-react/icons/CplusplusPlain'
+import CsharpPlain from 'devicons-react/icons/CsharpPlain'
+import Css3Plain from 'devicons-react/icons/Css3Plain'
+import DartPlain from 'devicons-react/icons/DartPlain'
+import GoPlain from 'devicons-react/icons/GoPlain'
+import Html5Plain from 'devicons-react/icons/Html5Plain'
+import JavaPlain from 'devicons-react/icons/JavaPlain'
+import JavascriptPlain from 'devicons-react/icons/JavascriptPlain'
+import JsonPlain from 'devicons-react/icons/JsonPlain'
+import KotlinPlain from 'devicons-react/icons/KotlinPlain'
+import LessPlainWordmark from 'devicons-react/icons/LessPlainWordmark'
+import MarkdownOriginal from 'devicons-react/icons/MarkdownOriginal'
+import OpenglPlain from 'devicons-react/icons/OpenglPlain'
+import PythonPlain from 'devicons-react/icons/PythonPlain'
+import ReactOriginal from 'devicons-react/icons/ReactOriginal'
+import RustOriginal from 'devicons-react/icons/RustOriginal'
+import SassOriginal from 'devicons-react/icons/SassOriginal'
+import SwiftPlain from 'devicons-react/icons/SwiftPlain'
+import TypescriptPlain from 'devicons-react/icons/TypescriptPlain'
+import VuejsPlain from 'devicons-react/icons/VuejsPlain'
+import WasmOriginal from 'devicons-react/icons/WasmOriginal'
 import type { ReactElement } from 'react'
 
 import type { LooseOptional } from '@velaros-ai/ui/utility-types'
@@ -62,9 +70,7 @@ const BuiltinFileIcons: Partial<Record<WorkbenchBuiltinFilePresentationVariant, 
   generic: FileIcon,
   gitignore: ProhibitIcon,
   image: FileImageIcon,
-  javascript: FileJsIcon,
   json: BracketsCurlyIcon,
-  jsx: FileJsxIcon,
   less: FileCssIcon,
   lock: FileLockIcon,
   markdown: FileMdIcon,
@@ -75,44 +81,78 @@ const BuiltinFileIcons: Partial<Record<WorkbenchBuiltinFilePresentationVariant, 
   scss: FileCssIcon,
   spreadsheet: FileXlsIcon,
   text: FileTextIcon,
-  tsx: FileTsxIcon,
-  typescript: FileTsIcon,
   video: FileVideoIcon,
-  java: CoffeeIcon,
-  csharp: FileCSharpIcon,
-  go: WindIcon,
-  rust: GearSixIcon,
-  vue: TriangleIcon,
-  dart: DiamondIcon,
-  swift: BirdIcon,
-  kotlin: LightningIcon,
-  webassembly: CodeBlockIcon,
-  glsl: HexagonIcon,
-  python: FilePyIcon,
   html: FileHtmlIcon,
   sql: FileSqlIcon,
 }
 
+/** Devicon language marks, imported individually so unused logos never enter the bundle. */
+const BuiltinLanguageIcons: Partial<
+  Record<WorkbenchBuiltinFilePresentationVariant, typeof VuejsPlain>
+> = {
+  c: COriginal,
+  cpp: CplusplusPlain,
+  csharp: CsharpPlain,
+  css: Css3Plain,
+  dart: DartPlain,
+  glsl: OpenglPlain,
+  go: GoPlain,
+  html: Html5Plain,
+  java: JavaPlain,
+  javascript: JavascriptPlain,
+  json: JsonPlain,
+  jsx: ReactOriginal,
+  kotlin: KotlinPlain,
+  less: LessPlainWordmark,
+  markdown: MarkdownOriginal,
+  python: PythonPlain,
+  rust: RustOriginal,
+  sass: SassOriginal,
+  scss: SassOriginal,
+  shell: BashPlain,
+  swift: SwiftPlain,
+  tsx: ReactOriginal,
+  typescript: TypescriptPlain,
+  vue: VuejsPlain,
+  webassembly: WasmOriginal,
+}
+
 const BuiltinFileIconColors: Partial<Record<WorkbenchBuiltinFilePresentationVariant, string>> = {
-  config: '#9c6b30',
+  c: 'var(--workbench-file-c)',
+  cpp: 'var(--workbench-file-cpp)',
+  csharp: 'var(--workbench-file-csharp)',
+  dart: 'var(--workbench-file-dart)',
+  glsl: 'var(--workbench-file-glsl)',
+  go: 'var(--workbench-file-go)',
+  html: 'var(--workbench-file-html)',
+  java: 'var(--workbench-file-java)',
+  kotlin: 'var(--workbench-file-kotlin)',
+  python: 'var(--workbench-file-python)',
+  rust: 'var(--workbench-file-rust)',
+  shell: 'var(--workbench-file-shell)',
+  sql: 'var(--workbench-file-sql)',
+  swift: 'var(--workbench-file-swift)',
+  vue: 'var(--workbench-file-vue)',
+  webassembly: 'var(--workbench-file-webassembly)',
+  config: 'var(--workbench-file-config)',
   css: 'var(--workbench-file-css)',
-  gitignore: '#737373',
-  javascript: '#c9b134',
-  json: '#b5931a',
-  jsx: '#3a9ec2',
-  less: 'var(--workbench-file-css)',
-  lock: '#8b5cf6',
-  markdown: '#519aba',
-  patch: '#0f766e',
+  gitignore: 'var(--workbench-text-muted)',
+  javascript: 'var(--workbench-file-javascript)',
+  json: 'var(--workbench-file-json)',
+  jsx: 'var(--workbench-file-jsx)',
+  less: 'var(--workbench-file-less)',
+  lock: 'var(--workbench-file-lock)',
+  markdown: 'var(--workbench-file-markdown)',
+  patch: 'var(--workbench-file-patch)',
   sass: 'var(--workbench-file-scss)',
   scss: 'var(--workbench-file-scss)',
-  tsx: '#3178c6',
-  typescript: '#3178c6',
+  tsx: 'var(--workbench-file-tsx)',
+  typescript: 'var(--workbench-file-typescript)',
   velarscript: 'var(--workbench-file-velarscript)',
   yaml: 'var(--workbench-file-yaml)',
 }
 
-/** Workbench 核心只内置当前产品语言与通用文件类型；框架图标由贡献注册。 */
+/** One resolver supplies standard language marks and generic file icons across the workbench. */
 export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactElement {
   const {
     fileName,
@@ -127,7 +167,43 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
   } = props
   const presentation = resolveWorkbenchFilePresentation({ fileName, mediaType })
   const builtinVariant = presentation.variant as WorkbenchBuiltinFilePresentationVariant
-  const iconColor = color ?? presentation.color ?? BuiltinFileIconColors[builtinVariant]
+  const iconColor =
+    color ??
+    (presentation.icon
+      ? presentation.color
+      : (BuiltinFileIconColors[builtinVariant] ?? presentation.color))
+  const transform = mirrored
+    ? [style?.transform, 'scaleX(-1)'].filter(Boolean).join(' ')
+    : style?.transform
+  const LanguageIcon = BuiltinLanguageIcons[builtinVariant]
+
+  if (LanguageIcon && !presentation.icon)
+    return (
+      <LanguageIcon
+        {...iconProps}
+        data-file-icon-kind={presentation.variant}
+        data-language-logo="devicon"
+        data-monochrome={
+          builtinVariant === 'c' ||
+          builtinVariant === 'jsx' ||
+          builtinVariant === 'tsx' ||
+          builtinVariant === 'sass' ||
+          builtinVariant === 'scss'
+            ? true
+            : undefined
+        }
+        size={size}
+        color={iconColor}
+        aria-label={iconProps['aria-label'] ?? alt}
+        aria-hidden={iconProps['aria-label'] || alt ? undefined : true}
+        style={{
+          ...style,
+          fill: iconColor,
+          color: iconColor,
+          ...(transform ? { transform, transformOrigin: 'center' } : {}),
+        }}
+      />
+    )
 
   if (presentation.variant !== 'velarscript' && presentation.variant !== 'yaml') {
     const IconComponent = presentation.icon ?? BuiltinFileIcons[builtinVariant] ?? FileCodeIcon
@@ -143,10 +219,6 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
       />
     )
   }
-
-  const transform = mirrored
-    ? [style?.transform, 'scaleX(-1)'].filter(Boolean).join(' ')
-    : style?.transform
 
   if (presentation.variant === 'yaml')
     return (

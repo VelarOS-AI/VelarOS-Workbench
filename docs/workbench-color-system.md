@@ -50,5 +50,8 @@ authoritative; the native file does not duplicate accent preferences.
 To add a theme, choose its neutral scale and color scheme in this module, then
 verify every accent family with `tests/workbench-color-system.test.ts` and visually
 check hover, selection, menus and tooltips. Add role aliases instead of copying
-colors into components. Code syntax and language-specific file icons remain
-separate palettes; they identify language roles rather than product action states.
+colors into components. Code syntax keeps its own palette. Standard Devicon language
+marks use `--workbench-file-*` roles derived from readable light/dark hue families;
+these roles identify technologies independently of product action states. Generic
+file types continue to use the shared file icons, and registered contributions can
+override either presentation.

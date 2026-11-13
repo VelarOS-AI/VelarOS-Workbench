@@ -45,7 +45,7 @@ void describe('Workbench file icon surface', () => {
   void test('renders stylesheet files with the shared CSS file icon', () => {
     for (const [fileName, variant, color] of [
       ['styles/app.css', 'css', '--workbench-file-css'],
-      ['styles/app.less', 'less', '--workbench-file-css'],
+      ['styles/app.less', 'less', '--workbench-file-less'],
       ['styles/app.sass', 'sass', '--workbench-file-scss'],
       ['styles/app.scss', 'scss', '--workbench-file-scss'],
     ] as const) {
@@ -106,6 +106,9 @@ void describe('Workbench file icon surface', () => {
   void test('renders distinct colored icons for supported programming languages', () => {
     const paths = [
       'Main.java',
+      'main.c',
+      'main.cpp',
+      'launch.sh',
       'Main.cs',
       'main.go',
       'main.rs',
@@ -125,8 +128,9 @@ void describe('Workbench file icon surface', () => {
       variants.add(presentation.variant)
       const markup = renderToStaticMarkup(createElement(WorkbenchFileTypeIcon, { fileName }))
       assert.match(presentation.color ?? '', /^#[\da-f]{6}$/iu)
-      assert.ok(markup.includes(presentation.color!), fileName)
+      assert.match(markup, /var\(--workbench-file-[a-z]+\)/u, fileName)
       assert.match(markup, new RegExp(`data-file-icon-kind="${presentation.variant}"`, 'u'))
+      if (presentation.variant !== 'sql') assert.match(markup, /data-language-logo="devicon"/u)
     }
     assert.equal(variants.size, paths.length)
   })

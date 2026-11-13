@@ -3,6 +3,38 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.23",
+      "releasedAt": "2026-11-13",
+      "title": {
+        "zh": "修复 Vue 误报与悬浮延迟，统一文件图标",
+        "en": "Fix Vue diagnostics and hover latency, unify file icons"
+      },
+      "added": {
+        "zh": [
+          "语言文件统一采用标准 Devicon 标志，覆盖文件树、标签页、搜索和问题列表，并补充 C/C++ 与 Shell 文件识别。"
+        ],
+        "en": [
+          "Use standard Devicon language marks across the file tree, tabs, search and Problems, and recognize C/C++ and shell files."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "补齐安装包中的 TypeScript SDK、标准库声明与包元数据，修复 Vue 文件错误报告 Array、Date、Map 等基础类型缺失。",
+          "使用真实归档文件身份校验内置语言服务，避免 ASAR 虚拟文件标识变化导致服务反复重启，改善悬浮与补全响应。",
+          "诊断标记不再等待整批快速修复计算，错误气泡优先显示诊断文字，并丢弃文件切换或编辑后的过期结果。",
+          "首次 Vue 类型分析使用独立的初始化时限，避免提前取消后重复计算。",
+          "优化图标的明暗模式配色与可读性，并调淡浅色模式下的文件夹图标。"
+        ],
+        "en": [
+          "Ship the complete TypeScript SDK, standard declarations and package metadata to fix false missing Array, Date and Map diagnostics in Vue files.",
+          "Fingerprint the physical archive for bundled language servers, preventing repeated restarts caused by synthetic ASAR entry identities and improving hover and completion response.",
+          "Render diagnostics without waiting for whole-file quick fixes, show diagnostic text first in hover tooltips and discard stale responses after edits or file switches.",
+          "Give initial Vue type analysis a separate startup deadline to avoid premature cancellation and repeated work.",
+          "Improve file-icon colors and readability in light and dark themes and lighten light-mode folder icons."
+        ]
+      }
+    },
+    {
       "version": "0.4.22",
       "releasedAt": "2026-11-13",
       "title": {

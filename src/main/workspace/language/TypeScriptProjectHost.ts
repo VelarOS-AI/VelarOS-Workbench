@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { workerData } from 'node:worker_threads'
 
 import * as ts from 'typescript'
+
+import { languageWorkerResourcesPath } from './TypeScriptSdk'
 
 const TypeScriptExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.cts', '.mts', '.cjs', '.mjs'])
 const JavaScriptExtensions = new Set(['.js', '.jsx', '.cjs', '.mjs'])
@@ -120,13 +121,6 @@ function resolveTypeScriptDefaultLibFilePath(
   return ts.getDefaultLibFilePath(options)
 }
 
-function languageWorkerResourcesPath(): Nullable<string> {
-  const data = workerData as { resourcesPath?: unknown } | null | undefined
-  return typeof data?.resourcesPath === 'string'
-    ? data.resourcesPath
-    : (process.resourcesPath ?? null)
-}
-
 function extensionWithDot(path: string): string {
   const index = path.lastIndexOf('.')
   return index === -1 ? '' : path.slice(index).toLowerCase()
@@ -239,8 +233,12 @@ function findTypeScriptConfigPath(
       const owningConfigPath = findOwningReferencedConfigPath(configPath, requestAbsolutePath)
       // A workspace-wide root config can overlap its narrower node/web configs.
       // Prefer those owning configs over loading every product surface into one program.
-      if (owningConfigPath &&
-        (!typeScriptPathsEqual(directory, projectRoot) || owningConfigPath !== configPath || isJavaScript))
+      if (
+        owningConfigPath &&
+        (!typeScriptPathsEqual(directory, projectRoot) ||
+          owningConfigPath !== configPath ||
+          isJavaScript)
+      )
         return owningConfigPath
     }
 
@@ -702,13 +700,21 @@ function getOrCreateProjectCache(
   pooledProjects.delete(cacheKey)
 
   const diskFiles = collectTypeScriptFilesFromConfig(config, requestAbsolutePath, priorityPaths)
-  const entry: TypeScriptProjectCacheEntry = { cacheKey, config, diskFiles, packageImportsLoaded: false }
+  const entry: TypeScriptProjectCacheEntry = {
+    cacheKey,
+    config,
+    diskFiles,
+    packageImportsLoaded: false,
+  }
   projectCache.set(cacheKey, entry)
   return entry
 }
 
 /** Add unimported dependency exports only when ordinary completion candidates do not match. */
-export function includeTypeScriptPackageAutoImports(projectRoot: string, requestAbsolutePath: string): boolean {
+export function includeTypeScriptPackageAutoImports(
+  projectRoot: string,
+  requestAbsolutePath: string
+): boolean {
   const entry = getOrCreateProjectCache(projectRoot, requestAbsolutePath, [requestAbsolutePath])
   if (entry.packageImportsLoaded) return false
   entry.packageImportsLoaded = true

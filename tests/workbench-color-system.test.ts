@@ -69,6 +69,13 @@ describe('Workbench semantic color system', () => {
         expect(tokens['--workbench-bg']).toBe(getWorkbenchNativeAppearance(theme).backgroundColor)
         expect(tokens['--workbench-test-fg']).toBe(tokens['--status-orange']!)
         expect(tokens['--workbench-run-fg']).toBe(tokens['--status-green']!)
+        for (const [role, ink] of Object.entries(tokens)) {
+          if (!role.startsWith('--workbench-file-')) continue
+          expect(workbenchColorContrast(ink, tokens['--workbench-bg']!)).toBeGreaterThanOrEqual(4.5)
+          expect(
+            workbenchColorContrast(ink, tokens['--workbench-surface-muted']!)
+          ).toBeGreaterThanOrEqual(4.5)
+        }
       })
     }
   }

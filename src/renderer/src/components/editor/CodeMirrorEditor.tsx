@@ -30,7 +30,7 @@ import {
   indentUnit,
   language as languageFacet,
 } from '@codemirror/language'
-import { type Diagnostic, linter } from '@codemirror/lint'
+import { linter } from '@codemirror/lint'
 import {
   findNext,
   findPrevious,
@@ -113,10 +113,7 @@ import {
   workbenchDefinitionHoverExtension,
   type WorkbenchDefinitionHoverRange,
 } from '@renderer/models/editor/workbenchCodeMirrorDefinitionHover'
-import {
-  createWorkbenchDiagnosticForegroundExtension,
-  mapWorkbenchDiagnosticToCodeMirror,
-} from '@renderer/models/editor/workbenchCodeMirrorDiagnostics'
+import { createWorkbenchDiagnosticForegroundExtension } from '@renderer/models/editor/workbenchCodeMirrorDiagnostics'
 import {
   type WorkbenchEditorHostCommands,
   workbenchEditorKeymap,
@@ -147,7 +144,6 @@ import {
   buildWorkbenchLanguageServiceRequestBase,
   languageServiceRangeToOffsets,
   usesWorkbenchBuiltinLanguageService,
-  usesWorkbenchExternalSemanticLanguageService,
   usesWorkbenchInlayHintLanguageService,
   usesWorkbenchSemanticLanguageService,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
@@ -156,6 +152,7 @@ import {
   shouldRequestWorkbenchLanguageServiceCompletions,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageServiceCompletions'
 import { workbenchLineNumbersExtension } from '@renderer/models/editor/workbenchCodeMirrorLineNumberSelection'
+import { createWorkbenchCodeMirrorLintSource } from '@renderer/models/editor/workbenchCodeMirrorLintSource'
 import { createWorkbenchCodeMirrorMetricsExtension } from '@renderer/models/editor/workbenchCodeMirrorMetrics'
 import { buildWorkbenchReadOnlyExtensions } from '@renderer/models/editor/workbenchCodeMirrorReadOnly'
 import {
@@ -219,7 +216,6 @@ import {
 import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@renderer/models/editor/workbenchIndentGuides'
 import {
   getWorkbenchInlineCompletion,
-  getWorkbenchLanguageServiceCodeActions,
   getWorkbenchLanguageServiceCompletions,
   getWorkbenchLanguageServiceDefinition,
   getWorkbenchLanguageServiceDiagnostics,
@@ -274,8 +270,6 @@ import {
 } from '@velaros-ai/velaros/core'
 
 import {
-  type WorkbenchLanguageServiceCodeAction,
-  type WorkbenchLanguageServiceDiagnostic,
   type WorkbenchLanguageServiceEditFormat,
   type WorkbenchLanguageServiceFileEdit,
   type WorkbenchLanguageServiceLocation,
@@ -303,7 +297,11 @@ export interface CodeMirrorEditorNavigationOptions {
 
 export interface CodeMirrorEditorHandle {
   focus: () => void
-  moveToLine: (line: number, column?: number, options?: CodeMirrorEditorNavigationOptions) => boolean
+  moveToLine: (
+    line: number,
+    column?: number,
+    options?: CodeMirrorEditorNavigationOptions
+  ) => boolean
   /** 选中 startLine..endLine 整行并滚到视野中间（指给用户看一段代码）。 */
   selectLines: (
     startLine: number,
@@ -810,133 +808,24 @@ function createWorkbenchLanguageServiceLinter({
   getActivePath: () => Nullable<string>
   hostRuntime: WorkbenchHostRuntime
 }) {
-  let requestGeneration = 0
-
   return linter(
-    async (view): Promise<Diagnostic[]> => {
-      if (!path || !usesWorkbenchBuiltinLanguageService(path)) return []
-      // 切换文件时旧 linter 的延迟任务仍可能返回；此时激活的已是别的文件，
-      // 别把旧文件的诊断打到刚换入的文档上（否则会短暂爆红后又消失）。
-      if (getActivePath() !== path) return []
-
-      const generation = ++requestGeneration
-      const result = await getWorkbenchLanguageServiceDiagnostics(
-        {
-          ...buildWorkbenchLanguageServiceRequestBase({
-            projectRoot,
-            path,
-            language,
-            content: view.state.doc.toString(),
-            openTabs: getOpenTabs(),
-          }),
-        },
-        hostRuntime
-      )
-      // 请求返回时若已切走当前文件，同样丢弃结果。
-      if (generation !== requestGeneration || !result.ok || getActivePath() !== path) return []
-
-      const languageServiceDiagnostics = result.data.diagnostics.filter(
-        (diagnostic) => diagnostic.path === path
-      )
-
-      const codeActions =
-        usesWorkbenchExternalSemanticLanguageService(path) && languageServiceDiagnostics.length > 0
-          ? await getWorkbenchLanguageServiceCodeActions(
-              {
-                ...buildWorkbenchLanguageServiceRequestBase({
-                  projectRoot,
-                  path,
-                  language,
-                  content: view.state.doc.toString(),
-                  openTabs: getOpenTabs(),
-                }),
-                range: enclosingDiagnosticRange(languageServiceDiagnostics),
-                diagnostics: languageServiceDiagnostics,
-              },
-              hostRuntime
-            )
-          : null
-      if (generation !== requestGeneration || getActivePath() !== path) return []
-      const availableActions = codeActions?.ok ? codeActions.data.actions : []
-      const actionContent = view.state.doc.toString()
-
-      return languageServiceDiagnostics
-        .map((diagnostic) => {
-          const mapped = mapWorkbenchDiagnosticToCodeMirror(view.state, diagnostic)
-          if (!mapped) return null
-          const actions = codeMirrorActionsForDiagnostic(
-            actionContent,
-            path,
-            diagnostic,
-            availableActions
-          )
-          return actions.length > 0 ? { ...mapped, actions } : mapped
-        })
-        .filter((diagnostic): diagnostic is Diagnostic => isPresent(diagnostic))
-    },
+    createWorkbenchCodeMirrorLintSource({
+      projectRoot,
+      path,
+      language,
+      getOpenTabs,
+      getActivePath,
+      requestDiagnostics: (request) => getWorkbenchLanguageServiceDiagnostics(request, hostRuntime),
+    }),
     {
-      delay: 500,
-      // 依赖文件在磁盘上变了（Agent 修好了它 import 的那个文件）：当前文档没变，诊断也要重算。
+      delay: 300,
+      // Dependencies changed on disk; refresh even when this document did not change.
       needsRefresh: (update) =>
         update.transactions.some((transaction) =>
           transaction.effects.some((effect) => effect.is(externalWorkspaceChange))
         ),
     }
   )
-}
-
-function enclosingDiagnosticRange(
-  diagnostics: readonly WorkbenchLanguageServiceDiagnostic[]
-): WorkbenchLanguageServiceDiagnostic['range'] {
-  const starts = diagnostics.map((item) => [item.range.startLine, item.range.startColumn] as const)
-  const ends = diagnostics.map((item) => [item.range.endLine, item.range.endColumn] as const)
-  starts.sort((left, right) => left[0] - right[0] || left[1] - right[1])
-  ends.sort((left, right) => right[0] - left[0] || right[1] - left[1])
-  return {
-    startLine: starts[0]![0],
-    startColumn: starts[0]![1],
-    endLine: ends[0]![0],
-    endColumn: ends[0]![1],
-  }
-}
-
-function codeMirrorActionsForDiagnostic(
-  content: string,
-  path: string,
-  diagnostic: WorkbenchLanguageServiceDiagnostic,
-  actions: readonly WorkbenchLanguageServiceCodeAction[]
-): NonNullable<Diagnostic['actions']> {
-  const diagnosticOffsets = languageServiceRangeToOffsets(content, diagnostic.range)
-  if (!diagnosticOffsets) return []
-  return actions.flatMap((action) => {
-    if (action.changes.length !== 1 || action.changes[0]?.path !== path) return []
-    const edits = action.changes[0].edits
-      .flatMap((edit) => {
-        const range = languageServiceRangeToOffsets(content, edit.range)
-        return range ? [{ ...range, insert: edit.newText }] : []
-      })
-      .sort((left, right) => left.from - right.from || left.to - right.to)
-    if (
-      edits.length === 0 ||
-      edits.some((edit, index) => index > 0 && edit.from < edits[index - 1]!.to)
-    )
-      return []
-    if (
-      !edits.some((edit) => edit.from <= diagnosticOffsets.to && edit.to >= diagnosticOffsets.from)
-    )
-      return []
-    return [
-      {
-        name: action.title,
-        apply: (targetView: EditorView) => {
-          if (targetView.state.readOnly || targetView.state.doc.toString() !== content) return
-          targetView.dispatch({
-            changes: edits.map((edit) => ({ from: edit.from, to: edit.to, insert: edit.insert })),
-          })
-        },
-      },
-    ]
-  })
 }
 
 /** compartment 里已经是这份扩展就不动（换回来的文件在换进来时已经配好了）。 */
@@ -1069,7 +958,11 @@ function buildWorkbenchRunFileCommand(
 ): WorkbenchRunCommand {
   if (isWorkbenchVelarFilePath(path)) return buildWorkbenchVelarRunCommand(path, packageManager)
   if (isTypeScriptEditorPath(path))
-    return buildWorkbenchProcessRunCommand({ kind: 'package-manager', program: 'npx', argv: ['tsx', path] })
+    return buildWorkbenchProcessRunCommand({
+      kind: 'package-manager',
+      program: 'npx',
+      argv: ['tsx', path],
+    })
   if (['py', 'pyw'].includes(editorPathExtension(path)))
     return buildWorkbenchProcessRunCommand({ kind: 'python-script', script: path, argv: [] })
   return buildWorkbenchProcessRunCommand({ kind: 'node-script', script: path, argv: [] })
@@ -1490,7 +1383,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         createWorkbenchPackageScriptRunGutterExtension({
           content: packageScriptRunContent,
           disabled: disabled || !callbacksRef.current.onRunPackageScript,
-          onRunScript: (command, launch) => callbacksRef.current.onRunPackageScript?.(command, launch),
+          onRunScript: (command, launch) =>
+            callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
           path: onRunPackageScript ? path : null,
         }),
@@ -1503,7 +1397,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         createWorkbenchVelarMainRunGutterExtension({
           content: velarMainRunContent,
           disabled: disabled || !callbacksRef.current.onRunPackageScript,
-          onRunMain: (command, launch) => callbacksRef.current.onRunPackageScript?.(command, launch),
+          onRunMain: (command, launch) =>
+            callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
           path: onRunPackageScript ? path : null,
         }),
@@ -1514,7 +1409,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         createWorkbenchVelarTestRunGutterExtension({
           content: velarTestRunContent,
           disabled: disabled || !callbacksRef.current.onRunPackageScript,
-          onRunTest: (command, launch) => callbacksRef.current.onRunPackageScript?.(command, launch),
+          onRunTest: (command, launch) =>
+            callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
           path: onRunPackageScript ? path : null,
         }),
@@ -1708,7 +1604,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           }
         },
       })
-    }, [editorMetricsCompartment, editorMetricsExtension, renamePopupRef, requestCommentDraftMeasure])
+    }, [
+      editorMetricsCompartment,
+      editorMetricsExtension,
+      renamePopupRef,
+      requestCommentDraftMeasure,
+    ])
 
     const commentEditLabelRef = useLatest(t('workbench.editorCommentEdit'))
     const commentSaveLabelRef = useLatest(t('workbench.editorCommentSave'))
@@ -2030,8 +1931,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       acceptCommentDraft(null)
       const view = owner.view
       const body = rawBody.trim()
-      if (!owner.path || !body || !isCurrentFileOwner(owner) || view.state.doc !== draft.doc)
-        return
+      if (!owner.path || !body || !isCurrentFileOwner(owner) || view.state.doc !== draft.doc) return
 
       const comment = commentStore.add({
         projectRoot: owner.projectRoot,
@@ -2193,10 +2093,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       setRenamePopup((current) => (current?.action === action ? null : current))
     }
 
-    const commitRename = async (
-      action: WorkbenchRenameAction,
-      rawName: string
-    ): Promise<void> => {
+    const commitRename = async (action: WorkbenchRenameAction, rawName: string): Promise<void> => {
       if (!isCurrentRenameAction(action)) return
       setRenamePopup((current) => (current?.action === action ? null : current))
       const { owner, identifier } = action
@@ -2282,7 +2179,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }
 
         if (!isCurrentRenameAction(action)) return
-        const changes = buildIdentifierRenameChanges(action.doc.toString(), identifier.text, nextName)
+        const changes = buildIdentifierRenameChanges(
+          action.doc.toString(),
+          identifier.text,
+          nextName
+        )
         if (isEmpty(changes)) return
 
         setContextMenu(null)
@@ -2339,7 +2240,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         referenceSelectionRequestRef.current !== requestToken ||
         !isCurrentFileOwner(owner) ||
         view.state.doc !== sourceDocument
-      ) return
+      )
+        return
       referenceSelectionRequestRef.current = null
       const currentFileReferences = references.filter(
         (location) => location.path === owner.path && location.range

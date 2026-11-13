@@ -37,6 +37,9 @@ export type WorkbenchBuiltinFilePresentationVariant =
   | 'python'
   | 'html'
   | 'sql'
+  | 'c'
+  | 'cpp'
+  | 'shell'
 
 export type WorkbenchFilePresentationVariant =
   WorkbenchBuiltinFilePresentationVariant | (string & {})
@@ -104,6 +107,20 @@ function resolveBuiltinFilePresentation(
     return { variant: extension === 'json' || extension === 'jsonc' ? 'json' : 'config' }
 
   switch (extension) {
+    case 'c':
+    case 'h':
+      return { variant: 'c', color: '#659ad2' }
+    case 'cc':
+    case 'cpp':
+    case 'cxx':
+    case 'hpp':
+    case 'hxx':
+      return { variant: 'cpp', color: '#659ad2' }
+    case 'sh':
+    case 'bash':
+    case 'zsh':
+    case 'fish':
+      return { variant: 'shell', color: '#5b8b49' }
     case 'java':
       return { variant: 'java', color: '#c74634' }
     case 'cs':

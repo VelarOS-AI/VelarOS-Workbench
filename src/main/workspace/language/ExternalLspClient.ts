@@ -13,6 +13,7 @@ import type { WorkbenchLanguageServiceDescriptor } from '@shared/workbenchLangua
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isPathInsideRoot } from '../PathContainmentHelper'
 
+import { externalLspFileIdentity as fileIdentity } from './ExternalLspFileIdentity'
 import {
   type ExternalLspExit,
   type ExternalLspLauncher,
@@ -20,6 +21,7 @@ import {
   type ExternalLspTransport,
   withinLspDeadline,
 } from './ExternalLspTransport'
+import { resolveLanguageTypeScriptSdk } from './TypeScriptSdk'
 
 interface JsonRpcMessage {
   jsonrpc?: string
@@ -187,6 +189,7 @@ interface ExternalLspLaunch {
 
 const DiagnosticWaitTimeoutMs = 4_000
 const DefaultRequestTimeoutMs = 15_000
+const ColdTypeScriptAnalysisTimeoutMs = 45_000
 const MaxLspHeaderBytes = 8 * 1024
 const MaxLspMessageBytes = 16 * 1024 * 1024
 const LspHeaderSeparator = '\r\n\r\n'
@@ -398,16 +401,6 @@ function resolvedExecutablePath(command: string, pathValue: string): string {
   return command
 }
 
-function fileIdentity(path: string): string {
-  try {
-    const canonical = realpathSync(path)
-    const value = statSync(canonical)
-    return `${path}:${canonical}:${value.dev}:${value.ino}:${value.size}:${value.mtimeMs}`
-  } catch {
-    return `${path}:missing`
-  }
-}
-
 function isDirectory(path: string): boolean {
   try {
     return statSync(path).isDirectory()
@@ -572,7 +565,8 @@ function launchFor(
 
   const pathValue = extendPath(runtimeRoot, workspaceRoot)
   const commands = [descriptor.command ?? '', ...(descriptor.commandAlternatives ?? [])]
-  const command = commands.find((candidate) => executableExists(candidate, pathValue)) ?? commands[0] ?? ''
+  const command =
+    commands.find((candidate) => executableExists(candidate, pathValue)) ?? commands[0] ?? ''
   const executable = executablePath(runtimeRoot, command, workspaceRoot)
   return {
     command: resolvedExecutablePath(executable.command, pathValue),
@@ -600,6 +594,7 @@ export class ExternalLspClient {
   private readonly documents = new Map<string, OpenDocument>()
   private readonly diagnostics = new Map<string, DiagnosticSnapshot>()
   private readonly diagnosticWaiters = new Map<string, DiagnosticWaiter[]>()
+  private hasCompletedAnalysis = false
   private serverCapabilities: Record<string, unknown> = {}
   private initializePromise: Nullable<Promise<void>> = null
   private processTermination: Nullable<{
@@ -963,13 +958,30 @@ export class ExternalLspClient {
 
   public async getDiagnostics(path: string, content: string): Promise<ExternalLspDiagnostic[]> {
     const document = await this.synchronize(path, content)
-    if (this.descriptor.diagnosticMode === 'pull' || (
-      this.descriptor.diagnosticMode !== 'push' && this.serverCapabilities['diagnosticProvider']
-    )) {
-      const report = objectValue(await this.request('textDocument/diagnostic', {
-        textDocument: { uri: document.uri },
-      }))
-      return Array.isArray(report?.['items']) ? report['items'] as ExternalLspDiagnostic[] : []
+    if (
+      this.descriptor.diagnosticMode === 'pull' ||
+      (this.descriptor.diagnosticMode !== 'push' && this.serverCapabilities['diagnosticProvider'])
+    ) {
+      // A cold Vue project must load dependency declarations once. Cancelling that
+      // first pass at the normal interactive deadline repeatedly discards its work.
+      const timeoutMs =
+        !this.hasCompletedAnalysis &&
+        this.descriptor.initializationTypeScriptSdk &&
+        this.requestTimeoutMs === DefaultRequestTimeoutMs
+          ? ColdTypeScriptAnalysisTimeoutMs
+          : this.requestTimeoutMs
+      const report = objectValue(
+        await this.request(
+          'textDocument/diagnostic',
+          {
+            textDocument: { uri: document.uri },
+          },
+          undefined,
+          timeoutMs
+        )
+      )
+      this.hasCompletedAnalysis = true
+      return Array.isArray(report?.['items']) ? (report['items'] as ExternalLspDiagnostic[]) : []
     }
     const current = this.diagnostics.get(document.uri)
     if (current && current.version >= document.version) return current.diagnostics
@@ -1045,6 +1057,7 @@ export class ExternalLspClient {
   }
 
   private async startAndInitialize(): Promise<void> {
+    this.hasCompletedAnalysis = false
     await this.processTermination?.completed
     this.processTermination = null
     if (this.disposed)
@@ -1190,12 +1203,17 @@ export class ExternalLspClient {
     const typescript = objectValue(options?.['typescript']) ?? {}
     return {
       ...options,
-      typescript: { ...typescript, tsdk: dirname(require.resolve('typescript/lib/typescript.js')) },
+      typescript: { ...typescript, tsdk: resolveLanguageTypeScriptSdk() },
     }
   }
 
   /** `signal` 中止（请求被新请求顶掉）时告诉服务器不必再算，并立刻以取消结束。 */
-  private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+  private request(
+    method: string,
+    params: unknown,
+    signal?: AbortSignal,
+    timeoutMs = this.requestTimeoutMs
+  ): Promise<unknown> {
     if (signal?.aborted)
       return Promise.reject(
         new AppError(
@@ -1238,9 +1256,12 @@ export class ExternalLspClient {
               })
             )
           ),
-        Math.max(1, method === 'initialize'
-          ? (this.descriptor.initializeTimeoutMs ?? this.requestTimeoutMs)
-          : this.requestTimeoutMs)
+        Math.max(
+          1,
+          method === 'initialize'
+            ? (this.descriptor.initializeTimeoutMs ?? this.requestTimeoutMs)
+            : timeoutMs
+        )
       )
       this.pending.set(id, {
         resolve: (value) => {

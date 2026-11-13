@@ -117,3 +117,8 @@ body {
   --velar-button-hover-background: var(--workbench-accent-solid-hover);
   color: var(--workbench-accent-contrast);
 }
+
+/* Devicon original single-color marks contain fixed fills. Keep their ink adaptive. */
+svg[data-language-logo='devicon'][data-monochrome='true'] :is(path, circle, polygon) {
+  fill: currentColor;
+}

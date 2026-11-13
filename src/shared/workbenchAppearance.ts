@@ -213,6 +213,7 @@ export function getWorkbenchColorTokens(
     '--workbench-editor-tooltip-bg': dark ? neutral[3]! : elevated,
     '--workbench-editor-unused-fg': muted,
     '--workbench-tree-ignored-fg': muted,
+    '--workbench-folder-fg': dark ? muted : neutral[8]!,
     '--foreground': ink,
     '--background': background,
     '--background-panel': panel,
@@ -287,6 +288,42 @@ export function getWorkbenchColorTokens(
     tokens[`--workbench-accent-${name}-contrast`] = readable(['#ffffff', '#111113'], [foreground])
   }
   tokens['--workbench-test-fg'] = tokens['--status-orange']!
+  // Technology identity keeps its hue while icon ink follows readable light/dark scales.
+  const fileFamilies = {
+    java: 'orange',
+    csharp: 'violet',
+    go: 'teal',
+    rust: 'orange',
+    vue: 'green',
+    dart: 'blue',
+    swift: 'orange',
+    kotlin: 'violet',
+    webassembly: 'violet',
+    glsl: 'teal',
+    python: 'blue',
+    html: 'orange',
+    sql: 'blue',
+    c: 'blue',
+    cpp: 'blue',
+    shell: 'green',
+    javascript: 'amber',
+    typescript: 'blue',
+    tsx: 'blue',
+    jsx: 'blue',
+    css: 'rose',
+    scss: 'rose',
+    sass: 'rose',
+    less: 'blue',
+    json: 'amber',
+    markdown: 'blue',
+    yaml: 'rose',
+    velarscript: 'blue',
+    config: 'amber',
+    lock: 'violet',
+    patch: 'teal',
+  } as const
+  for (const [name, family] of Object.entries(fileFamilies))
+    tokens[`--workbench-file-${name}`] = tokens[`--status-${family}`]!
   tokens['--workbench-run-fg'] = tokens['--status-green']!
   tokens['--status-blue-selection-bg'] = palettes.blue[mode][3]!
   tokens['--status-blue-selection-inactive'] = neutral[3]!

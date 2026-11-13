@@ -6,7 +6,7 @@ import { createLanguageProject, positionOf } from './helpers/languageProject'
 
 test('bundled Vue server checks TypeScript in SFCs and supplies completions without project-installed servers', async () => {
   const content =
-    '<script setup lang="ts">\nconst count: number = "wrong"\nconst message = "hello"\nmessage.toUpperCase()\n</script>\n<template><div>{{ message }}</div></template>\n'
+    '<script setup lang="ts">\nconst count: number = "wrong"\nconst message = "hello"\nmessage.toUpperCase()\nfunction formatDate(value: Date): string { return value.toISOString() }\nconst values = Array.from(new Map([["a", new Date()]]).values()).map(formatDate)\n</script>\n<template><div>{{ message }} {{ values }}</div></template>\n'
   const project = await createLanguageProject({
     'package.json': JSON.stringify({ name: 'vue-language-fixture', private: true }),
     'tsconfig.json': JSON.stringify({
@@ -22,6 +22,17 @@ test('bundled Vue server checks TypeScript in SFCs and supplies completions with
       diagnostics.diagnostics.some((item) => String(item.code) === '2322'),
       JSON.stringify(diagnostics)
     )
+    assert.ok(
+      !diagnostics.diagnostics.some((item) =>
+        /Cannot find name '(?:Array|Date|Map)'/.test(item.message)
+      ),
+      JSON.stringify(diagnostics)
+    )
+    const hover = await project.services.getHover({
+      ...request,
+      position: positionOf(content, 'formatDate', 2),
+    })
+    assert.match(hover.hover?.displayText ?? '', /formatDate/)
     const symbols = await project.services.getDocumentSymbols(request)
     assert.ok(symbols.symbols.length > 0)
     const completions = await project.services.getCompletions({

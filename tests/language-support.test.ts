@@ -158,8 +158,23 @@ void describe('focused Workbench language surface', () => {
   void test('keeps Velar outside the generic host until its built-in contribution is injected', () => {
     assert.deepEqual(
       getBuiltinWorkbenchLanguageServices().map((service) => service.id),
-      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown',
-        'java', 'csharp', 'go', 'rust', 'vue', 'dart', 'swift', 'kotlin', 'webassembly', 'glsl']
+      [
+        'typescript-javascript',
+        'python',
+        'web-html',
+        'web-css',
+        'markdown',
+        'java',
+        'csharp',
+        'go',
+        'rust',
+        'vue',
+        'dart',
+        'swift',
+        'kotlin',
+        'webassembly',
+        'glsl',
+      ]
     )
     assert.equal(resolveBuiltinWorkbenchLanguageService('vel'), null)
     assert.equal(resolveWorkbenchCodeMirrorLanguage('src/main.vel', '').mode, 'plain-text')
@@ -167,8 +182,24 @@ void describe('focused Workbench language surface', () => {
     const remove = installVelarWorkbenchContribution()
     assert.deepEqual(
       getBuiltinWorkbenchLanguageServices().map((service) => service.id),
-      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown',
-        'java', 'csharp', 'go', 'rust', 'vue', 'dart', 'swift', 'kotlin', 'webassembly', 'glsl', 'velarscript']
+      [
+        'typescript-javascript',
+        'python',
+        'web-html',
+        'web-css',
+        'markdown',
+        'java',
+        'csharp',
+        'go',
+        'rust',
+        'vue',
+        'dart',
+        'swift',
+        'kotlin',
+        'webassembly',
+        'glsl',
+        'velarscript',
+      ]
     )
     remove()
     for (const language of ['c', 'cpp'])
@@ -1391,7 +1422,7 @@ void describe('focused Workbench language surface', () => {
     )
     assert.match(
       hoverFeatures,
-      /hoverTooltip\(\s*async[\s\S]{0,2600}await getWorkbenchLanguageServiceHover[\s\S]{0,420}if \(!diagnosticRange && !resolvedHover\) return null/u
+      /const hoverRequest = getWorkbenchLanguageServiceHover[\s\S]{0,320}if \(!diagnosticRange\) \{\s*resolvedHover = await hoverRequest[\s\S]{0,220}if \(!diagnosticRange && !resolvedHover\) return null/u
     )
     // 诊断的修复另外问、回来再补按钮：不排在悬浮说明的请求前面等。
     assert.doesNotMatch(hoverFeatures, /await context\.codeActions/u)
@@ -2125,7 +2156,10 @@ void describe('shared external LSP client', () => {
       const projectRoot = join(workspaceRoot, 'packages', 'server')
       const binRoot = join(workspaceRoot, 'node_modules', '.bin')
       const commandName = 'ancestor-fixture-lsp'
-      const command = join(binRoot, process.platform === 'win32' ? `${commandName}.cmd` : commandName)
+      const command = join(
+        binRoot,
+        process.platform === 'win32' ? `${commandName}.cmd` : commandName
+      )
       await mkdir(projectRoot, { recursive: true })
       await mkdir(binRoot, { recursive: true })
       await writeFile(
@@ -2173,7 +2207,10 @@ void describe('shared external LSP client', () => {
       const projectRoot = join(workspaceRoot, 'packages', 'server')
       const packageRoot = join(workspaceRoot, 'node_modules', '@fixture', 'language-server')
       const binRoot = join(workspaceRoot, 'node_modules', '.bin')
-      const command = join(binRoot, process.platform === 'win32' ? 'fixture-lsp.cmd' : 'fixture-lsp')
+      const command = join(
+        binRoot,
+        process.platform === 'win32' ? 'fixture-lsp.cmd' : 'fixture-lsp'
+      )
       await mkdir(projectRoot, { recursive: true })
       await mkdir(packageRoot, { recursive: true })
       await mkdir(binRoot, { recursive: true })
@@ -2304,7 +2341,10 @@ void describe('shared external LSP client', () => {
         line: 0,
         character: 11,
       })
-      const references = await client.references(path, 'component App:\n', { line: 0, character: 11 })
+      const references = await client.references(path, 'component App:\n', {
+        line: 0,
+        character: 11,
+      })
       const documentHighlights = await client.documentHighlights(path, 'component App:\n', {
         line: 0,
         character: 11,

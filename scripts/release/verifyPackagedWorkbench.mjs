@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { access, open, readdir, readFile, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -20,9 +21,10 @@ function archivePath(...segments) {
 }
 
 function resolvePackagedWorkbenchPaths(appOutDir, platformName) {
-  const resourcesRoot = platformName === 'darwin'
-    ? path.join(appOutDir, `${ProductFilename}.app`, 'Contents', 'Resources')
-    : path.join(appOutDir, 'resources')
+  const resourcesRoot =
+    platformName === 'darwin'
+      ? path.join(appOutDir, `${ProductFilename}.app`, 'Contents', 'Resources')
+      : path.join(appOutDir, 'resources')
   return {
     appArchive: path.join(resourcesRoot, 'app.asar'),
     resourcesRoot,
@@ -36,13 +38,17 @@ async function readWindowsExecutableArchitecture(executablePath) {
     const dosHeader = Buffer.alloc(64)
     const dosRead = await executable.read(dosHeader, 0, dosHeader.length, 0)
     if (dosRead.bytesRead !== dosHeader.length || dosHeader.readUInt16LE(0) !== 0x5a4d) {
-      throw new Error(`Packaged Workbench Windows executable has no valid DOS header: ${executablePath}`)
+      throw new Error(
+        `Packaged Workbench Windows executable has no valid DOS header: ${executablePath}`
+      )
     }
     const peOffset = dosHeader.readUInt32LE(0x3c)
     const peHeader = Buffer.alloc(6)
     const peRead = await executable.read(peHeader, 0, peHeader.length, peOffset)
     if (peRead.bytesRead !== peHeader.length || peHeader.readUInt32LE(0) !== 0x00004550) {
-      throw new Error(`Packaged Workbench Windows executable has no valid PE header: ${executablePath}`)
+      throw new Error(
+        `Packaged Workbench Windows executable has no valid PE header: ${executablePath}`
+      )
     }
     const machine = peHeader.readUInt16LE(4)
     if (machine === 0x8664) return 'x64'
@@ -91,14 +97,17 @@ export async function verifyPackagedTerminalBackend(resourcesRoot, platformName)
     .filter((entry) => entry.isDirectory() && entry.name.startsWith(`node-pty-${platformName}-`))
     .map((entry) => entry.name)
   if (platformPackages.length === 0) {
-    throw new Error(`Packaged Workbench is missing the unpacked terminal backend for ${platformName}.`)
+    throw new Error(
+      `Packaged Workbench is missing the unpacked terminal backend for ${platformName}.`
+    )
   }
   for (const packageName of platformPackages) {
     const target = packageName.slice('node-pty-'.length)
     const prebuildDir = path.join(unpackedRoot, packageName, 'prebuilds', target)
-    const requiredFiles = platformName === 'win32'
-      ? ['conpty.node', 'conpty_console_list.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe']
-      : ['pty.node']
+    const requiredFiles =
+      platformName === 'win32'
+        ? ['conpty.node', 'conpty_console_list.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe']
+        : ['pty.node']
     for (const name of requiredFiles) {
       const binary = await stat(path.join(prebuildDir, name)).catch(() => null)
       if (!binary?.isFile()) {
@@ -116,7 +125,12 @@ export async function verifyPackagedTerminalBackend(resourcesRoot, platformName)
   }
 }
 
-async function verifyPackagedWorkbench({ appOutDir, platformName, architecture, projectDir = process.cwd() }) {
+async function verifyPackagedWorkbench({
+  appOutDir,
+  platformName,
+  architecture,
+  projectDir = process.cwd(),
+}) {
   const paths = resolvePackagedWorkbenchPaths(appOutDir, platformName)
   await waitForPackagedApp(paths.appArchive)
   if (platformName === 'win32') await verifyWindowsX64Executable(appOutDir)
@@ -126,11 +140,13 @@ async function verifyPackagedWorkbench({ appOutDir, platformName, architecture, 
   const rootRequire = createRequire(import.meta.url)
   const builderRequire = createRequire(rootRequire.resolve('electron-builder/package.json'))
   const { extractFile, listPackage } = builderRequire('@electron/asar')
-  const packagedApp = JSON.parse(extractFile(paths.appArchive, archivePath('package.json')).toString('utf8'))
+  const packagedApp = JSON.parse(
+    extractFile(paths.appArchive, archivePath('package.json')).toString('utf8')
+  )
   if (packagedApp.version !== workbenchPackage.version) {
     throw new Error(
-      `Packaged app version ${packagedApp.version ?? '<missing>'} `
-      + `does not match expected ${workbenchPackage.version}.`
+      `Packaged app version ${packagedApp.version ?? '<missing>'} ` +
+        `does not match expected ${workbenchPackage.version}.`
     )
   }
 
@@ -146,7 +162,9 @@ async function verifyPackagedWorkbench({ appOutDir, platformName, architecture, 
   ).toString('utf8')
   const rendererCssWithoutComments = rendererCss.replace(/\/\*[\s\S]*?\*\//gu, '')
   if (rendererCssWithoutComments.includes('@apply')) {
-    throw new Error('Packaged Workbench renderer CSS still contains uncompiled Tailwind @apply rules.')
+    throw new Error(
+      'Packaged Workbench renderer CSS still contains uncompiled Tailwind @apply rules.'
+    )
   }
   for (const requiredLayoutRule of requiredLayoutRules) {
     if (!requiredLayoutRule.test(rendererCss)) {
@@ -176,7 +194,9 @@ async function verifyPackagedWorkbench({ appOutDir, platformName, architecture, 
     archivePath('build', 'electron', 'main', 'workbench-language-worker.js')
   ).toString('utf8')
   if (!languageWorker.includes('velarscript')) {
-    throw new Error('Packaged Workbench language worker is missing the built-in Velar contribution.')
+    throw new Error(
+      'Packaged Workbench language worker is missing the built-in Velar contribution.'
+    )
   }
 
   // 主进程在运行时从 node_modules 加载 Platform 的原生 ESM 包（脚本子进程入口、ScriptAct 模板都按包内路径
@@ -221,14 +241,29 @@ async function verifyPackagedWorkbench({ appOutDir, platformName, architecture, 
 
   const nodePlatform = platformName === 'win32' ? 'win' : platformName
   const unpackedModules = path.join(paths.resourcesRoot, 'app.asar.unpacked', 'node_modules')
-  const nodePackages = (await readdir(unpackedModules)).filter((name) =>
-    name.startsWith(`node-${nodePlatform}-`) || (platformName === 'darwin' && name === 'node-bin-darwin-arm64')
+  const nodePackages = (await readdir(unpackedModules)).filter(
+    (name) =>
+      name.startsWith(`node-${nodePlatform}-`) ||
+      (platformName === 'darwin' && name === 'node-bin-darwin-arm64')
   )
-  const targetArchitecture = architecture ?? (platformName === 'win32' ? 'x64' : nodePackages.length === 1 ? nodePackages[0].split('-').at(-1) : undefined)
+  const targetArchitecture =
+    architecture ??
+    (platformName === 'win32'
+      ? 'x64'
+      : nodePackages.length === 1
+        ? nodePackages[0].split('-').at(-1)
+        : undefined)
   if (!targetArchitecture) throw new Error('Packaged Agent Node architecture is ambiguous')
-  const nodePackage = nodePlatform === 'darwin' && targetArchitecture === 'arm64'
-    ? 'node-bin-darwin-arm64' : `node-${nodePlatform}-${targetArchitecture}`
-  const nodeBinary = path.join(unpackedModules, nodePackage, 'bin', platformName === 'win32' ? 'node.exe' : 'node')
+  const nodePackage =
+    nodePlatform === 'darwin' && targetArchitecture === 'arm64'
+      ? 'node-bin-darwin-arm64'
+      : `node-${nodePlatform}-${targetArchitecture}`
+  const nodeBinary = path.join(
+    unpackedModules,
+    nodePackage,
+    'bin',
+    platformName === 'win32' ? 'node.exe' : 'node'
+  )
   await access(nodeBinary)
   const nodeResources = path.join(paths.resourcesRoot, 'node-runtime')
   await assertNodeRuntimePackageFiles(nodeResources)
@@ -237,16 +272,32 @@ async function verifyPackagedWorkbench({ appOutDir, platformName, architecture, 
     await assertNodeRuntimePackages(nodeResources, nodeBinary)
   await verifyPackagedTerminalBackend(paths.resourcesRoot, platformName)
 
-  for (const standardLibraryFile of ['lib.d.ts', 'lib.es2022.full.d.ts']) {
+  for (const standardLibraryFile of [
+    'typescript.js',
+    'lib.d.ts',
+    'lib.es5.d.ts',
+    'lib.es2022.full.d.ts',
+  ]) {
     const filePath = path.join(paths.typeScriptLibRoot, standardLibraryFile)
     await access(filePath).catch(() => {
       throw new Error(`Packaged TypeScript standard library is missing: ${filePath}`)
     })
   }
+  const sdkManifest = JSON.parse(
+    await readFile(path.join(paths.typeScriptLibRoot, '..', 'package.json'), 'utf8')
+  )
+  const expectedTypeScript = rootRequire('typescript/package.json')
+  assert.equal(sdkManifest.name, 'typescript')
+  assert.equal(sdkManifest.version, expectedTypeScript.version)
+  assert.notEqual(
+    sdkManifest.type,
+    'module',
+    'The external TypeScript SDK must keep its CommonJS package boundary'
+  )
 
   console.log(
-    `Verified Workbench ${workbenchPackage.version} ${platformName} package runtime `
-    + `(${externalPackageCount} external ESM packages): ${paths.appArchive}`
+    `Verified Workbench ${workbenchPackage.version} ${platformName} package runtime ` +
+      `(${externalPackageCount} external ESM packages): ${paths.appArchive}`
   )
 }
 

@@ -247,7 +247,7 @@
 }
 
 .treeRowIgnored:not(.treeRowSelected) .treeFolderIcon {
-  color: var(--workbench-tree-ignored-fg);
+  color: var(--workbench-folder-fg);
 }
 
 .treeRowIgnored:not(.treeRowSelected) .treeFileIcon,
@@ -278,6 +278,10 @@
 .treeFileIcon {
   @apply flex shrink-0 items-center justify-center text-muted-foreground;
   width: 16px;
+}
+
+.treeFolderIcon {
+  color: var(--workbench-folder-fg);
 }
 
 .treeRow[data-test-directory='true'] .treeFolderIcon,

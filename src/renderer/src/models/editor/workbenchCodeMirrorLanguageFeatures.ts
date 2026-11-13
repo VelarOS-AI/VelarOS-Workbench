@@ -599,8 +599,8 @@ export function createWorkbenchLanguageServiceHoverTooltip(
       )
       if (keywordRange && !diagnosticRange) return null
 
-      // 诊断的修复与悬浮说明一起问：浮层不等修复，先显示诊断，修复回来再把按钮补上。
-      const actionsRequest =
+      // Only request fixes once the tooltip exists; diagnostic text must not wait for them.
+      const requestActions = () =>
         diagnosticRange && context.codeActions
           ? context.codeActions
               .request(view, diagnosticRange.from, diagnosticRange.to)
@@ -623,7 +623,7 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             const { diagnostics } = diagnosticRange
             const dom = buildWorkbenchEditorHoverDom({ diagnostics }, classes)
             let destroyed = false
-            void actionsRequest?.then((diagnosticActions) => {
+            void requestActions()?.then((diagnosticActions) => {
               if (destroyed || isEmpty(diagnosticActions)) return
               replaceHoverTooltipDom(
                 dom,
@@ -644,11 +644,11 @@ export function createWorkbenchLanguageServiceHoverTooltip(
       const sourceDocument = view.state.doc
       const tokenRange = getWorkbenchHoverTokenRange(view.state, position)
       let resolvedHover: Nullable<WorkbenchLanguageServiceHoverResult> = null
-      try {
-        const result = await getWorkbenchLanguageServiceHover(request, context.hostRuntime)
-        if (generation !== requestGeneration || view.state.doc !== sourceDocument) return null
-        resolvedHover = result.ok ? result.data.hover : null
-      } catch {
+      const hoverRequest = getWorkbenchLanguageServiceHover(request, context.hostRuntime)
+        .then((result) => (result.ok ? result.data.hover : null))
+        .catch(() => null)
+      if (!diagnosticRange) {
+        resolvedHover = await hoverRequest
         if (generation !== requestGeneration || view.state.doc !== sourceDocument) return null
       }
       if (!diagnosticRange && !resolvedHover) return null
@@ -763,7 +763,19 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           window.addEventListener('keydown', handleWindowKeyDown, true)
           window.addEventListener('keyup', handleWindowKeyUp, true)
           window.addEventListener('blur', handleWindowBlur)
-          void actionsRequest?.then((actions) => {
+          if (diagnosticRange)
+            void hoverRequest.then((hover) => {
+              if (
+                destroyed ||
+                !hover ||
+                generation !== requestGeneration ||
+                view.state.doc !== sourceDocument
+              )
+                return
+              resolvedHover = hover
+              scheduleResolvedHoverRender()
+            })
+          void requestActions()?.then((actions) => {
             if (destroyed || isEmpty(actions)) return
             diagnosticActions = actions
             scheduleResolvedHoverRender()
