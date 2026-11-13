@@ -88,7 +88,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.equal(toolbar.match(/<WorkbenchGit\w+Control\b/g)?.length, 1)
     assert.match(toolbar, /<WorkbenchGitBranchControl/)
     const runButton = toolbar.indexOf('<WorkbenchRunAction')
-    const settingsButton = toolbar.indexOf('tooltip={settingsLabel}')
+    const settingsButton = toolbar.indexOf('aria-label={settingsLabel}')
     assert.ok(runButton >= 0)
     assert.ok(settingsButton >= 0 && settingsButton < runButton)
     assert.match(adapter, /gitWorkspaceRoot:\s*workbench\.activeProject\?\.rootPath/)

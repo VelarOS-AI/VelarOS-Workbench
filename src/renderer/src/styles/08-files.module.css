@@ -246,10 +246,6 @@
   background: var(--chrome-rail-hover-bg);
 }
 
-.treeRowIgnored:not(.treeRowSelected) .treeFolderIcon {
-  color: var(--workbench-folder-fg);
-}
-
 .treeRowIgnored:not(.treeRowSelected) .treeFileIcon,
 .treeRowIgnored:not(.treeRowSelected) .treeFileIcon[data-kind] {
   color: var(--workbench-tree-ignored-fg);
@@ -287,6 +283,12 @@
 .treeRow[data-test-directory='true'] .treeFolderIcon,
 .treeRow[data-test-directory='true'] .treeName {
   color: var(--workbench-test-fg);
+}
+
+.treeRowIgnored[data-tree-kind='directory'] .treeFolderIcon,
+.treeRowIgnored[data-tree-kind='directory'] .treeName,
+.treeRowIgnored[data-tree-kind='directory'] .treeDisclosureButton {
+  color: var(--workbench-folder-ignored-fg);
 }
 
 .treeFileIcon[data-test-file='true'] {

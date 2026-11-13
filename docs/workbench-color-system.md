@@ -30,6 +30,8 @@ and contrast-safe hover colors are calculated centrally from these scales.
 Text, accent ink, status text, tooltip content and primary-button foregrounds
 are tested at a WCAG contrast ratio of at least 4.5:1 on their intended surfaces.
 Disabled decoration is a separate role and does not replace readable hint text.
+Ignored folders use `--workbench-folder-ignored-fg` from the neutral Gray scale for
+their names, icons and disclosure arrows, independently of theme and test-directory hues.
 
 ## Applying and extending themes
 

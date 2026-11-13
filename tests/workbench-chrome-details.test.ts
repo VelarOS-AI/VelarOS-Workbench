@@ -282,13 +282,13 @@ void describe('Workbench window and chat chrome details', () => {
       presentation,
       /className=\{styles\.rightToolWindowGroup\}>\s*<WorkbenchSettingsAction[^>]*\/>\s*<WorkbenchAgentRail[\s\S]*?<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/u
     )
-    // 三个按钮共用工具条中线，尺寸由 icon-sm 预设决定，悬停说明向左弹出。
+    // 按钮共用工具条中线和 icon-sm 尺寸；设置不显示悬停气泡。
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
     assert.match(
       toolbar,
       /function WorkbenchTopIconAction[\s\S]*<IconButton\n\s*variant="ghost"\n\s*size="icon-sm"/u
     )
-    assert.match(toolbar, /tooltip=\{settingsLabel\}[\s\S]*<WorkbenchRunAction/u)
+    assert.match(toolbar, /aria-label=\{settingsLabel\}[\s\S]*<WorkbenchRunAction/u)
     assert.match(toolbar, /className=\{styles\.topRunButton\}\n\s*tooltipSide="left"/u)
     assert.doesNotMatch(topStyles, /\.topToolbarIconButton/u)
     // 运行按钮只染色（绿、悬停淡绿底、禁用灰），边长与圆角照旧归 icon-sm。

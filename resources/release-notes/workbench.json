@@ -3,6 +3,28 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.24",
+      "releasedAt": "2026-11-14",
+      "title": {
+        "zh": "优化忽略目录配色，移除设置悬停提示",
+        "en": "Refine ignored-folder colors and remove Settings tooltips"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "被忽略文件夹的图标、名称和展开箭头统一使用独立的浅灰色阶，适配明暗主题，避免沿用普通文件夹或测试目录颜色。",
+          "移除设置按钮的自定义悬停气泡和系统文字提示，保留点击操作与无障碍名称。"
+        ],
+        "en": [
+          "Use a dedicated neutral gray scale for ignored-folder icons, names and disclosure arrows across light and dark themes instead of ordinary-folder or test-directory colors.",
+          "Remove the Settings button's custom hover bubble and native tooltip while preserving its action and accessible name."
+        ]
+      }
+    },
+    {
       "version": "0.4.23",
       "releasedAt": "2026-11-13",
       "title": {

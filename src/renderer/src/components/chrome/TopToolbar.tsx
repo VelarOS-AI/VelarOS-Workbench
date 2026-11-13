@@ -95,14 +95,15 @@ export function WorkbenchSettingsAction({
   const { t } = useWorkbenchI18n()
   const settingsLabel = t('workbench.settingsTitle')
   return (
-    <WorkbenchTopIconAction
-      tooltip={settingsLabel}
-      label={settingsLabel}
-      tooltipSide="left"
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className={styles.rightToolButton}
+      aria-label={settingsLabel}
       onClick={onOpenSettings}
     >
       <GearSixIcon size={17} />
-    </WorkbenchTopIconAction>
+    </Button>
   )
 }
 
