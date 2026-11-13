@@ -34,7 +34,6 @@ const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-update-e2e-中
 const installed = join(root, 'Application')
 const profile = join(root, 'User Data')
 const harness = join(root, 'Harness')
-const receipt = join(profile, 'windows-update-result.json')
 const startupLog = join(root, 'startup.log')
 const requests = []
 const info = JSON.parse(await readFile(join(unpackedPath, 'windows-update-manifest.json'), 'utf8'))
@@ -159,6 +158,11 @@ try {
   clearTimeout(timer)
   output += await readFile(startupLog, 'utf8').catch((error) => `Startup log: ${error.message}`)
   assert.equal(code, 0, output)
+  const task = JSON.parse(await readFile(join(profile, 'windows-update-owner.json'), 'utf8'))
+  assert.match(task.jobId, /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/iu)
+  assert.equal(task.appDir, installed)
+  assert.equal(task.userDataDir, profile)
+  const receipt = join(profile, `windows-update-result-${task.jobId}.json`)
   const deadline = Date.now() + 90_000
   let result
   while (Date.now() < deadline) {
@@ -171,6 +175,9 @@ try {
     await delay(300)
   }
   assert.equal(result?.success, true, JSON.stringify(result) + output)
+  assert.equal(result.jobId, task.jobId)
+  assert.equal(result.workerExited, true)
+  assert.equal(result.cancelled, false)
   assert.equal(result.version, info.version)
   assert.equal(
     await hash(join(installed, info.executable)),
