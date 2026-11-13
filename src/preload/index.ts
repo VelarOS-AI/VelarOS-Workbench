@@ -322,6 +322,7 @@ const settingsWindowBridge: WorkbenchSettingsWindowBridge = {
 }
 
 const windowStateBridge: WorkbenchWindowStateBridge = {
+  setTheme: (theme) => ipcRenderer.invoke(WorkbenchWindowStateChannels.setTheme, theme),
   getState: () => ipcRenderer.invoke(WorkbenchWindowStateChannels.getState),
   onChanged: (listener) => subscribe(WorkbenchWindowStateChannels.changed, listener),
 }

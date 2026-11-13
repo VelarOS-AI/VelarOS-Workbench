@@ -153,72 +153,11 @@
   background: var(--workbench-bg);
 }
 
-/*
- * 主题色的**唯一真相源**：默认值与 accent 覆盖都住在文档根。
- *
- * 它以前的默认值写在下面那个 shell 块里，而 accent 覆盖挂在 shell 的属性选择器上。两者作用在
- * 同一个元素、靠特异性分胜负，于是任何拿不到那条覆盖的子树（渲染到 <body> 的门户弹层只复制
- * `data-velar-theme-scope`）就永远吃默认的蓝，同一个界面里出现两种主题色。
- *
- * 现在默认值与覆盖都在 :root：shell、welcome 页与所有门户一律继承同一份，没有谁需要向谁复制，
- * 也没有第二处可以悄悄分叉。下面的派生量（--workbench-active 等）仍在 shell 块里定义，
- * 但它们的 var() 在使用处求值，拿到的就是继承下来的这一份。
- *
- * `--workbench-theme-color-rgb` 是同一个颜色的 rgb 分量形式，只为共享 UI 组件那条
- * `rgba(var(--control-checked-rgb), …)` 契约存在——两行必须成对修改。
- */
+/* UI palettes are authored in shared/workbenchAppearance.ts. Root-only aliases
+ * let shells and body portals inherit one palette without local token resets. */
 :global(:root) {
-  --workbench-theme-color: #2563eb;
-  --workbench-theme-color-rgb: 37, 99, 235;
-}
-
-/*
- * Workbench theme tokens — single source of truth.
- *
- * Grouped so they apply to the shell itself AND to any portalled popover that
- * carries the copied `data-velar-theme-scope` (composer add-menu, `/` skill
- * flyout, model/tier selector, …). Those popovers render on <body>, outside the
- * shell, so without this they'd lose the chrome tokens and stay light. The shell
- * sets `data-velar-theme-scope` alongside `data-workbench-theme`; the Popover
- * primitive copies the nearest scope onto its portal (see packages/ui
- * Popover.tsx). Everything below derives from `--workbench-*`, so both surfaces
- * stay in sync from one definition.
- */
-:global(:root),
-:global([data-velar-theme-scope]) {
-  --workbench-bg: var(--background);
-  --workbench-surface: var(--card);
-  --workbench-surface-muted: var(--background-panel);
-  --workbench-toolbar: var(--background-panel);
-  --workbench-control-bg: var(--background-muted-strong);
-  --workbench-border: var(--border);
-  --workbench-border-soft: color-mix(in oklab, var(--border) 42%, transparent);
-  /*
-   * 中性悬浮底色。
-   *
-   * 这里**不能**写 `var(--accent)`：下面的共享令牌重映射里有 `--accent: var(--workbench-hover)`,
-   * 两条合起来是一个自环，自环的自定义属性整条按 guaranteed-invalid 计算 —— 于是全 IDE 所有
-   * `background: var(--workbench-hover)` 都静默失效，落回 transparent，连带 --muted / --secondary /
-   * --surface-subtle 这一串别名一起哑掉。悬浮要的是「比底色重一点的中性」，直接按前景色兑，
-   * 深浅主题各自跟着 --workbench-text 翻转；**主题色**的悬浮由 --workbench-active 负责，两者分工不同。
-   */
-  --workbench-hover: color-mix(in srgb, var(--workbench-text) 7%, transparent);
-  --workbench-active: rgba(var(--workbench-theme-color-rgb), 0.12);
-  --workbench-active-soft: color-mix(in oklab, var(--workbench-theme-color) 12%, var(--card));
-  --workbench-active-fg: var(--workbench-theme-color);
-  --workbench-selection-inactive: var(--muted);
-  --workbench-focus: var(--workbench-theme-color);
-  --workbench-focus-inset-ring: rgba(var(--workbench-theme-color-rgb), 0.38);
-  --workbench-tab-accent-line: var(--workbench-theme-color);
-  --workbench-text: oklch(0.18 0 0);
-  --workbench-text-muted: oklch(0.56 0 0);
   --workbench-git-untracked-fg: var(--status-amber);
   /* 编辑区行号旁的 Git 改动标记，与 Git 面板的新增 / 修改配色一致。 */
-  --workbench-editor-git-added: var(--status-green, #15803d);
-  --workbench-editor-git-modified: var(--status-teal, #0f766e);
-  --workbench-editor-git-deleted: var(--status-red, #dc2626);
-  --workbench-test-fg: var(--status-violet);
-  --workbench-tree-ignored-fg: var(--workbench-text-muted);
   --workbench-file-typescript: #3178c6;
   --workbench-file-velarscript: #1d4ed8;
   --workbench-file-tsx: #3178c6;
@@ -249,24 +188,10 @@
   --workbench-file-text: var(--status-blue);
   --workbench-file-code: #6e7681;
   --workbench-file-generic: var(--status-blue);
-  --workbench-selection-bg: var(--chrome-rail-selected-bg);
-  --workbench-selection-secondary-bg: var(--background-muted);
-  --workbench-editor-bg: var(--card);
-  --workbench-editor-fg: var(--foreground);
-  --workbench-editor-muted: var(--foreground-tertiary);
-  --workbench-editor-gutter-bg: var(--control-gray-bg);
-  --workbench-editor-gutter-border: var(--border-strong);
-  --workbench-editor-active-line: rgba(var(--status-blue-rgb), 0.055);
-  --workbench-editor-active-gutter: rgba(var(--status-blue-rgb), 0.09);
-  --workbench-editor-selection: rgba(var(--status-blue-rgb), 0.16);
   --workbench-editor-comment-block-bg: rgba(var(--workbench-theme-color-rgb), 0.12);
   --workbench-editor-comment-block-accent: var(--workbench-theme-color);
   --workbench-editor-comment-marker-fg: var(--workbench-theme-color);
   --workbench-editor-comment-marker-bg: rgba(var(--workbench-theme-color-rgb), 0.14);
-  --workbench-editor-occurrence-match: rgba(56, 139, 253, 0.14);
-  --workbench-editor-occurrence-match-active: rgba(56, 139, 253, 0.28);
-  --workbench-editor-caret: #111111;
-  --workbench-editor-tooltip-bg: #ffffff;
   --workbench-editor-hover-keyword: #0033b3;
   --workbench-editor-hover-builtin-type: #0067c0;
   --workbench-editor-hover-type: #007070;
@@ -298,7 +223,6 @@
   --workbench-console-boolean: var(--workbench-editor-hover-keyword);
   --workbench-console-stack-fn: var(--workbench-editor-hover-function);
   --workbench-console-stack-path: var(--workbench-editor-hover-location);
-  --workbench-editor-unused-fg: #6e7681;
   --workbench-editor-diagnostic-error-fg: #8b0000;
   --workbench-editor-diagnostic-error-underline: #e51400;
   --workbench-editor-diagnostic-warning-underline: #bf8803;
@@ -333,76 +257,12 @@
   --workbench-settings-row-padding-block: 7px;
   --workbench-settings-theme-card-height: 68px;
   --workbench-settings-theme-card-padding: 10px;
-  --background: var(--workbench-bg);
-  --background-panel: var(--workbench-toolbar);
-  --foreground: var(--workbench-text);
-  --foreground-secondary: color-mix(in srgb, var(--workbench-text) 74%, transparent);
-  --foreground-tertiary: var(--workbench-text-muted);
-  --card: var(--workbench-surface);
-  --card-foreground: var(--workbench-text);
-  --popover: var(--workbench-surface);
-  --popover-foreground: var(--workbench-text);
-  --muted: var(--workbench-hover);
-  --muted-foreground: var(--workbench-text-muted);
-  --accent: var(--workbench-hover);
-  --accent-foreground: var(--workbench-text);
-  --border: var(--workbench-border);
-  --border-strong: color-mix(in srgb, var(--workbench-border) 96%, var(--workbench-text));
-  --input: var(--workbench-border);
-  --ring: color-mix(in srgb, var(--workbench-active-fg) 30%, transparent);
-  --primary: var(--workbench-text);
   --chat-task-usage-color: var(--workbench-theme-color);
-  --primary-foreground: var(--workbench-bg);
-  --control-themed-bg: var(--workbench-control-bg);
-  --control-themed-hover-bg: var(--workbench-hover);
-  --control-themed-open-bg: var(--workbench-active-soft);
-  --control-themed-disabled-bg: var(--workbench-toolbar);
-  /*
-   * The shared chat composer / conversation surfaces consume these semantic
-   * tokens too. The light theme hardcodes several of them to white (or mixes
-   * with `--color-white`), so without deriving them from the chrome palette the
-   * embedded panels stay white under a dark workbench theme. Keep them tied to
-   * `--workbench-*` so both light and dark chrome stay consistent.
-   */
-  --background-elevated: var(--workbench-surface);
-  --background-panel-strong: var(--workbench-surface);
-  --background-muted: var(--workbench-hover);
-  --background-muted-strong: var(--workbench-control-bg);
-  --secondary: var(--workbench-hover);
-  --secondary-foreground: var(--workbench-text);
   --surface-subtle: var(--workbench-hover);
   --surface-settings-card: color-mix(in oklab, var(--workbench-control-bg) 60%, transparent);
   --surface-interaction-card: color-mix(in oklab, var(--workbench-hover) 60%, transparent);
-  --control-gray-bg: var(--workbench-control-bg);
-  --control-gray-hover-bg: var(--workbench-hover);
-  --control-gray-inset-hover-bg: var(--workbench-surface);
   --chat-user-bubble-bg: var(--workbench-control-bg);
-  /* 勾选态跟随工作台主题色：共享令牌里 --control-checked 挂在 --primary 上，而工作台把
-     --primary 重映射成了文字色，于是复选框既不是主题色也不是共享品牌色，两头不靠。 */
-  --control-checked: var(--workbench-theme-color);
-  --control-checked-rgb: var(--workbench-theme-color-rgb);
-  /*
-   * 开关与主题化边框此前整格没覆盖，于是它们吃共享包 `:root` 上那份挂在 --primary 的默认值
-   * （靛蓝 #333366）——同一个面板里复选框跟着主题色、开关却是靛蓝。凡是「选中/激活」语义的
-   * 控件都归主题色管，这里一次补齐，别再留下按 --primary 走的漏网格子。
-   */
-  --control-switch-checked: var(--workbench-theme-color);
-  --control-switch-checked-hover: color-mix(
-    in oklab,
-    var(--workbench-theme-color) 88%,
-    black
-  );
-  --control-themed-border: color-mix(
-    in oklab,
-    var(--workbench-theme-color) 14%,
-    var(--workbench-border)
-  );
-  --control-checked-surface: var(--workbench-active-soft);
-  --control-checked-border: color-mix(
-    in oklab,
-    var(--workbench-active-fg) 34%,
-    var(--workbench-surface)
-  );
+  /* Compatibility aliases derive from the semantic palette; controls never own colors. */
   --dt-border-split: var(--workbench-border);
   --dt-header-bg: var(--workbench-surface-muted);
   --dt-header-color: var(--workbench-text);
@@ -414,49 +274,13 @@
   --scrollbar-thumb-hover: color-mix(in oklab, var(--workbench-text) 28%, transparent);
 }
 
-/* Neutral presets keep the familiar Workbench baseline; the two color themes
- * deliberately change both chrome layering and editor surfaces. */
+/* Code and terminal syntax roles stay separate from app interaction/status colors. */
 :global([data-workbench-theme='light-modern']),
 :global([data-velar-theme-scope='light-modern']) {
-  --workbench-bg: #ffffff;
-  --workbench-surface: #ffffff;
-  --workbench-surface-muted: #f8f8f8;
-  --workbench-toolbar: #f8f8f8;
-  --workbench-control-bg: rgba(0, 0, 0, 0.06);
-  --workbench-border: #e5e5e5;
-  --workbench-hover: rgba(0, 0, 0, 0.04);
-  --workbench-selection-bg: color-mix(in srgb, var(--workbench-theme-color) 12%, #ffffff);
-  --workbench-selection-inactive: rgba(0, 0, 0, 0.05);
-  --chrome-rail-selected-bg: color-mix(in srgb, var(--workbench-theme-color) 11%, #ffffff);
-  --chrome-rail-hover-bg: rgba(0, 0, 0, 0.05);
-  --workbench-editor-gutter-bg: #ffffff;
 }
 
 :global([data-workbench-theme='warm-paper']),
 :global([data-velar-theme-scope='warm-paper']) {
-  --workbench-bg: #fbf5e9;
-  --workbench-surface: #fffaf0;
-  --workbench-surface-muted: #f2e7d5;
-  --workbench-toolbar: #eee0cb;
-  --workbench-control-bg: rgba(105, 78, 48, 0.1);
-  --workbench-border: #ddcbb2;
-  --workbench-border-soft: rgba(105, 78, 48, 0.13);
-  --workbench-hover: rgba(105, 78, 48, 0.08);
-  --workbench-text: #3d3025;
-  --workbench-text-muted: #806e5c;
-  --workbench-selection-bg: color-mix(in srgb, var(--workbench-theme-color) 15%, #fff7e8);
-  --workbench-selection-inactive: rgba(105, 78, 48, 0.08);
-  --chrome-rail-selected-bg: color-mix(in srgb, var(--workbench-theme-color) 14%, #f7ead7);
-  --chrome-rail-hover-bg: rgba(105, 78, 48, 0.1);
-  --workbench-editor-bg: #fffaf0;
-  --workbench-editor-fg: #3d3025;
-  --workbench-editor-muted: #998773;
-  --workbench-editor-gutter-bg: #f6ecdd;
-  --workbench-editor-gutter-border: #e3d3bd;
-  --workbench-editor-active-line: rgba(139, 94, 52, 0.055);
-  --workbench-editor-active-gutter: rgba(139, 94, 52, 0.09);
-  --workbench-editor-caret: #6f4b2d;
-  --workbench-editor-tooltip-bg: #fff8ec;
   --workbench-editor-hover-keyword: #7c3aed;
   --workbench-editor-hover-builtin-type: #2563eb;
   --workbench-editor-hover-type: #0f766e;
@@ -475,8 +299,6 @@
   --workbench-terminal-ansi-cyan: #0f766e;
   --workbench-terminal-ansi-white: #806e5c;
   --workbench-terminal-ansi-bright-black: #806e5c;
-  --workbench-editor-unused-fg: #998773;
-  --workbench-tree-ignored-fg: #998773;
   color-scheme: light;
 }
 
@@ -484,37 +306,6 @@
 :global([data-workbench-theme='midnight-blue']),
 :global([data-velar-theme-scope='dark-modern']),
 :global([data-velar-theme-scope='midnight-blue']) {
-  --workbench-border-soft: rgba(255, 255, 255, 0.05);
-  --workbench-active: rgba(var(--workbench-theme-color-rgb), 0.22);
-  --workbench-active-soft: rgba(var(--workbench-theme-color-rgb), 0.16);
-  --workbench-active-fg: color-mix(in oklab, var(--workbench-theme-color) 72%, white);
-  --workbench-focus: var(--workbench-active-fg);
-  --workbench-selection-inactive: rgba(255, 255, 255, 0.07);
-  --workbench-text: #cccccc;
-  --workbench-text-muted: #8b8b8b;
-  /*
-   * Monochrome design aliases --status-blue (and --ring / --memory-accent /
-   * --control-checked) to --primary via --primary-rgb. --primary is remapped to
-   * light ink for dark chrome, but --primary-rgb was left at the light value
-   * (17,17,17), so anything using rgb(var(--status-blue-rgb)) — console info/
-   * link/level tokens, the run console's stderr→blue remap, editor selection —
-   * rendered near-black and unreadable on dark. Flip it to match --workbench-text.
-   */
-  --primary-rgb: 204, 204, 204;
-  --workbench-selection-secondary-bg: rgba(255, 255, 255, 0.06);
-  --workbench-tab-accent-line: var(--workbench-active-fg);
-  --workbench-focus-inset-ring: rgba(var(--workbench-theme-color-rgb), 0.55);
-  --chrome-rail-hover-bg: rgba(255, 255, 255, 0.08);
-  --workbench-editor-fg: #d4d4d4;
-  --workbench-editor-muted: #7a808b;
-  --workbench-editor-gutter-border: #34373d;
-  --workbench-editor-active-line: rgba(255, 255, 255, 0.045);
-  --workbench-editor-active-gutter: rgba(255, 255, 255, 0.07);
-  --workbench-editor-selection: rgba(var(--status-blue-muted-rgb), 0.3);
-  --workbench-editor-occurrence-match: rgba(56, 139, 253, 0.18);
-  --workbench-editor-occurrence-match-active: rgba(56, 139, 253, 0.34);
-  --workbench-editor-caret: #aeafad;
-  --workbench-editor-tooltip-bg: #252526;
   --workbench-editor-hover-keyword: #cf8efa;
   --workbench-editor-hover-builtin-type: #4da6ff;
   --workbench-editor-hover-type: #56c3d6;
@@ -534,11 +325,6 @@
   --workbench-terminal-ansi-cyan: #4ec9b0;
   --workbench-terminal-ansi-white: #d8dee9;
   --workbench-terminal-ansi-bright-black: #a3abb5;
-  --workbench-editor-unused-fg: #848d98;
-  --workbench-editor-git-added: #48a868;
-  --workbench-editor-git-modified: #2ea3a8;
-  --workbench-editor-git-deleted: #e5534b;
-  --workbench-tree-ignored-fg: var(--workbench-editor-muted);
   --workbench-file-typescript: #4da6ff;
   --workbench-file-velarscript: #7aa2ff;
   --workbench-file-tsx: #4da6ff;
@@ -576,50 +362,9 @@
   color-scheme: dark;
 }
 
-/* Dark Modern: neutral #1f1f1f editor, #181818 sidebar/toolbar. */
-:global([data-workbench-theme='dark-modern']),
-:global([data-velar-theme-scope='dark-modern']) {
-  --workbench-bg: #1f1f1f;
-  --workbench-surface: #1f1f1f;
-  --workbench-surface-muted: #181818;
-  --workbench-toolbar: #181818;
-  --workbench-control-bg: rgba(255, 255, 255, 0.06);
-  --workbench-border: #2b2b2b;
-  --workbench-hover: rgba(255, 255, 255, 0.06);
-  --workbench-selection-bg: rgba(var(--workbench-theme-color-rgb), 0.28);
-  --chrome-rail-selected-bg: rgba(var(--workbench-theme-color-rgb), 0.26);
-  --workbench-editor-bg: #1f1f1f;
-  --workbench-editor-gutter-bg: #1f1f1f;
-}
-
 /* Midnight Blue: navy chrome, lifted panels, and a saturated editor palette. */
 :global([data-workbench-theme='midnight-blue']),
 :global([data-velar-theme-scope='midnight-blue']) {
-  --workbench-bg: #0b1220;
-  --workbench-surface: #101a2b;
-  --workbench-surface-muted: #0d1626;
-  --workbench-toolbar: #080f1c;
-  --workbench-control-bg: rgba(148, 177, 222, 0.09);
-  --workbench-border: #243552;
-  --workbench-border-soft: rgba(148, 177, 222, 0.09);
-  --workbench-hover: rgba(148, 177, 222, 0.1);
-  --workbench-text: #d7e3f4;
-  --workbench-text-muted: #8192ab;
-  --workbench-selection-bg: rgba(var(--workbench-theme-color-rgb), 0.34);
-  --chrome-rail-selected-bg: rgba(var(--workbench-theme-color-rgb), 0.3);
-  --chrome-rail-hover-bg: rgba(148, 177, 222, 0.11);
-  --workbench-editor-bg: #0b1220;
-  --workbench-editor-fg: #d6deeb;
-  --workbench-editor-muted: #637777;
-  --workbench-editor-gutter-bg: #0d1626;
-  --workbench-editor-gutter-border: #22324c;
-  --workbench-editor-active-line: rgba(130, 170, 255, 0.06);
-  --workbench-editor-active-gutter: rgba(130, 170, 255, 0.11);
-  --workbench-editor-selection: rgba(130, 170, 255, 0.28);
-  --workbench-editor-occurrence-match: rgba(128, 203, 196, 0.2);
-  --workbench-editor-occurrence-match-active: rgba(128, 203, 196, 0.36);
-  --workbench-editor-caret: #ffcc80;
-  --workbench-editor-tooltip-bg: #121f33;
   --workbench-editor-hover-keyword: #c792ea;
   --workbench-editor-hover-builtin-type: #82aaff;
   --workbench-editor-hover-type: #89ddff;
@@ -638,48 +383,6 @@
   --workbench-terminal-ansi-cyan: #89ddff;
   --workbench-terminal-ansi-white: #d6deeb;
   --workbench-terminal-ansi-bright-black: #94b1de;
-  --workbench-editor-unused-fg: #637777;
-  --workbench-tree-ignored-fg: #637777;
-}
-
-:global(:root[data-workbench-accent='blue']) {
-  --workbench-theme-color: #2563eb;
-  --workbench-theme-color-rgb: 37, 99, 235;
-}
-
-:global(:root[data-workbench-accent='teal']) {
-  --workbench-theme-color: var(--status-teal);
-  --workbench-theme-color-rgb: 15, 118, 110;
-}
-
-:global(:root[data-workbench-accent='green']) {
-  --workbench-theme-color: var(--status-green);
-  --workbench-theme-color-rgb: 21, 128, 61;
-}
-
-:global(:root[data-workbench-accent='amber']) {
-  --workbench-theme-color: var(--status-amber);
-  --workbench-theme-color-rgb: 217, 119, 6;
-}
-
-:global(:root[data-workbench-accent='orange']) {
-  --workbench-theme-color: #ea580c;
-  --workbench-theme-color-rgb: 234, 88, 12;
-}
-
-:global(:root[data-workbench-accent='rose']) {
-  --workbench-theme-color: #e11d48;
-  --workbench-theme-color-rgb: 225, 29, 72;
-}
-
-:global(:root[data-workbench-accent='violet']) {
-  --workbench-theme-color: var(--status-violet);
-  --workbench-theme-color-rgb: 124, 58, 237;
-}
-
-:global(:root[data-workbench-accent='slate']) {
-  --workbench-theme-color: var(--status-slate);
-  --workbench-theme-color-rgb: 63, 95, 151;
 }
 
 :global([data-workbench-density='compact']) {
@@ -732,20 +435,10 @@
   /* Space was wasted with a drag-only stripe; draggable regions live on top chrome rows instead. */
   padding-top: 0;
   box-sizing: border-box;
-  /*
-   * Default --workbench-border is ~9% alpha on light chrome and reads as invisible.
-   * Standalone seam tokens strengthen only the console divider lines on white surfaces.
-   */
-  --workbench-seam: rgba(15, 15, 15, 0.2);
-  --workbench-seam-strong: rgba(15, 15, 15, 0.28);
-  --workbench-card-border: rgba(15, 15, 15, 0.24);
 }
 
 .workbenchShell[data-standalone='true'][data-workbench-theme='dark-modern'],
 .workbenchShell[data-standalone='true'][data-workbench-theme='midnight-blue'] {
-  --workbench-seam: rgba(255, 255, 255, 0.14);
-  --workbench-seam-strong: rgba(255, 255, 255, 0.2);
-  --workbench-card-border: rgba(255, 255, 255, 0.18);
 }
 
 /* macOS hiddenInset：原生红绿灯的位置由左侧现有标题行让出，不再单独占一条顶栏。
@@ -760,7 +453,9 @@
 
 .workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .filePanelProjectHeader,
 .workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .embeddedFilePane .panelHeader,
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .embeddedKernelRoot[data-file-panel-open='false'] .editorTabBar {
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true']
+  .embeddedKernelRoot[data-file-panel-open='false']
+  .editorTabBar {
   padding-left: calc(76px - var(--workbench-left-rail-width));
 }
 

@@ -12,7 +12,7 @@
 }
 
 .workbenchShell .filePanel {
-  background: var(--workbench-editor-bg);
+  background: var(--workbench-surface-muted);
 }
 
 .filePanelBody {
@@ -240,7 +240,6 @@
 
 .treeRowIgnored:not(.treeRowSelected) {
   color: var(--workbench-tree-ignored-fg);
-  opacity: 0.55;
 }
 
 .treeRowIgnored:not(.treeRowSelected):hover {
@@ -308,7 +307,7 @@
   position: absolute;
   right: -3px;
   bottom: -2px;
-  color: var(--workbench-test-fg);
+  color: var(--workbench-run-fg);
   filter: drop-shadow(0 0 1px var(--workbench-bg));
 }
 

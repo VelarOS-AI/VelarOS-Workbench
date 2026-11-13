@@ -190,7 +190,11 @@ export const FileTreeRow = memo(function FileTreeRow({
             !isWorkbenchTreeRoot(entry) && <span className={styles.treeSpacer} />
           )}
           <span className={styles.treeFolderIcon}>
-            {expanded ? <FolderOpenIcon size={15} /> : <FolderIcon size={15} />}
+            {expanded ? (
+              <FolderOpenIcon size={15} weight="fill" />
+            ) : (
+              <FolderIcon size={15} weight="fill" />
+            )}
           </span>
         </>
       ) : (
@@ -201,11 +205,7 @@ export const FileTreeRow = memo(function FileTreeRow({
             data-kind={fileKind}
             data-test-file={isTestFile || undefined}
           >
-            <WorkbenchFileTypeIcon
-              fileName={entry.name}
-              size={15}
-              weight="regular"
-            />
+            <WorkbenchFileTypeIcon fileName={entry.name} size={15} weight="regular" />
             {isTestFile && (
               <PlayCircleIcon
                 size={8}

@@ -5,6 +5,7 @@ import { AppError, isFiniteNumber, isObject, isString, Log, Result } from '@vela
 import type { Result as ResultType } from '@velaros-ai/velaros/core/result'
 import { isRecord } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
+import { type WorkbenchAccent, type WorkbenchThemeId } from '@shared/workbenchAppearance'
 import {
   type WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
   type WorkbenchWebSearchEngine,
@@ -13,6 +14,9 @@ import {
 
 import { createLocalStorageJsonStore, type StorageLike } from '../support/localStorageJsonStore'
 
+export type { WorkbenchAccent, WorkbenchThemeId } from '@shared/workbenchAppearance'
+export { isWorkbenchDarkTheme } from '@shared/workbenchAppearance'
+
 import {
   readWorkbenchGeneratedRunLaunch,
   type WorkbenchRunSessionLaunchOptions,
@@ -20,10 +24,7 @@ import {
 
 const log = Log.tag('workbench-preferences')
 
-export type WorkbenchThemeId = 'light-modern' | 'dark-modern' | 'warm-paper' | 'midnight-blue'
 export type WorkbenchDensity = 'compact' | 'balanced' | 'comfortable'
-export type WorkbenchAccent =
-  'blue' | 'teal' | 'green' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
 /** 差异查看器怎么排：改动前后上下合在一栏（unified），或者左右并排（split）。 */
 export type WorkbenchDiffLayout = 'unified' | 'split'
 
@@ -146,7 +147,6 @@ const WorkbenchThemes = new Set<WorkbenchThemeId>([
   'warm-paper',
   'midnight-blue',
 ])
-const WorkbenchDarkThemes = new Set<WorkbenchThemeId>(['dark-modern', 'midnight-blue'])
 export const WORKBENCH_PERMISSION_CONFIRMATION_MODES = Object.freeze([
   'standard-open',
   'ask-every-time',
@@ -156,9 +156,6 @@ const WorkbenchPermissionConfirmationModes = new Set<PermissionConfirmationMode>
   WORKBENCH_PERMISSION_CONFIRMATION_MODES
 )
 
-export function isWorkbenchDarkTheme(theme: WorkbenchThemeId): boolean {
-  return WorkbenchDarkThemes.has(theme)
-}
 const WorkbenchDensities = new Set<WorkbenchDensity>(['compact', 'balanced', 'comfortable'])
 const WorkbenchDiffLayouts = new Set<WorkbenchDiffLayout>(['unified', 'split'])
 
@@ -487,9 +484,8 @@ export function normalizeWorkbenchProjectRunSettings(
   settings: Partial<WorkbenchProjectRunSettings> | undefined
 ): WorkbenchProjectRunSettings {
   const command = isString(settings?.command) ? settings.command.trim() : ''
-  const launch = settings?.launch === undefined
-    ? undefined
-    : readWorkbenchGeneratedRunLaunch(settings.launch)
+  const launch =
+    settings?.launch === undefined ? undefined : readWorkbenchGeneratedRunLaunch(settings.launch)
   const normalized: WorkbenchProjectRunSettings = {
     command: launch === null ? '' : command,
     configurationId: isString(settings?.configurationId) ? settings.configurationId.trim() : '',

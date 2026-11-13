@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { app, BrowserWindow, ipcMain, session, shell, webContents } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, session, shell, webContents } from 'electron'
 
 import { createElectronBrowserRuntime } from '@velaros-ai/capabilities/browser/electron'
 import { Log } from '@velaros-ai/velaros/core'
@@ -10,6 +10,7 @@ import { createModelRuntimeComposition } from '@velaros-ai/velaros/model'
 
 import productionAppIconPath from '../../resources/icons/icon.png?asset'
 import developmentAppIconPath from '../../resources/icons/icon-dev.png?asset'
+import { getWorkbenchNativeAppearance } from '../shared/workbenchAppearance'
 import {
   normalizeWorkbenchBrowserPageUrl,
   WorkbenchBrowserPartition,
@@ -60,6 +61,7 @@ import {
   installWorkbenchExternalNavigation,
   isWorkbenchAgentConsoleRequest,
 } from './projects/WorkbenchExternalNavigation'
+import { WorkbenchNativeAppearance } from './projects/WorkbenchNativeAppearance'
 import { WorkbenchProjectRegistry } from './projects/WorkbenchProjectRegistry'
 import { WorkbenchSettingsWindows } from './projects/WorkbenchSettingsWindows'
 import { prepareWorkbenchWebviewAttachment } from './projects/WorkbenchWebviewSecurity'
@@ -143,6 +145,14 @@ if (WorkbenchIsDevelopmentRuntime) {
 }
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
+let nativeAppearance: WorkbenchNativeAppearance | undefined
+
+function workbenchWindowBackground(): string {
+  return (
+    nativeAppearance?.backgroundColor ??
+    getWorkbenchNativeAppearance('light-modern').backgroundColor
+  )
+}
 // 有未保存编辑器改动的窗口，关窗与退出前先交给 renderer 存或问；答应了才继续退出。
 const windowCloseGuard = new WorkbenchWindowCloseGuard(() => app.quit())
 const agentConsoleWindows = new WorkbenchAgentConsoleWindows()
@@ -197,7 +207,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     icon: WorkbenchApplicationIconPath,
     show: false,
     autoHideMenuBar: process.platform !== 'darwin',
-    backgroundColor: '#f7f7f7',
+    backgroundColor: workbenchWindowBackground(),
     title: getWorkbenchWindowTitle(hub.getState().currentProject?.name ?? null),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
@@ -221,7 +231,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
       minHeight: 320,
       icon: WorkbenchApplicationIconPath,
       autoHideMenuBar: true,
-      backgroundColor: '#f7f7f7',
+      backgroundColor: workbenchWindowBackground(),
     }
   )
   const consoleOwnerId = window.webContents.id
@@ -292,6 +302,11 @@ if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
     if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
     const dataRootDir = resolveWorkbenchDataRootDir()
+    nativeAppearance = new WorkbenchNativeAppearance({
+      file: join(dataRootDir, 'native-appearance.json'),
+      nativeTheme,
+      windows: () => BrowserWindow.getAllWindows(),
+    })
     const disposeBrowserPermissionPolicy = installWorkbenchBrowserDefaultPermissionPolicy(
       session.fromPartition(WorkbenchBrowserPartition),
       { isInteractiveGuest: (guest) => workbenchBrowserWebviewGate?.ownsGuest(guest) === true }
@@ -468,7 +483,7 @@ if (hasSingleInstanceLock)
           titleBarStyle: 'default',
           show: false,
           autoHideMenuBar: true,
-          backgroundColor: '#f7f7f7',
+          backgroundColor: workbenchWindowBackground(),
           icon: WorkbenchApplicationIconPath,
           title: 'VelarOS Workbench Settings',
           webPreferences: {
@@ -547,7 +562,10 @@ if (hasSingleInstanceLock)
       withLanguageSyncOnUserWrites(providers.chatRunAttribution, providers.language)
     )
     registerProjectHubIpc(windowManager, new WorkbenchProjectRegistry(dataRootDir))
-    registerWorkbenchWindowStateIpc()
+    registerWorkbenchWindowStateIpc(
+      nativeAppearance,
+      (sender) => !!windowManager?.getHubForWebContents(sender)
+    )
     registerWorkbenchWindowCloseIpc(windowCloseGuard)
     let shutdownStarted = false
     app.on('before-quit', (event) => {

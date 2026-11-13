@@ -107,7 +107,7 @@ void describe('Workbench window and chat chrome details', () => {
       main,
       /installWorkbenchEditorZoom\(window\)\n\s*installWorkbenchWindowState\(window\)/u
     )
-    assert.match(main, /registerWorkbenchWindowStateIpc\(\)/u)
+    assert.match(main, /registerWorkbenchWindowStateIpc\(\s*nativeAppearance,/u)
     assert.match(
       ipc,
       /ipcMain\.handle\(WorkbenchWindowStateChannels\.getState[\s\S]*BrowserWindow\.fromWebContents\(event\.sender\)/u
@@ -130,7 +130,7 @@ void describe('Workbench window and chat chrome details', () => {
     )
     assert.match(
       shellStyles,
-      /\[data-mac-title-inset='true'\] \.embeddedKernelRoot\[data-file-panel-open='false'\] \.editorTabBar \{\n\s*padding-left: calc\(76px - var\(--workbench-left-rail-width\)\);/u
+      /\[data-mac-title-inset='true'\]\s+\.embeddedKernelRoot\[data-file-panel-open='false'\]\s+\.editorTabBar \{\n\s*padding-left: calc\(76px - var\(--workbench-left-rail-width\)\);/u
     )
   })
 

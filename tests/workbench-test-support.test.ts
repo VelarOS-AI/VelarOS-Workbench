@@ -13,6 +13,7 @@ import {
   isWorkbenchTestDirectoryPath,
   isWorkbenchTestFilePath,
 } from '../src/renderer/src/models/files/workbenchTestFile'
+import { getWorkbenchColorTokens } from '../src/shared/workbenchAppearance'
 
 void describe('Workbench test affordances', () => {
   void test('recognizes conventional test files without coloring unrelated files in tests folders', () => {
@@ -42,14 +43,20 @@ void describe('Workbench test affordances', () => {
     )
 
     assert.match(shellStyles, /--workbench-git-untracked-fg:\s*var\(--status-amber\)/)
-    assert.match(shellStyles, /--workbench-test-fg:\s*var\(--status-violet\)/)
+    for (const theme of ['light-modern', 'dark-modern', 'warm-paper', 'midnight-blue'] as const) {
+      const colors = getWorkbenchColorTokens(theme, 'green')
+      assert.equal(colors['--workbench-test-fg'], colors['--status-orange'])
+      assert.equal(colors['--workbench-run-fg'], colors['--status-green'])
+      assert.notEqual(colors['--workbench-test-fg'], colors['--status-amber'])
+      assert.notEqual(colors['--workbench-run-fg'], colors['--workbench-test-fg'])
+    }
     assert.match(
       fileStyles,
       /data-test-directory='true'[\s\S]*color:\s*var\(--workbench-test-fg\)/
     )
     assert.match(
       fileStyles,
-      /\.treeTestFileBadge[\s\S]*color:\s*var\(--workbench-test-fg\)/
+      /\.treeTestFileBadge[\s\S]*color:\s*var\(--workbench-run-fg\)/
     )
   })
 

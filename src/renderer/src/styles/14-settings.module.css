@@ -1,13 +1,4 @@
 .workbenchSettingsDialog {
-  --primary: var(--workbench-theme-color);
-  --primary-rgb: var(--workbench-theme-color-rgb);
-  --primary-foreground: #ffffff;
-  --control-switch-checked: var(--workbench-theme-color);
-  --control-switch-checked-hover: color-mix(
-    in oklab,
-    var(--workbench-theme-color) 86%,
-    var(--workbench-text)
-  );
   display: grid;
 
   grid-template-rows: minmax(0, 1fr);
@@ -15,7 +6,7 @@
   /* This is a native window surface. Radix scroll locking changes body positioning. */
   height: 100dvh;
   overflow: hidden;
-  background: var(--workbench-surface);
+  background: var(--workbench-bg);
   color: var(--workbench-text);
 
   font-size: 13px;
@@ -625,7 +616,7 @@
 }
 .workbenchSettingsAccentChoice svg {
   position: absolute;
-  color: white;
+  color: var(--settings-swatch-foreground);
   pointer-events: none;
 }
 .workbenchSettingsResetRow {

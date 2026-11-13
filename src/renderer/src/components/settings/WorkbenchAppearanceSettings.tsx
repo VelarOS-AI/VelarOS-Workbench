@@ -22,6 +22,8 @@ import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 
+import { getWorkbenchColorTokens, getWorkbenchNativeAppearance } from '@shared/workbenchAppearance'
+
 import styles from '../../styles/workbenchPageStyles'
 import { ReadOnlyWorkbenchCode } from '../editor/ReadOnlyWorkbenchCode'
 
@@ -30,39 +32,31 @@ import { SettingRow, SettingsDisclosure } from './WorkbenchSettingsParts'
 const Themes: Array<{
   value: WorkbenchThemeId
   labelKey: string
-  color: string
-  foreground: string
 }> = [
   {
     value: 'light-modern',
     labelKey: 'settingsThemeLight',
-    color: '#f1f3f6',
-    foreground: '#64748b',
   },
-  { value: 'dark-modern', labelKey: 'settingsThemeDark', color: '#25282e', foreground: '#cbd5e1' },
+  { value: 'dark-modern', labelKey: 'settingsThemeDark' },
   {
     value: 'warm-paper',
     labelKey: 'settingsThemeWarmPaper',
-    color: '#f2e7d5',
-    foreground: '#a56a36',
   },
   {
     value: 'midnight-blue',
     labelKey: 'settingsThemeMidnightBlue',
-    color: '#101a2b',
-    foreground: '#82aaff',
   },
 ]
 
 const Accents: Array<{ value: WorkbenchAccent; labelKey: string; color: string }> = [
-  { value: 'blue', labelKey: 'settingsAccentBlue', color: '#2563eb' },
-  { value: 'violet', labelKey: 'settingsAccentViolet', color: '#8b5cf6' },
-  { value: 'rose', labelKey: 'settingsAccentRose', color: '#ec4899' },
-  { value: 'orange', labelKey: 'settingsAccentOrange', color: '#f97316' },
-  { value: 'amber', labelKey: 'settingsAccentAmber', color: '#d99a12' },
-  { value: 'green', labelKey: 'settingsAccentGreen', color: '#16a34a' },
-  { value: 'teal', labelKey: 'settingsAccentTeal', color: '#0d9488' },
-  { value: 'slate', labelKey: 'settingsAccentSlate', color: '#64748b' },
+  { value: 'blue', labelKey: 'settingsAccentBlue', color: 'var(--workbench-accent-blue)' },
+  { value: 'violet', labelKey: 'settingsAccentViolet', color: 'var(--workbench-accent-violet)' },
+  { value: 'rose', labelKey: 'settingsAccentRose', color: 'var(--workbench-accent-rose)' },
+  { value: 'orange', labelKey: 'settingsAccentOrange', color: 'var(--workbench-accent-orange)' },
+  { value: 'amber', labelKey: 'settingsAccentAmber', color: 'var(--workbench-accent-amber)' },
+  { value: 'green', labelKey: 'settingsAccentGreen', color: 'var(--workbench-accent-green)' },
+  { value: 'teal', labelKey: 'settingsAccentTeal', color: 'var(--workbench-accent-teal)' },
+  { value: 'slate', labelKey: 'settingsAccentSlate', color: 'var(--workbench-accent-slate)' },
 ]
 
 const PreviewCode = `import { Workbench } from './core/workbench'
@@ -79,12 +73,19 @@ export class VelarOSWorkbench extends Workbench {
 }`
 
 /** The preview uses the same read-only editor and theme as real files. */
-function WorkbenchThemePreview({ theme }: { theme: WorkbenchThemeId }): ReactElement {
+function WorkbenchThemePreview({
+  theme,
+  accent,
+}: {
+  theme: WorkbenchThemeId
+  accent: WorkbenchAccent
+}): ReactElement {
   const { t } = useWorkbenchI18n()
   return (
     <div
       className={styles.workbenchSettingsPreview}
       data-velar-theme-scope={theme}
+      style={getWorkbenchColorTokens(theme, accent) as CSSProperties}
       role="img"
       aria-label={t('workbench.settingsThemePreview')}
     >
@@ -95,13 +96,13 @@ function WorkbenchThemePreview({ theme }: { theme: WorkbenchThemeId }): ReactEle
       <div className={styles.workbenchSettingsPreviewBody} aria-hidden="true" inert>
         <div className={styles.workbenchSettingsPreviewFiles}>
           <div>
-            <FolderOpenIcon size={15} /> VelarOS
+            <FolderOpenIcon size={15} weight="fill" /> VelarOS
           </div>
           <div>
-            <FolderOpenIcon size={15} /> src
+            <FolderOpenIcon size={15} weight="fill" /> src
           </div>
           <div>
-            <FolderIcon size={15} /> core
+            <FolderIcon size={15} weight="fill" /> core
           </div>
           <div>
             <FileCodeIcon size={15} /> index.ts
@@ -176,7 +177,12 @@ export function WorkbenchAppearanceSettings({
                     />
                     <span
                       className={styles.workbenchSettingsThemeSample}
-                      style={{ background: theme.color, color: theme.foreground }}
+                      style={{
+                        background: getWorkbenchNativeAppearance(theme.value).backgroundColor,
+                        color: getWorkbenchColorTokens(theme.value, preferences.accent)[
+                          '--workbench-text-secondary'
+                        ],
+                      }}
                       aria-hidden="true"
                     >
                       <MonitorIcon size={22} />
@@ -192,7 +198,7 @@ export function WorkbenchAppearanceSettings({
               })}
             </div>
           </fieldset>
-          <WorkbenchThemePreview theme={preferences.theme} />
+          <WorkbenchThemePreview theme={preferences.theme} accent={preferences.accent} />
         </div>
       </SettingsDisclosure>
       <SettingsDisclosure
@@ -207,7 +213,12 @@ export function WorkbenchAppearanceSettings({
                 className={styles.workbenchSettingsAccentChoice}
                 data-active={preferences.accent === accent.value}
                 title={t(`workbench.${accent.labelKey}`)}
-                style={{ '--settings-swatch': accent.color } as CSSProperties}
+                style={
+                  {
+                    '--settings-swatch': accent.color,
+                    '--settings-swatch-foreground': `var(--workbench-accent-${accent.value}-contrast)`,
+                  } as CSSProperties
+                }
               >
                 <input
                   type="radio"

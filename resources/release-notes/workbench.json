@@ -3,6 +3,36 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.22",
+      "releasedAt": "2026-11-13",
+      "title": {
+        "zh": "统一主题配色与原生窗口外观",
+        "en": "Unified theme colors and native window appearance"
+      },
+      "added": {
+        "zh": [
+          "基于 Radix Colors 统一四个主题的语义配色，区分文字层级、强调色与状态色，明暗模式使用独立色阶。",
+          "集中派生悬停、选中、浮层与控件颜色，并验证文字和主要操作的对比度。"
+        ],
+        "en": [
+          "Unify all four themes with Radix Colors semantic palettes, separate text, accent and status roles, and use independent light and dark scales.",
+          "Derive hover, selection, floating-surface and control colors centrally and verify contrast for text and primary actions."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "优化暖纸与午夜蓝的背景层次，修复深色提示气泡、主题色选中标记和按钮悬停时的配色。",
+          "保留系统原生标题栏并同步窗口明暗外观，冷启动时恢复上次使用的主题。",
+          "文件夹改用实心图标，测试目录使用橙色，测试启动标记使用绿色，并改善忽略文件的文字可读性。"
+        ],
+        "en": [
+          "Refine Warm Paper and Midnight Blue surface hierarchy and fix dark tooltips, accent selection marks and primary-button hover colors.",
+          "Keep native system title bars, synchronize native light and dark appearance, and restore the last theme during cold startup.",
+          "Use filled folder icons, orange test directories and green test-run badges, and improve ignored-file text readability."
+        ]
+      }
+    },
+    {
       "version": "0.4.21",
       "releasedAt": "2026-11-13",
       "title": {

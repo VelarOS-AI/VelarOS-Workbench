@@ -93,3 +93,27 @@ body {
 .velar-select-content[data-state='closed'] {
   animation: none;
 }
+
+/* Shared Tooltip has a fixed white fill; portals must consume the same semantic
+ * palette as the app, including the arrow, rather than mixing white with dark ink. */
+.velar-tooltip-content,
+.velar-tooltip-bubble {
+  background: var(--workbench-tooltip-bg);
+  color: var(--workbench-tooltip-fg);
+  border-color: var(--workbench-tooltip-border);
+  box-shadow: var(--workbench-overlay-shadow);
+  border-radius: var(--ui-radius-control);
+}
+
+.velar-tooltip-arrow,
+.velar-tooltip-bubble-arrow {
+  fill: var(--workbench-tooltip-bg);
+}
+
+/* Shared default buttons lighten their fill on hover. Use the palette's
+ * contrast-checked solid states so the foreground stays readable in both modes. */
+.velar-button-variant-default {
+  --velar-button-base-background: var(--workbench-accent-solid);
+  --velar-button-hover-background: var(--workbench-accent-solid-hover);
+  color: var(--workbench-accent-contrast);
+}
