@@ -117,9 +117,12 @@ try {
   await expect(settings).toHaveAccessibleName('设置')
   await page.keyboard.press('Escape')
   await settings.hover()
+  await page.waitForTimeout(300)
   await expect(
     page.locator('[data-slot="tooltip-content"]').filter({ hasText: '设置' })
-  ).toBeVisible()
+  ).toHaveCount(0)
+  await expect(settings).not.toHaveAttribute('title', /.+/)
+  console.info('PASS Settings action has no hover bubble or native tooltip')
   for (const [kind, token] of [
     ['java', '--workbench-file-java'],
     ['python', '--workbench-file-python'],
