@@ -18,7 +18,8 @@ import {
 export interface WorkbenchLanguageServiceWorkerSchedulerOptions {
   dispatch: (
     request: WorkbenchLanguageServiceWorkerRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
+    yieldToInteractive: () => void
   ) => Promise<unknown>
   post: (
     message: WorkbenchLanguageServiceWorkerResponse | WorkbenchLanguageServiceWorkerPong
@@ -48,13 +49,14 @@ export class WorkbenchLanguageServiceWorkerScheduler {
     background: [],
   }
   private running: Nullable<RunningLanguageServiceRequest> = null
+  private readonly waitingForTools = new Map<number, RunningLanguageServiceRequest>()
   private draining = false
 
   public constructor(private readonly options: WorkbenchLanguageServiceWorkerSchedulerOptions) {}
 
   /** 正在处理请求（内存看守此时不动手）。 */
   public get busy(): boolean {
-    return this.draining
+    return this.draining || this.waitingForTools.size > 0
   }
 
   public receive(message: WorkbenchLanguageServiceWorkerMessage): void {
@@ -94,8 +96,9 @@ export class WorkbenchLanguageServiceWorkerScheduler {
       queue.splice(index, 1)
       return
     }
-    const running = this.running
-    if (running?.request.id !== message.id) return
+    const running =
+      this.running?.request.id === message.id ? this.running : this.waitingForTools.get(message.id)
+    if (!running) return
     running.cancelled = true
     running.controller.abort()
   }
@@ -104,7 +107,7 @@ export class WorkbenchLanguageServiceWorkerScheduler {
     return (
       this.queues.lifecycle.shift() ??
       this.queues.interactive.shift() ??
-      this.queues.background.shift()
+      (this.waitingForTools.size === 0 ? this.queues.background.shift() : undefined)
     )
   }
 
@@ -125,6 +128,30 @@ export class WorkbenchLanguageServiceWorkerScheduler {
       cancelled: false,
     }
     this.running = running
+    let release: () => void = () => undefined
+    const yielded = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const completed = this.execute(running, () => {
+      // The TypeScript phase is finished. Only the independent tools worker and
+      // its cleanup remain; keep one background tool run but let input through.
+      if (this.running !== running || request.operation !== 'getDiagnostics') return
+      this.waitingForTools.set(request.id, running)
+      release()
+    }).finally(() => {
+      this.waitingForTools.delete(request.id)
+      if (this.running === running) this.running = null
+      if (!this.draining) void this.drain()
+    })
+    await Promise.race([completed, yielded])
+    if (this.running === running) this.running = null
+  }
+
+  private async execute(
+    running: RunningLanguageServiceRequest,
+    yieldToInteractive: () => void
+  ): Promise<void> {
+    const { request } = running
     let response: WorkbenchLanguageServiceWorkerResponse
     try {
       // 排队时就被顶掉了（取消消息还没轮到处理，共享缓冲里已经有它）：不必再算。
@@ -132,7 +159,7 @@ export class WorkbenchLanguageServiceWorkerScheduler {
         throw new AppError('CANCELLED', workbenchMainText('language.requestCancelledPlain'))
       response = {
         id: request.id,
-        result: await this.options.dispatch(request, running.controller.signal),
+        result: await this.options.dispatch(request, running.controller.signal, yieldToInteractive),
       }
     } catch (error) {
       // 取消后抛出的任何东西（TypeScript 的取消异常、被中止的外部请求）都按取消答复。
@@ -148,8 +175,6 @@ export class WorkbenchLanguageServiceWorkerScheduler {
           : AppError.from(error)
         ).toJSON(),
       }
-    } finally {
-      this.running = null
     }
     this.options.post(response)
   }

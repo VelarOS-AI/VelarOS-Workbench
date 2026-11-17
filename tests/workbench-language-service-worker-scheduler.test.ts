@@ -49,7 +49,8 @@ const languagePathResolver = {
     return realpath(resolve(input))
   },
   assertAllowedProjectPath(projectRoot: string, absolutePath: string, inputPath: string): void {
-    if (!isInside(projectRoot, absolutePath)) throw new Error(`Language path escapes the project: ${inputPath}`)
+    if (!isInside(projectRoot, absolutePath))
+      throw new Error(`Language path escapes the project: ${inputPath}`)
   },
   isAllowedProjectPath(projectRoot: string, absolutePath: string): boolean {
     return isInside(projectRoot, absolutePath)
@@ -60,6 +61,82 @@ const languagePathResolver = {
 }
 
 void describe('language worker scheduler', () => {
+  void test('runs hover and navigation while diagnostics await tools without starting another background run', async () => {
+    const tools = deferred()
+    const started: number[] = []
+    const posted: Posted[] = []
+    const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
+      dispatch: async (request, _signal, yieldToInteractive) => {
+        started.push(request.id)
+        if (request.id === 1) {
+          yieldToInteractive()
+          await tools.promise
+        }
+        return request.id
+      },
+      post: (message) => posted.push(message),
+    })
+    scheduler.receive({
+      id: 1,
+      operation: 'getDiagnostics',
+      request: { projectRoot: '/p', path: 'a.ts' },
+    })
+    scheduler.receive({
+      id: 2,
+      operation: 'getDiagnostics',
+      request: { projectRoot: '/p', path: 'b.ts' },
+    })
+    scheduler.receive(positionRequest(3, 'getHover'))
+    scheduler.receive(positionRequest(4, 'getDefinition'))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    assert.deepEqual(started, [1, 3, 4])
+    assert.deepEqual(
+      posted.map((message) => message.id),
+      [3, 4]
+    )
+    assert.equal(scheduler.busy, true)
+    tools.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    assert.deepEqual(started, [1, 3, 4, 2])
+    assert.deepEqual(
+      posted.map((message) => message.id),
+      [3, 4, 1, 2]
+    )
+    assert.equal(scheduler.busy, false)
+  })
+
+  void test('cancels a yielded diagnostic without cancelling the interactive request', async () => {
+    const tools = deferred()
+    const hover = deferred()
+    const signals = new Map<number, AbortSignal>()
+    const posted: Posted[] = []
+    const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
+      dispatch: async (request, signal, yieldToInteractive) => {
+        signals.set(request.id, signal)
+        if (request.id === 1) {
+          yieldToInteractive()
+          await tools.promise
+        } else await hover.promise
+        return request.id
+      },
+      post: (message) => posted.push(message),
+    })
+    scheduler.receive({
+      id: 1,
+      operation: 'getDiagnostics',
+      request: { projectRoot: '/p', path: 'a.ts' },
+    })
+    scheduler.receive(positionRequest(2, 'getHover'))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    scheduler.receive({ control: 'cancel', id: 1 })
+    assert.equal(signals.get(1)?.aborted, true)
+    assert.equal(signals.get(2)?.aborted, false)
+    tools.resolve()
+    hover.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    assert.equal(scheduler.busy, false)
+  })
+
   void test('drops a cancelled request that is still queued and runs interactive work first', async () => {
     const started: string[] = []
     const gate = deferred()
@@ -73,8 +150,16 @@ void describe('language worker scheduler', () => {
       post: (message) => posted.push(message),
     })
 
-    scheduler.receive({ id: 1, operation: 'getDiagnostics', request: { projectRoot: '/p', path: 'a.ts' } })
-    scheduler.receive({ id: 2, operation: 'getDiagnostics', request: { projectRoot: '/p', path: 'b.ts' } })
+    scheduler.receive({
+      id: 1,
+      operation: 'getDiagnostics',
+      request: { projectRoot: '/p', path: 'a.ts' },
+    })
+    scheduler.receive({
+      id: 2,
+      operation: 'getDiagnostics',
+      request: { projectRoot: '/p', path: 'b.ts' },
+    })
     scheduler.receive(positionRequest(3, 'getCompletions'))
     scheduler.receive(positionRequest(4, 'getHover'))
     scheduler.receive({ control: 'cancel', id: 3 })
@@ -95,12 +180,13 @@ void describe('language worker scheduler', () => {
     const posted: Posted[] = []
     let aborted = false
     const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
-      dispatch: (_request, signal) => new Promise((_resolve, reject) => {
-        signal.addEventListener('abort', () => {
-          aborted = true
-          reject(new Error('aborted by signal'))
-        })
-      }),
+      dispatch: (_request, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            aborted = true
+            reject(new Error('aborted by signal'))
+          })
+        }),
       post: (message) => posted.push(message),
     })
 
@@ -117,17 +203,18 @@ void describe('language worker scheduler', () => {
   void test('reads cancellations from the shared buffer while the worker is busy', async () => {
     const buffer = new Int32Array(createWorkbenchLanguageServiceCancellationBuffer())
     const checks: boolean[] = []
-    const scheduler: WorkbenchLanguageServiceWorkerScheduler = new WorkbenchLanguageServiceWorkerScheduler({
-      dispatch: async (request) => {
-        checks.push(scheduler.isRunningRequestCancelled())
-        // 主进程在 worker 算到一半时写入取消：同步代码里也能读到。
-        markWorkbenchLanguageServiceRequestCancelled(buffer, request.id)
-        checks.push(scheduler.isRunningRequestCancelled())
-        return null
-      },
-      post: () => undefined,
-      cancellation: buffer,
-    })
+    const scheduler: WorkbenchLanguageServiceWorkerScheduler =
+      new WorkbenchLanguageServiceWorkerScheduler({
+        dispatch: async (request) => {
+          checks.push(scheduler.isRunningRequestCancelled())
+          // 主进程在 worker 算到一半时写入取消：同步代码里也能读到。
+          markWorkbenchLanguageServiceRequestCancelled(buffer, request.id)
+          checks.push(scheduler.isRunningRequestCancelled())
+          return null
+        },
+        post: () => undefined,
+        cancellation: buffer,
+      })
 
     scheduler.receive(positionRequest(11, 'getCompletions'))
     // 诊断、跳转定义这类请求从不中途放弃。
@@ -163,8 +250,16 @@ void describe('language worker scheduler', () => {
     configureTypeScriptCancellation(() => scheduler.isRunningRequestCancelled())
 
     try {
-      scheduler.receive({ id: 21, operation: 'getSemanticTokens', request: { projectRoot, path: 'main.ts', content } })
-      scheduler.receive({ id: 22, operation: 'getDiagnostics', request: { projectRoot, path: 'main.ts', content } })
+      scheduler.receive({
+        id: 21,
+        operation: 'getSemanticTokens',
+        request: { projectRoot, path: 'main.ts', content },
+      })
+      scheduler.receive({
+        id: 22,
+        operation: 'getDiagnostics',
+        request: { projectRoot, path: 'main.ts', content },
+      })
       for (let attempt = 0; attempt < 200 && posted.length < 2; attempt += 1)
         await new Promise((settle) => setTimeout(settle, 10))
 

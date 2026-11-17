@@ -111,9 +111,9 @@ const cancellation =
     ? new Int32Array(workerData.cancellation)
     : undefined
 const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
-  dispatch: (request, signal) =>
+  dispatch: (request, signal, yieldToInteractive) =>
     projects.run(request.projectLease, () =>
-      projectTools.withRequest(request, () => dispatch(request, signal))
+      projectTools.withRequest(request, () => dispatch(request, signal), yieldToInteractive)
     ),
   post: (message) => port.postMessage(message),
   cancellation,
@@ -125,7 +125,12 @@ if (isWorkbenchAppLocale(workerData?.locale)) setWorkbenchMainLocale(workerData.
 
 port.on(
   'message',
-  (message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale | ProjectToolEndpointResponse) => {
+  (
+    message:
+      | WorkbenchLanguageServiceWorkerMessage
+      | WorkbenchLanguageServiceWorkerLocale
+      | ProjectToolEndpointResponse
+  ) => {
     if (projectTools.receive(message)) return
     if (isWorkbenchLanguageServiceWorkerLocale(message)) {
       if (isWorkbenchAppLocale(message.locale)) setWorkbenchMainLocale(message.locale)
@@ -197,7 +202,9 @@ memoryGuard.unref()
 port.on('close', () => {
   clearInterval(memoryGuard)
   projectTools.lose(new AppError('CLOSED', 'Language worker owner disconnected'))
-  void languageServices.dispose().catch((error: unknown) =>
-    Log.tag('WorkbenchLanguageService').warn('language_worker_close_failed', { error })
-  )
+  void languageServices
+    .dispose()
+    .catch((error: unknown) =>
+      Log.tag('WorkbenchLanguageService').warn('language_worker_close_failed', { error })
+    )
 })

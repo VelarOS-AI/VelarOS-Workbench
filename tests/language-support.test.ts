@@ -1422,7 +1422,7 @@ void describe('focused Workbench language surface', () => {
     )
     assert.match(
       hoverFeatures,
-      /const hoverRequest = getWorkbenchLanguageServiceHover[\s\S]{0,320}if \(!diagnosticRange\) \{\s*resolvedHover = await hoverRequest[\s\S]{0,220}if \(!diagnosticRange && !resolvedHover\) return null/u
+      /const hoverRequest = getWorkbenchLanguageServiceHover[\s\S]{0,420}const reply = await Promise\.race/u
     )
     // 诊断的修复另外问、回来再补按钮：不排在悬浮说明的请求前面等。
     assert.doesNotMatch(hoverFeatures, /await context\.codeActions/u)

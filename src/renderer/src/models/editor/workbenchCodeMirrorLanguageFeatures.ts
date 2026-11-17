@@ -61,6 +61,7 @@ export interface WorkbenchLanguageServiceEditorContext {
   hostRuntime?: WorkbenchHostRuntime
   hoverDefinitionLabel?: string
   hoverDefinitionPreviewLabel?: string
+  hoverLoadingLabel?: string
   /** 给了就在诊断浮层上列出修复按钮。 */
   codeActions?: WorkbenchEditorHoverCodeActions
 }
@@ -648,10 +649,20 @@ export function createWorkbenchLanguageServiceHoverTooltip(
         .then((result) => (result.ok ? result.data.hover : null))
         .catch(() => null)
       if (!diagnosticRange) {
-        resolvedHover = await hoverRequest
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const reply = await Promise.race([
+          hoverRequest.then((hover) => ({ ready: true as const, hover })),
+          new Promise<{ ready: false }>((resolve) => {
+            timer = setTimeout(() => resolve({ ready: false }), 120)
+          }),
+        ])
+        if (timer) clearTimeout(timer)
         if (generation !== requestGeneration || view.state.doc !== sourceDocument) return null
+        if (reply.ready) {
+          resolvedHover = reply.hover
+          if (!resolvedHover) return null
+        }
       }
-      if (!diagnosticRange && !resolvedHover) return null
 
       return {
         pos: diagnosticRange?.from ?? tokenRange.from,
@@ -672,6 +683,13 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             classes
           )
           if (resolvedHover?.definitionPreview) dom.dataset.hasDefinitionPreview = 'true'
+          if (!diagnosticRange && !resolvedHover) {
+            const loading = document.createElement('div')
+            loading.className = classes.editorSymbolTooltipDocsParagraph
+            loading.setAttribute('role', 'status')
+            loading.textContent = context.hoverLoadingLabel ?? 'Loading language information…'
+            dom.append(loading)
+          }
           let hoveredTypeTarget: Nullable<HTMLElement> = null
           let modifierTypeTarget: Nullable<HTMLElement> = null
           let modifierActive = false
@@ -763,15 +781,18 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           window.addEventListener('keydown', handleWindowKeyDown, true)
           window.addEventListener('keyup', handleWindowKeyUp, true)
           window.addEventListener('blur', handleWindowBlur)
-          if (diagnosticRange)
+          if (!resolvedHover)
             void hoverRequest.then((hover) => {
               if (
                 destroyed ||
-                !hover ||
                 generation !== requestGeneration ||
                 view.state.doc !== sourceDocument
               )
                 return
+              if (!hover && !diagnosticRange) {
+                view.dispatch({ effects: closeHoverTooltips })
+                return
+              }
               resolvedHover = hover
               scheduleResolvedHoverRender()
             })

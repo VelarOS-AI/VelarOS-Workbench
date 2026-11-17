@@ -36,7 +36,10 @@ export async function finishProjectToolRun<T>(
 
 /** 只做语言 worker 已登记请求的结构化 RPC；不创建线程，不本地加载项目工具。 */
 export class ProjectToolWorkerEndpoint implements ProjectToolRunner {
-  private readonly context = new AsyncLocalStorage<WorkbenchLanguageServiceWorkerRequest>()
+  private readonly context = new AsyncLocalStorage<{
+    request: WorkbenchLanguageServiceWorkerRequest
+    yieldToInteractive?: () => void
+  }>()
   private readonly pending = new Map<
     number,
     { resolve(value: ProjectToolEndpointResponse['result']): void; reject(error: Error): void }
@@ -47,8 +50,12 @@ export class ProjectToolWorkerEndpoint implements ProjectToolRunner {
 
   public constructor(private readonly post: (message: ProjectToolEndpointRequest) => void) {}
 
-  public withRequest<T>(request: WorkbenchLanguageServiceWorkerRequest, body: () => T): T {
-    return this.context.run(request, body)
+  public withRequest<T>(
+    request: WorkbenchLanguageServiceWorkerRequest,
+    body: () => T,
+    yieldToInteractive?: () => void
+  ): T {
+    return this.context.run({ request, yieldToInteractive }, body)
   }
 
   public async run<T>(
@@ -58,7 +65,8 @@ export class ProjectToolWorkerEndpoint implements ProjectToolRunner {
   ): Promise<T> {
     if (this.failure) throw this.failure
     if (this.closing) throw new AppError('CLOSED', 'Project tool endpoint is closed')
-    const request = this.context.getStore()
+    const context = this.context.getStore()
+    const request = context?.request
     if (
       !request ||
       request.operation !== operation ||
@@ -72,6 +80,7 @@ export class ProjectToolWorkerEndpoint implements ProjectToolRunner {
       input: ProjectToolOperationMap[TOperation]['input']
     ): Promise<ProjectToolOperationMap[TOperation]['result']> => {
       used = true
+      if (request.operation === 'getDiagnostics' && tool === 'lint') context?.yieldToInteractive?.()
       return this.send({
         control: 'project-tools',
         id: this.nextCall++,
@@ -147,7 +156,7 @@ export class ProjectToolWorkerEndpoint implements ProjectToolRunner {
         control: 'project-tools',
         id: this.nextCall++,
         action: 'close',
-        requestId: this.context.getStore()?.id,
+        requestId: this.context.getStore()?.request.id,
       }).then(() => undefined)
     return this.closing
   }

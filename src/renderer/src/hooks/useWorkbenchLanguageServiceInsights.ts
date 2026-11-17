@@ -147,59 +147,64 @@ export function useWorkbenchLanguageServiceInsights({
     )
     const request = async (paths: readonly string[]): Promise<void> => {
       if (disposed || contextRef.current.projectRoot !== root || isEmpty(paths)) return
-      const results = new Map<string, readonly WorkbenchLanguageServiceDiagnostic[]>()
       let failureMessage: Nullable<string> = null
+      // Submit one file at a time. A large set of restored tabs must not spend
+      // every request's timeout budget waiting for earlier ESLint workers.
+      for (const path of paths) {
+        if (disposed || contextRef.current.projectRoot !== root) return
+        const result = await getWorkbenchLanguageServiceDiagnostics(
+          {
+            ...buildWorkbenchLanguageServiceRequestBase({
+              projectRoot: root,
+              path,
+              language: fileLanguage(path),
+              content: contentByPath.get(path) ?? '',
+              openTabs: openTabsWithLiveContent,
+            }),
+          },
+          hostRuntime
+        )
 
-      await Promise.all(
-        paths.map(async (path) => {
-          const result = await getWorkbenchLanguageServiceDiagnostics(
-            {
-              ...buildWorkbenchLanguageServiceRequestBase({
-                projectRoot: root,
-                path,
-                language: fileLanguage(path),
-                content: contentByPath.get(path) ?? '',
-                openTabs: openTabsWithLiveContent,
-              }),
-            },
-            hostRuntime
+        if (disposed || contextRef.current.projectRoot !== root) return
+        if (!result.ok && result.error.code !== 'CANCELLED') {
+          failureMessage ??= result.error.message
+        }
+        if (result.ok) {
+          const diagnostics = result.data.diagnostics.filter(
+            (diagnostic) => diagnostic.path === path
           )
-
-          if (!result.ok) {
-            failureMessage ??= result.error.message
-            return
-          }
-          results.set(
-            path,
-            result.data.diagnostics.filter((diagnostic) => diagnostic.path === path)
-          )
-        })
-      )
-
-      if (disposed || contextRef.current.projectRoot !== root) return
-      const errorKey = failureMessage ? `${root}\0${failureMessage}` : null
-      if (failureMessage && announcedErrorRef.current !== errorKey) {
-        messageLatest.current.error({
-          title: tLatest.current('workbench.languageServiceDiagnosticsFailed'),
-          description: failureMessage,
-        })
+          setDiagnosticsByPath((current) => {
+            const next = new Map([...current].filter(([file]) => contentByPath.has(file)))
+            next.set(path, diagnostics)
+            return next
+          })
+        }
+        const errorKey = failureMessage ? `${root}\0${failureMessage}` : null
+        if (failureMessage && announcedErrorRef.current !== errorKey) {
+          messageLatest.current.error({
+            title: tLatest.current('workbench.languageServiceDiagnosticsFailed'),
+            description: failureMessage,
+          })
+        }
+        if (errorKey) announcedErrorRef.current = errorKey
+        const remaining = new Set(
+          [...pendingPathsRef.current].filter((pending) => pending !== path)
+        )
+        pendingPathsRef.current = remaining
+        setDiagnosticsPendingPaths(remaining)
       }
-      announcedErrorRef.current = errorKey
-      setDiagnosticsByPath((current) => {
-        const next = new Map<string, readonly WorkbenchLanguageServiceDiagnostic[]>()
-        for (const [path, diagnostics] of current)
-          if (contentByPath.has(path)) next.set(path, diagnostics)
-        for (const [path, diagnostics] of results) next.set(path, diagnostics)
-        return next
-      })
-      const remaining = new Set(
-        [...pendingPathsRef.current].filter((path) => !paths.includes(path))
-      )
-      pendingPathsRef.current = remaining
-      setDiagnosticsPendingPaths(remaining)
+      if (!failureMessage) announcedErrorRef.current = null
     }
 
-    const promptTimer = setTimeout(() => void request([...promptPaths]), DIAGNOSTIC_DEBOUNCE_MS)
+    const promptTimer = setTimeout(
+      () =>
+        void request(
+          [...promptPaths].sort(
+            (left, right) => Number(right === activePath) - Number(left === activePath)
+          )
+        ),
+      DIAGNOSTIC_DEBOUNCE_MS
+    )
     const siblingTimer = isEmpty(siblingPaths)
       ? null
       : setTimeout(() => void request(siblingPaths), SIBLING_DIAGNOSTIC_DEBOUNCE_MS)

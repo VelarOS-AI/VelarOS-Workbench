@@ -3,6 +3,34 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.25",
+      "releasedAt": "2026-11-17",
+      "title": {
+        "zh": "修复大项目悬浮、跳转和补全的等待问题",
+        "en": "Fix large-project hover, navigation and completion stalls"
+      },
+      "added": {
+        "zh": ["首次符号分析较慢时显示悬浮加载状态，结果就绪后自动更新说明。"],
+        "en": [
+          "Show a hover loading state during slow initial symbol analysis and replace it when the result is ready."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "后台代码检查等待独立 ESLint 线程时让出交互队列，避免悬浮、补全和定义跳转被检查任务阻塞。",
+          "打开多个标签时优先检查当前文件，按文件提交并逐个显示诊断结果，减少排队造成的超时提示。",
+          "定义跳转不再自动启动结果已无用的全项目引用扫描，减少跳转后的交互阻塞。",
+          "补全列表显示后立即接收上下键和回车，并增加 console 前缀补全、接受候选及切换窗口后悬浮的原生回归验证。"
+        ],
+        "en": [
+          "Let interactive requests proceed while background diagnostics await the independent ESLint worker, preventing hover, completion and definition navigation from stalling behind code checks.",
+          "Check the active tab first, submit restored tabs sequentially and publish diagnostics per file to reduce queue-related timeout notifications.",
+          "Do not launch an unused project-wide reference scan after navigating to a definition, avoiding stalls after a jump.",
+          "Accept completion navigation and Enter immediately and extend native regressions for console prefixes, accepting candidates and hover after window focus returns."
+        ]
+      }
+    },
+    {
       "version": "0.4.24",
       "releasedAt": "2026-11-14",
       "title": {

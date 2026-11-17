@@ -546,6 +546,7 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
     icons: true,
     defaultKeymap: true,
     selectOnOpen: true,
+    interactionDelay: 0,
     optionClass: workbenchCompletionOptionClass,
     addToOptions: workbenchCompletionAddToOptions,
   }),
@@ -1714,6 +1715,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         hostRuntime,
         hoverDefinitionLabel: t('workbench.editorHoverDefinition'),
         hoverDefinitionPreviewLabel: t('workbench.editorHoverDefinitionPreview'),
+        hoverLoadingLabel: t('workbench.editorHoverLoading'),
         codeActions: codeActions.hover,
       }),
       [codeActions.hover, hostRuntime, language, openTabsLatest, path, projectRoot, t]
@@ -2009,38 +2011,39 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             if (!isDefinition)
               callbacksRef.current.onGoToDefinition(location.path, location.line, location.column)
 
-            // Definition navigation must not wait for a project-wide reference scan. Fill the
-            // panel in after the jump/open has happened, while rejecting results for an edited,
-            // replaced, or superseded source document.
-            void getWorkbenchLanguageServiceReferences(request, hostRuntime)
-              .then((referencesResult) => {
-                if (
-                  !referencesResult.ok ||
-                  requestGeneration !== definitionRequestGenerationRef.current ||
-                  viewRef.current !== view ||
-                  view.state.doc !== sourceDocument ||
-                  pathRef.current !== currentPath
-                )
-                  return
-                callbacksRef.current.onOpenSymbolLocations?.(
-                  buildWorkbenchSymbolLocationsRequest({
-                    symbol: identifier.text,
-                    origin,
-                    destination: optionalWhen(!isDefinition, location),
-                    definitions,
-                    references: referencesResult.data.locations,
-                  })
-                )
-              })
-              .catch((error) => {
-                if (requestGeneration !== definitionRequestGenerationRef.current) return
-                log.debug('查询语言服务引用失败，保留定义跳转结果', {
-                  projectRoot,
-                  path: currentPath,
-                  language,
-                  error,
+            // A real jump must not launch a project-wide reference scan whose result
+            // is discarded as soon as the source tab changes. Only clicking the
+            // definition itself opens its usages; explicit Find References is separate.
+            if (isDefinition)
+              void getWorkbenchLanguageServiceReferences(request, hostRuntime)
+                .then((referencesResult) => {
+                  if (
+                    !referencesResult.ok ||
+                    requestGeneration !== definitionRequestGenerationRef.current ||
+                    viewRef.current !== view ||
+                    view.state.doc !== sourceDocument ||
+                    pathRef.current !== currentPath
+                  )
+                    return
+                  callbacksRef.current.onOpenSymbolLocations?.(
+                    buildWorkbenchSymbolLocationsRequest({
+                      symbol: identifier.text,
+                      origin,
+                      destination: optionalWhen(!isDefinition, location),
+                      definitions,
+                      references: referencesResult.data.locations,
+                    })
+                  )
                 })
-              })
+                .catch((error) => {
+                  if (requestGeneration !== definitionRequestGenerationRef.current) return
+                  log.debug('查询语言服务引用失败，保留定义跳转结果', {
+                    projectRoot,
+                    path: currentPath,
+                    language,
+                    error,
+                  })
+                })
             return
           }
         } catch (error) {

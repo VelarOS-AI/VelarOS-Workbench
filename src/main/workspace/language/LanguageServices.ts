@@ -897,11 +897,17 @@ class WorkbenchLanguageServices {
       }
 
     const snapshot = await this.createTypeScriptProjectSnapshot(request)
+    // Materialize ranges before yielding to the independent ESLint worker. A
+    // newer hover/completion can then update the shared TypeScript overlays.
     const diagnostics = [
       ...snapshot.service.getSyntacticDiagnostics(snapshot.requestAbsolutePath),
       ...snapshot.service.getSemanticDiagnostics(snapshot.requestAbsolutePath),
       ...snapshot.service.getSuggestionDiagnostics(snapshot.requestAbsolutePath),
     ]
+      .map((diagnostic) => this.diagnosticFromTypeScript(snapshot, diagnostic))
+      .filter((diagnostic): diagnostic is WorkbenchLanguageServiceDiagnostic =>
+        isPresent(diagnostic)
+      )
     const eslintDiagnostics = await tools.lint({
       projectRoot: snapshot.projectRoot,
       absolutePath: snapshot.requestAbsolutePath,
@@ -912,14 +918,7 @@ class WorkbenchLanguageServices {
     return {
       projectRoot: snapshot.projectRoot,
       path: snapshot.requestPath,
-      diagnostics: [
-        ...diagnostics
-          .map((diagnostic) => this.diagnosticFromTypeScript(snapshot, diagnostic))
-          .filter((diagnostic): diagnostic is WorkbenchLanguageServiceDiagnostic =>
-            isPresent(diagnostic)
-          ),
-        ...eslintDiagnostics,
-      ],
+      diagnostics: [...diagnostics, ...eslintDiagnostics],
     }
   }
 
