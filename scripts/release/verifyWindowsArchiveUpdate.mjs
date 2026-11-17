@@ -20,6 +20,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { pathToFileURL } from 'node:url'
 
 import { build } from 'esbuild'
 import yaml from 'js-yaml'
@@ -141,6 +142,13 @@ try {
     bundle: true,
     platform: 'node',
     format: 'cjs',
+    // The production entry is ESM. Give this CommonJS fixture its real module URL
+    // so the updater can resolve Electron's original-fs through createRequire.
+    define: {
+      'import.meta.url': JSON.stringify(
+        pathToFileURL(join(installed, 'resources/app.asar/updater.cjs')).href
+      ),
+    },
     external: ['electron'],
   })
   await rm(join(installed, 'resources/app.asar'))
