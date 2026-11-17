@@ -5,7 +5,11 @@ import { Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
-import type { WorkbenchUpdateChannel, WorkbenchUpdateState } from '../../shared/workbenchUpdate'
+import type {
+  WorkbenchUpdateChannel,
+  WorkbenchUpdatePreparationProgress,
+  WorkbenchUpdateState,
+} from '../../shared/workbenchUpdate'
 
 import { WorkbenchReleaseFeedServer } from './WorkbenchReleaseFeedServer'
 import type {
@@ -15,6 +19,7 @@ import type {
 } from './WorkbenchReleaseSource'
 import { validateWorkbenchReleaseCatalog } from './WorkbenchReleaseSource'
 import type { WorkbenchUpdateDownloadCache } from './WorkbenchUpdateDownloadCache'
+import { WorkbenchUpdatePolling } from './WorkbenchUpdatePolling'
 import type { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 
 interface WorkbenchUpdateServiceOptions {
@@ -27,6 +32,9 @@ interface WorkbenchUpdateServiceOptions {
 
 interface WorkbenchUpdateInstaller extends AppUpdater {
   cancelPreparedUpdate?(): Promise<void>
+  subscribePreparationProgress?(
+    listener: (progress: WorkbenchUpdatePreparationProgress) => void
+  ): () => void
 }
 
 type WorkbenchUpdateListener = (state: WorkbenchUpdateState) => void
@@ -66,6 +74,13 @@ export class WorkbenchUpdateService {
   #updaterPromise: Promise<AppUpdater> | null = null
   #disposed = false
   #disposePromise: Nullable<Promise<void>> = null
+  #removePreparationListener?: () => void
+  readonly #polling = new WorkbenchUpdatePolling(
+    async () => {
+      await this.checkForUpdates()
+    },
+    (error) => this.#log.caught('automatic update check failed; will retry', error)
+  )
 
   public constructor(
     private readonly releases: WorkbenchReleaseSource,
@@ -104,6 +119,9 @@ export class WorkbenchUpdateService {
     updater.on('update-available', this.#handleAvailable)
     updater.on('update-not-available', this.#handleNotAvailable)
     updater.on('download-progress', this.#handleProgress)
+    this.#removePreparationListener = (
+      updater as WorkbenchUpdateInstaller
+    ).subscribePreparationProgress?.(this.#handlePreparationProgress)
     updater.on('update-downloaded', this.#handleDownloaded)
     updater.on('update-cancelled', this.#handleCancelled)
     updater.on('error', this.#handleError)
@@ -147,9 +165,11 @@ export class WorkbenchUpdateService {
 
   public start(): void {
     if (!this.#isPackaged || !expectedFiles(this.#platform)) return
-    void this.checkForUpdates().catch((error) => {
-      this.#log.caught('startup update check failed', error)
-    })
+    this.#polling.start()
+  }
+
+  public wake(): void {
+    this.#polling.wake()
   }
 
   public checkForUpdates(): Promise<WorkbenchUpdateState> {
@@ -355,7 +375,10 @@ export class WorkbenchUpdateService {
     if (this.#disposed) return Promise.reject(new Error('Workbench update service is disposed.'))
     const operation = this.#channelChangeTail.then(() => this.#changeChannel(channel))
     // 调用者保留本次原错误；队尾只负责让后续通道选择继续进入。
-    this.#channelChangeTail = operation.then(() => undefined, () => undefined)
+    this.#channelChangeTail = operation.then(
+      () => undefined,
+      () => undefined
+    )
     return operation
   }
 
@@ -400,6 +423,7 @@ export class WorkbenchUpdateService {
   public dispose(): Promise<void> {
     if (this.#disposePromise) return this.#disposePromise
     this.#disposed = true
+    this.#polling.dispose()
     const channelChanges = this.#channelChangeTail
     this.#disposePromise = Promise.resolve().then(async () => {
       // 先撤当前 feed，不能让队中的检查等它，而关闭又只等队尾。
@@ -415,11 +439,13 @@ export class WorkbenchUpdateService {
       }
       if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
       this.#listeners.clear()
-      if (failures.length) throw new AggregateError(failures, 'Workbench update service did not close')
+      if (failures.length)
+        throw new AggregateError(failures, 'Workbench update service did not close')
     })
     this.#updater?.removeListener('update-available', this.#handleAvailable)
     this.#updater?.removeListener('update-not-available', this.#handleNotAvailable)
     this.#updater?.removeListener('download-progress', this.#handleProgress)
+    this.#removePreparationListener?.()
     this.#updater?.removeListener('update-downloaded', this.#handleDownloaded)
     this.#updater?.removeListener('update-cancelled', this.#handleCancelled)
     this.#downloadCancellation?.cancel()
@@ -549,6 +575,17 @@ export class WorkbenchUpdateService {
     )
       return
     this.#setState({ phase: 'downloaded', targetVersion: event.version, percent: 100 })
+  }
+
+  readonly #handlePreparationProgress = (progress: WorkbenchUpdatePreparationProgress): void => {
+    if (this.#disposed || !this.#downloadPromise || this.#downloadController?.signal.aborted) return
+    this.#setState({
+      ...this.#downloadSnapshot(),
+      phase: progress.phase,
+      percent: Math.max(0, Math.min(100, progress.percent)),
+      preparationStep: progress.step,
+      bytesPerSecond: 0,
+    })
   }
 
   readonly #handleCancelled = (): void => {

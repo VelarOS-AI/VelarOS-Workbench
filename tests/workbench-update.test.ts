@@ -21,7 +21,9 @@ import { WorkbenchUpdateChannels } from '../src/shared/workbenchUpdate'
 const temporaryRoots: string[] = []
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })))
+  await Promise.all(
+    temporaryRoots.splice(0).map((path) => rm(path, { recursive: true, force: true }))
+  )
 })
 
 class FakeUpdater extends EventEmitter {
@@ -118,23 +120,37 @@ describe('Workbench update preferences startup', () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>()
     let initializationCalls = 0
     const application = Object.assign(new EventEmitter(), {
-      getPath: (name: string) => { expect(name).toBe('userData'); return root },
-      getLocale: () => { initializationCalls += 1; throw new Error('Update initialization must not start') },
+      getPath: (name: string) => {
+        expect(name).toBe('userData')
+        return root
+      },
+      getLocale: () => {
+        initializationCalls += 1
+        throw new Error('Update initialization must not start')
+      },
     })
     mock.module('electron', () => ({
       ipcMain: {
-        handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler),
+        handle: (channel: string, handler: (...args: unknown[]) => unknown) =>
+          handlers.set(channel, handler),
         removeHandler: (channel: string) => handlers.delete(channel),
       },
       app: application,
-      BrowserWindow: { getAllWindows: () => { throw new Error('No update state may be broadcast') } },
+      powerMonitor: new EventEmitter(),
+      BrowserWindow: {
+        getAllWindows: () => {
+          throw new Error('No update state may be broadcast')
+        },
+      },
     }))
-    const { installWorkbenchUpdateRuntime } = await import('../src/main/updates/WorkbenchUpdateRuntime')
-    const invoke = (channel: string, value?: unknown): Promise<unknown> => Promise.resolve().then(() => {
-      const handler = handlers.get(channel)
-      expect(handler).toBeDefined()
-      return handler!({}, value)
-    })
+    const { installWorkbenchUpdateRuntime } =
+      await import('../src/main/updates/WorkbenchUpdateRuntime')
+    const invoke = (channel: string, value?: unknown): Promise<unknown> =>
+      Promise.resolve().then(() => {
+        const handler = handlers.get(channel)
+        expect(handler).toBeDefined()
+        return handler!({}, value)
+      })
     const inspectUnavailable = async (): Promise<void> => {
       installWorkbenchUpdateRuntime()
       try {
@@ -357,16 +373,35 @@ describe('Workbench lazy update installer', () => {
     store.setAutomaticDownloads(false)
     return store
   }
-  const options = { currentVersion: '1.0.0', isPackaged: true, platform: 'darwin' as const, arch: 'arm64' }
+  const options = {
+    currentVersion: '1.0.0',
+    isPackaged: true,
+    platform: 'darwin' as const,
+    arch: 'arm64',
+  }
 
   test('current, empty and development release checks never load the platform installer', async () => {
     let loads = 0
     for (const scenario of ['current', 'empty', 'development'] as const) {
       const releases = releaseSource()
-      if (scenario === 'empty') releases.getCurrentRelease = async ({ channel }) => ({ baseUrl: 'https://updates.test', catalog: { product: 'workbench', channel, updatePolicy: 'optional', artifacts: [] } })
-      const service = new WorkbenchUpdateService(releases, async () => { loads++; return new FakeUpdater() as unknown as AppUpdater }, await preferences(), {
-        ...options, currentVersion: scenario === 'current' ? '1.1.0' : '1.0.0', isPackaged: scenario !== 'development',
-      })
+      if (scenario === 'empty')
+        releases.getCurrentRelease = async ({ channel }) => ({
+          baseUrl: 'https://updates.test',
+          catalog: { product: 'workbench', channel, updatePolicy: 'optional', artifacts: [] },
+        })
+      const service = new WorkbenchUpdateService(
+        releases,
+        async () => {
+          loads++
+          return new FakeUpdater() as unknown as AppUpdater
+        },
+        await preferences(),
+        {
+          ...options,
+          currentVersion: scenario === 'current' ? '1.1.0' : '1.0.0',
+          isPackaged: scenario !== 'development',
+        }
+      )
       expect((await service.checkForUpdates()).phase).toBe('idle')
       expect(loads).toBe(0)
       await service.dispose()
@@ -376,7 +411,15 @@ describe('Workbench lazy update installer', () => {
   test('concurrent real update checks share one installer and retain channel, events and disposal', async () => {
     let loads = 0
     const updater = new FakeUpdater()
-    const service = new WorkbenchUpdateService(releaseSource(), async () => { loads++; return updater as unknown as AppUpdater }, await preferences(), options)
+    const service = new WorkbenchUpdateService(
+      releaseSource(),
+      async () => {
+        loads++
+        return updater as unknown as AppUpdater
+      },
+      await preferences(),
+      options
+    )
     expect(loads).toBe(0)
     const first = service.checkForUpdates()
     expect(service.checkForUpdates()).toBe(first)
@@ -397,10 +440,15 @@ describe('Workbench lazy update installer', () => {
   test('failed installer loading can retry and disposal during loading never attaches listeners', async () => {
     let loads = 0
     const updater = new FakeUpdater()
-    const service = new WorkbenchUpdateService(releaseSource(), async () => {
-      if (++loads === 1) throw new Error('controlled loader failure')
-      return updater as unknown as AppUpdater
-    }, await preferences(), options)
+    const service = new WorkbenchUpdateService(
+      releaseSource(),
+      async () => {
+        if (++loads === 1) throw new Error('controlled loader failure')
+        return updater as unknown as AppUpdater
+      },
+      await preferences(),
+      options
+    )
     await expect(service.checkForUpdates()).rejects.toThrow('controlled loader failure')
     expect((await service.checkForUpdates()).phase).toBe('available')
     expect(loads).toBe(2)
@@ -408,10 +456,22 @@ describe('Workbench lazy update installer', () => {
 
     let release!: (updater: AppUpdater) => void
     let started!: () => void
-    const loading = new Promise<AppUpdater>((resolve) => { release = resolve })
-    const ready = new Promise<void>((resolve) => { started = resolve })
+    const loading = new Promise<AppUpdater>((resolve) => {
+      release = resolve
+    })
+    const ready = new Promise<void>((resolve) => {
+      started = resolve
+    })
     const other = new FakeUpdater()
-    const disposed = new WorkbenchUpdateService(releaseSource(), () => { started(); return loading }, await preferences(), options)
+    const disposed = new WorkbenchUpdateService(
+      releaseSource(),
+      () => {
+        started()
+        return loading
+      },
+      await preferences(),
+      options
+    )
     const check = disposed.checkForUpdates()
     await ready
     await disposed.dispose()

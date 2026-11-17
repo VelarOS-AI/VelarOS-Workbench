@@ -9,9 +9,14 @@ const extractZip = require('extract-zip')
 
 const manifestName = 'windows-update-manifest.json'
 
-async function digest(file, algorithm, encoding) {
+async function digest(file, algorithm, encoding, onProgress = () => {}) {
   const hash = createHash(algorithm)
-  for await (const bytes of createReadStream(file)) hash.update(bytes)
+  let transferred = 0
+  for await (const bytes of createReadStream(file)) {
+    hash.update(bytes)
+    transferred += bytes.length
+    onProgress(transferred)
+  }
   return hash.digest(encoding)
 }
 
@@ -113,22 +118,35 @@ async function readManifest(directory, job) {
   return manifest
 }
 
-async function inventory(directory, prefix = '') {
+async function inventory(directory, prefix = '', onProgress = () => {}) {
   const files = []
   for (const entry of await fs.readdir(path.join(directory, prefix), { withFileTypes: true })) {
     const name = prefix ? `${prefix}/${entry.name}` : entry.name
     if (entry.isSymbolicLink()) throw new Error(`Update contains a link: ${name}`)
-    if (entry.isDirectory()) files.push(...(await inventory(directory, name)))
-    else if (entry.isFile())
-      files.push([name, await digest(path.join(directory, name), 'sha256', 'hex')])
-    else throw new Error(`Update contains a special file: ${name}`)
+    if (entry.isDirectory()) files.push(...(await inventory(directory, name, onProgress)))
+    else if (entry.isFile()) {
+      files.push([name, await digest(path.join(directory, name), 'sha256', 'hex', onProgress)])
+      onProgress()
+    } else throw new Error(`Update contains a special file: ${name}`)
   }
   return files.sort(([a], [b]) => a.localeCompare(b))
 }
 
 async function prepare(job, helperDir) {
+  let lastProgress = 0
+  const report = (phase, percent, step, force = false) => {
+    if (!process.connected || (!force && Date.now() - lastProgress < 500)) return
+    lastProgress = Date.now()
+    process.send({ progress: { phase, percent, step } })
+  }
   await validateJob(job)
-  if ((await digest(job.archive, 'sha512', 'base64')) !== job.sha512)
+  const archiveSize = (await fs.stat(job.archive)).size
+  report('verifying', 0, undefined, true)
+  if (
+    (await digest(job.archive, 'sha512', 'base64', (bytes) =>
+      report('verifying', (bytes / archiveSize) * 100)
+    )) !== job.sha512
+  )
     throw new Error('Windows update checksum mismatch.')
   const workRoot = job.workRoot
   const stage = path.join(workRoot, 'next')
@@ -137,12 +155,16 @@ async function prepare(job, helperDir) {
     let expandedBytes = 0
     let count = 0
     const names = new Set()
+    report('preparing', 0, 'extracting', true)
+    let compressedBytes = 0
     await extractZip(job.archive, {
       dir: stage,
       onEntry(entry) {
         validateEntry(entry.fileName, entry.externalFileAttributes)
         expandedBytes += entry.uncompressedSize
         count += 1
+        compressedBytes += entry.compressedSize
+        report('preparing', Math.min(99, (compressedBytes / archiveSize) * 100), 'extracting')
         const name = entry.fileName.toLowerCase()
         if (
           expandedBytes > 8 * 1024 ** 3 ||
@@ -158,7 +180,12 @@ async function prepare(job, helperDir) {
     const incoming = await readManifest(stage, job)
     const installed = await readManifest(job.appDir, job)
     if (incoming.version !== job.version) throw new Error('Windows update version mismatch.')
-    const files = await inventory(stage)
+    report('preparing', 0, 'checking-files', true)
+    let checked = 0
+    const files = await inventory(stage, '', (bytes) => {
+      if (bytes === undefined) checked += 1
+      report('preparing', Math.min(99, (checked / Math.max(1, count)) * 100), 'checking-files')
+    })
     const prepared = {
       jobId: job.jobId,
       workRoot,
@@ -166,12 +193,16 @@ async function prepare(job, helperDir) {
       managedEntries: [...new Set([...incoming.entries, ...installed.entries])],
     }
     await fs.writeFile(path.join(helperDir, 'prepared.json'), JSON.stringify(prepared))
+    report('preparing', 100, 'checking-files', true)
     return prepared
   } catch (error) {
     try {
       await fs.rm(stage, { recursive: true, force: true })
     } catch (cleanupError) {
-      throw new AggregateError([error, cleanupError], `${error.message}; staging cleanup failed: ${cleanupError.message}`)
+      throw new AggregateError(
+        [error, cleanupError],
+        `${error.message}; staging cleanup failed: ${cleanupError.message}`
+      )
     }
     throw error
   }
@@ -229,7 +260,10 @@ async function replaceApplication(job, prepared, rename = fs.rename) {
     try {
       await retry(() => fs.rename(backup, job.appDir))
     } catch (rollbackError) {
-      const failure = new AggregateError([error, rollbackError], `${error.message}; rollback failed: ${rollbackError.message}`)
+      const failure = new AggregateError(
+        [error, rollbackError],
+        `${error.message}; rollback failed: ${rollbackError.message}`
+      )
       failure.rollbackFailed = true
       throw failure
     }
@@ -365,8 +399,18 @@ async function startCompletionObserver(job) {
   await fs.writeFile(scriptPath, completionScript)
   const observer = spawn(
     path.join(process.env.SystemRoot, 'System32', 'conhost.exe'),
-    ['--headless', path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-      '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+    [
+      '--headless',
+      path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      scriptPath,
+    ],
     {
       cwd: job.userDataDir,
       detached: true,
@@ -381,10 +425,12 @@ async function startCompletionObserver(job) {
     }
   )
   let didClose = false
-  const closed = new Promise((resolve) => observer.once('close', (code) => {
-    didClose = true
-    resolve(code)
-  }))
+  const closed = new Promise((resolve) =>
+    observer.once('close', (code) => {
+      didClose = true
+      resolve(code)
+    })
+  )
   const processFailed = new Promise((_resolve, reject) => {
     observer.once('error', reject)
   })
@@ -396,7 +442,11 @@ async function startCompletionObserver(job) {
       if (error.code === 'ENOENT') return null
       throw error
     }
-    if (failure.jobId !== job.jobId || failure.workerPid !== process.pid || typeof failure.error !== 'string')
+    if (
+      failure.jobId !== job.jobId ||
+      failure.workerPid !== process.pid ||
+      typeof failure.error !== 'string'
+    )
       throw new Error('Windows update observer diagnostic does not own its task.')
     return new Error(`Windows update observer failed (${failure.phase}): ${failure.error}`)
   }
@@ -407,12 +457,16 @@ async function startCompletionObserver(job) {
       const failure = await readFailure()
       if (failure) throw failure
       try {
-        const receipt = JSON.parse(await fs.readFile(readyPath, { encoding: 'utf8', signal: controller.signal }))
+        const receipt = JSON.parse(
+          await fs.readFile(readyPath, { encoding: 'utf8', signal: controller.signal })
+        )
         if (receipt.jobId !== job.jobId || receipt.workerPid !== process.pid)
           throw new Error('Windows update observer readiness does not own its task.')
         if (didClose || observer.exitCode !== null || observer.signalCode !== null) {
           const failure = await readFailure()
-          throw failure ?? new Error('Windows update observer exited before readiness was accepted.')
+          throw (
+            failure ?? new Error('Windows update observer exited before readiness was accepted.')
+          )
         }
         return
       } catch (error) {
@@ -428,10 +482,18 @@ async function startCompletionObserver(job) {
       processFailed,
       closed.then(async (code) => {
         const failure = await readFailure()
-        throw failure ?? new Error(`Windows update completion observer did not become ready (${code}); diagnostic: ${errorPath}`)
+        throw (
+          failure ??
+          new Error(
+            `Windows update completion observer did not become ready (${code}); diagnostic: ${errorPath}`
+          )
+        )
       }),
       new Promise((_resolve, reject) => {
-        deadline = setTimeout(() => reject(new Error('Windows update completion observer startup timed out.')), 30_000)
+        deadline = setTimeout(
+          () => reject(new Error('Windows update completion observer startup timed out.')),
+          30_000
+        )
       }),
     ])
   } catch (error) {
@@ -449,7 +511,10 @@ async function startCompletionObserver(job) {
       observer.ref()
       if (observer.exitCode === null && observer.signalCode === null) {
         const temporaryPath = `${stopPath}.tmp`
-        await fs.writeFile(temporaryPath, JSON.stringify({ jobId: job.jobId, workerPid: process.pid }))
+        await fs.writeFile(
+          temporaryPath,
+          JSON.stringify({ jobId: job.jobId, workerPid: process.pid })
+        )
         await fs.rename(temporaryPath, stopPath)
       }
       const code = await closed
@@ -457,7 +522,11 @@ async function startCompletionObserver(job) {
       if (failure || code !== 0)
         throw failure ?? new Error(`Windows update observer stop failed (${code}).`)
       const receipt = JSON.parse(await fs.readFile(stoppedPath, 'utf8'))
-      if (receipt.jobId !== job.jobId || receipt.workerPid !== process.pid || receipt.stopped !== true)
+      if (
+        receipt.jobId !== job.jobId ||
+        receipt.workerPid !== process.pid ||
+        receipt.stopped !== true
+      )
         throw new Error('Windows update observer stop receipt does not own its task.')
     },
   }
@@ -497,16 +566,25 @@ async function run(command, helperDir) {
     // 可以等待任意长的使用时间；父进程退出后才进入有超时的文件释放等待。
     await Promise.race([
       disconnected,
-      observer.closed.then(() => { throw new Error('Windows update completion observer stopped before installation.') }),
+      observer.closed.then(() => {
+        throw new Error('Windows update completion observer stopped before installation.')
+      }),
     ])
     if (cancelled) {
       await observer.stop()
       return
     }
     if (!install) {
-      await fs.writeFile(path.join(helperDir, 'terminal.json'), JSON.stringify({
-        jobId: job.jobId, success: false, cancelled: true, error: '', restartAllowed: false,
-      }))
+      await fs.writeFile(
+        path.join(helperDir, 'terminal.json'),
+        JSON.stringify({
+          jobId: job.jobId,
+          success: false,
+          cancelled: true,
+          error: '',
+          restartAllowed: false,
+        })
+      )
       return
     }
   } else {
@@ -530,21 +608,32 @@ async function run(command, helperDir) {
         await retry(() => fs.rename(job.appDir, path.join(prepared.workRoot, 'failed')))
         await retry(() => fs.rename(backup, job.appDir))
       } catch (rollbackError) {
-        failure = new AggregateError([error, rollbackError], `${error.message}; rollback failed: ${rollbackError.message}`)
+        failure = new AggregateError(
+          [error, rollbackError],
+          `${error.message}; rollback failed: ${rollbackError.message}`
+        )
         failure.rollbackFailed = true
       }
     }
     terminal = {
-      success: false, cancelled: false, error: failure.message,
+      success: false,
+      cancelled: false,
+      error: failure.message,
       restartAllowed: exited && !failure.rollbackFailed,
     }
   }
   try {
     await fs.writeFile(path.join(helperDir, 'job.json'), JSON.stringify(job))
-    await fs.writeFile(path.join(helperDir, 'terminal.json'), JSON.stringify({ jobId: job.jobId, ...terminal }))
+    await fs.writeFile(
+      path.join(helperDir, 'terminal.json'),
+      JSON.stringify({ jobId: job.jobId, ...terminal })
+    )
   } catch (recordError) {
     if (failure)
-      throw new AggregateError([failure, recordError], `${failure.message}; completion recording failed: ${recordError.message}`)
+      throw new AggregateError(
+        [failure, recordError],
+        `${failure.message}; completion recording failed: ${recordError.message}`
+      )
     throw recordError
   }
   if (failure) throw failure

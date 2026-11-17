@@ -11,7 +11,6 @@ import {
   ArrowCounterClockwiseIcon,
   ArrowSquareOutIcon,
   CodeIcon,
-  DownloadSimpleIcon,
   FileTextIcon,
   GearSixIcon,
   MonitorIcon,
@@ -102,6 +101,7 @@ import {
   SettingsSlider,
   WorkbenchSettingsPill,
 } from './WorkbenchSettingsParts'
+import { WorkbenchSettingsUpdateAction } from './WorkbenchSettingsUpdateAction'
 
 type WorkbenchSettingsSectionId = 'appearance' | 'editor' | 'ai' | 'system' | 'account'
 
@@ -138,6 +138,8 @@ function SettingsSubsection({
   children,
   defaultOpen = true,
   inline = false,
+  badge,
+  headerAction,
 }: {
   title: string
   description: string
@@ -145,6 +147,8 @@ function SettingsSubsection({
   children: ReactNode
   defaultOpen?: boolean
   inline?: boolean
+  badge?: ReactNode
+  headerAction?: ReactNode
 }): ReactElement {
   const content = (
     <section className={styles.workbenchSettingsGroup} aria-label={title}>
@@ -155,7 +159,13 @@ function SettingsSubsection({
   return inline ? (
     content
   ) : (
-    <SettingsDisclosure title={title} description={description} defaultOpen={defaultOpen}>
+    <SettingsDisclosure
+      title={title}
+      description={description}
+      defaultOpen={defaultOpen}
+      badge={badge}
+      headerAction={headerAction}
+    >
       {content}
     </SettingsDisclosure>
   )
@@ -970,85 +980,8 @@ export function WorkbenchSettingsDialog({
         </div>
       )
     const updateState = updateResult.data
-    const targetVersion = updateState.targetVersion ?? ''
-    let status = t('workbench.settingsUpdateIdle')
-    if (updateState.phase === 'checking') status = t('workbench.settingsCheckingForUpdates')
-    else if (updateState.phase === 'available') {
-      status = t('workbench.settingsUpdateAvailable', {
-        version: targetVersion,
-      })
-    } else if (updateState.phase === 'downloading') {
-      status = t('workbench.updateDownloading', {
-        percent: Math.round(updateState.percent ?? 0),
-        version: targetVersion,
-      })
-    } else if (updateState.phase === 'verifying') {
-      status = t('workbench.updateVerifying')
-    } else if (updateState.phase === 'preparing') {
-      status = t('workbench.updatePreparing')
-    } else if (updateState.phase === 'retrying') {
-      status = t('workbench.updateRetrying', { attempt: updateState.retryAttempt ?? 1 })
-    } else if (updateState.phase === 'paused') {
-      status = t('workbench.updatePaused', {
-        percent: Math.round(updateState.percent ?? 0),
-        version: targetVersion,
-      })
-    } else if (updateState.phase === 'downloaded') {
-      status = t('workbench.settingsUpdateDownloaded', {
-        version: targetVersion,
-      })
-    } else if (updateState.phase === 'error') {
-      status = t('workbench.settingsUpdateError', {
-        error: updateState.error ?? '',
-      })
-    }
-    const checkDisabled =
-      updateState.phase === 'checking' ||
-      updateState.phase === 'downloading' ||
-      updateState.phase === 'retrying' ||
-      updateState.phase === 'verifying' ||
-      updateState.phase === 'preparing' ||
-      updateState.phase === 'paused' ||
-      updateState.phase === 'downloaded'
-
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
-        <SettingRow title={t('workbench.settingsCurrentVersion')} description={status}>
-          <div className={styles.workbenchSettingsPluginActions}>
-            <WorkbenchSettingsPill>{updateState.currentVersion}</WorkbenchSettingsPill>
-            {updateState.phase === 'available' && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void window.velarosWorkbenchUpdate.download()}
-              >
-                <DownloadSimpleIcon size={14} />
-                {t('workbench.settingsDownloadUpdate')}
-              </Button>
-            )}
-            {updateState.phase === 'downloaded' && (
-              <Button
-                size="sm"
-                variant="default"
-                className={styles.workbenchSettingsUpdateRestart}
-                onClick={() => void window.velarosWorkbenchUpdate.restart()}
-              >
-                {t('workbench.settingsRestartToUpdate')}
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={checkDisabled}
-              onClick={() => void window.velarosWorkbenchUpdate.check()}
-            >
-              <ArrowCounterClockwiseIcon size={14} />
-              {updateState.phase === 'checking'
-                ? t('workbench.settingsCheckingForUpdates')
-                : t('workbench.settingsCheckForUpdates')}
-            </Button>
-          </div>
-        </SettingRow>
         <SettingsDisclosure
           title={t('workbench.settingsUpdatePreferences')}
           description={t('workbench.settingsUpdatePreferencesDescription')}
@@ -1341,6 +1274,19 @@ export function WorkbenchSettingsDialog({
         <SettingsSubsection
           title={t('workbench.settingsUpdates')}
           description={t('workbench.settingsUpdatesDescription')}
+          badge={
+            updateResult?.ok && (
+              <WorkbenchSettingsPill>{updateResult.data.currentVersion}</WorkbenchSettingsPill>
+            )
+          }
+          headerAction={
+            updateResult?.ok && (
+              <WorkbenchSettingsUpdateAction
+                state={updateResult.data}
+                onError={(error) => reportSettingSaveFailure('workbench.settingsUpdates', error)}
+              />
+            )
+          }
         >
           {renderUpdatesSection()}
         </SettingsSubsection>

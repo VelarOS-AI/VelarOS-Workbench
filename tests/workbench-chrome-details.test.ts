@@ -163,7 +163,11 @@ void describe('Workbench window and chat chrome details', () => {
     )
     for (const file of hiddenPages) assert.match(readSource(file), /show: false,/u, file)
     assert.equal(readSource('src/main/index.ts').match(/new BrowserWindow\(/gu)?.length, 2)
-    assert.match(readSource('src/main/index.ts'), /frame: true,\s*titleBarStyle: 'default'/u)
+    assert.match(
+      readSource('src/main/index.ts'),
+      /\.\.\.nativeAppearance!\.frameOptions\(process\.platform, true\)/u
+    )
+    assert.match(readSource('src/main/index.ts'), /installWorkbenchWindowState\(settings\)/u)
   })
 
   void test('uses native settings window controls and keeps file history inside the editor', () => {
@@ -179,7 +183,11 @@ void describe('Workbench window and chat chrome details', () => {
     assert.doesNotMatch(presentation, /LazyWorkbenchSettingsDialog/u)
     assert.doesNotMatch(settingsDialog, /workbenchSettingsHeader|workbenchSettingsCloseButton/u)
     assert.doesNotMatch(settingsDialog, /createPortal/u)
-    assert.match(readSource('src/main/index.ts'), /frame: true,\s*titleBarStyle: 'default'/u)
+    assert.match(
+      readSource('src/main/index.ts'),
+      /\.\.\.nativeAppearance!\.frameOptions\(process\.platform, true\)/u
+    )
+    assert.match(readSource('src/main/index.ts'), /registerCaptionWindow\(settings\)/u)
     assert.match(
       readSource('src/renderer/src/app/StandaloneWorkbenchSettingsWindow.tsx'),
       /WorkbenchSettingsDialog/u

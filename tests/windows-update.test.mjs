@@ -100,7 +100,10 @@ async function readReceipt(job) {
   }
   let diagnostic = ''
   try {
-    diagnostic = await readFile(join(job.helperDirectory, `observer-error-${job.jobId}.json`), 'utf8')
+    diagnostic = await readFile(
+      join(job.helperDirectory, `observer-error-${job.jobId}.json`),
+      'utf8'
+    )
   } catch (error) {
     if (error.code !== 'ENOENT') throw error
   }
@@ -109,7 +112,9 @@ async function readReceipt(job) {
     readFile(join(job.helperDirectory, `observer-ready-${job.jobId}.json`), 'utf8'),
     readFile(join(dirname(job.appDir), 'worker-exits.jsonl'), 'utf8'),
   ])
-  throw new Error(`Windows update completion receipt was not published. ${diagnostic} ${JSON.stringify(facts)}`)
+  throw new Error(
+    `Windows update completion receipt was not published. ${diagnostic} ${JSON.stringify(facts)}`
+  )
 }
 
 test('archive update replaces Electron files while preserving user data, uninstaller and extra files', async (t) => {
@@ -165,7 +170,10 @@ test('a failed rollback preserves the install error and the previous files', asy
     }
   )
   assert.equal(await readFile(join(retained, job.executable), 'utf8'), 'old exe')
-  assert.equal(await readFile(join(job.userDataDir, 'conversations.json'), 'utf8'), 'my conversations')
+  assert.equal(
+    await readFile(join(job.userDataDir, 'conversations.json'), 'utf8'),
+    'my conversations'
+  )
 })
 
 test('rejects corrupt archives, wrong product, wrong version, and modified staging', async (t) => {
@@ -278,7 +286,9 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
       })
       const exitLedger = join(root, 'worker-exits.jsonl')
       const observedWorker = join(root, 'observed-worker.cjs')
-      await writeFile(observedWorker, `
+      await writeFile(
+        observedWorker,
+        `
         const { appendFileSync, existsSync } = require('node:fs')
         process.once('exit', () => appendFileSync(process.env.UPDATE_EXIT_LEDGER, JSON.stringify({
           command: process.argv[2], directory: process.argv[3], pid: process.pid,
@@ -290,7 +300,8 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
           process.exitCode = 1
           if (process.connected) process.disconnect()
         })
-      `)
+      `
+      )
       const parentFile = join(root, 'parent.mjs')
       await build({
         stdin: {
@@ -348,8 +359,11 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
                   args.path === 'electron-updater'
                     ? `
               import { EventEmitter } from 'node:events'
+              import { createRequire } from 'node:module'
+              const { SemVer } = createRequire(${JSON.stringify(import.meta.url)})('semver')
               export class AppUpdater extends EventEmitter {
                 app = { version: process.env.UPDATE_VERSION || '1.0.0', quit: () => process.exit(0), onQuit: (handler) => process.on('exit', () => handler(0)) }
+                currentVersion = new SemVer(this.app.version)
                 async executeDownload(options) { await options.done({ downloadedFile: process.env.UPDATE_ARCHIVE }); return [] }
                 dispatchUpdateDownloaded(event) { this.emit('update-downloaded', event) }
                 dispatchError(error) { this.emit('error', error) }
@@ -362,27 +376,28 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
           },
         ],
       })
-      const startParent = (nextAction, version = '1.0.0') => spawn(process.execPath, [parentFile], {
-        stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
-        env: {
-          ...process.env,
-          TMPDIR: root,
-          TMP: root,
-          TEMP: root,
-          UPDATE_ACTION: nextAction,
-          UPDATE_VERSION: version,
-          UPDATE_EXIT_LEDGER: exitLedger,
-          UPDATE_ARCHIVE: job.archive,
-          UPDATE_SHA512: job.sha512,
-          UPDATE_OPTIONS: JSON.stringify({
-            appId: job.appId,
-            executable: join(job.appDir, job.executable),
-            nodeExecutable: process.execPath,
-            workerFile: observedWorker,
-            userDataDirectory: job.userDataDir,
-          }),
-        },
-      })
+      const startParent = (nextAction, version = '1.0.0') =>
+        spawn(process.execPath, [parentFile], {
+          stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+          env: {
+            ...process.env,
+            TMPDIR: root,
+            TMP: root,
+            TEMP: root,
+            UPDATE_ACTION: nextAction,
+            UPDATE_VERSION: version,
+            UPDATE_EXIT_LEDGER: exitLedger,
+            UPDATE_ARCHIVE: job.archive,
+            UPDATE_SHA512: job.sha512,
+            UPDATE_OPTIONS: JSON.stringify({
+              appId: job.appId,
+              executable: join(job.appDir, job.executable),
+              nodeExecutable: process.execPath,
+              workerFile: observedWorker,
+              userDataDirectory: job.userDataDir,
+            }),
+          },
+        })
       const parent = startParent(action)
       let error = ''
       parent.stderr.on('data', (bytes) => {
@@ -400,22 +415,35 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
       ])
       assert.equal(downloaded.downloaded, true)
       const task = downloaded.task
-      const ledger = (await readFile(exitLedger, 'utf8')).trim().split('\n').map((line) => JSON.parse(line))
-      const retired = action === 'replace' ? downloaded.previousTask : action === 'cancel' ? task : null
+      const ledger = (await readFile(exitLedger, 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+      const retired =
+        action === 'replace' ? downloaded.previousTask : action === 'cancel' ? task : null
       if (retired) {
-        const closedWorker = ledger.find((entry) => entry.command === 'watch' && entry.directory === retired.helperDirectory)
+        const closedWorker = ledger.find(
+          (entry) => entry.command === 'watch' && entry.directory === retired.helperDirectory
+        )
         assert.equal(closedWorker?.directoryExists, true, 'helper exists until its runtime exits')
-        await assert.rejects(readFile(join(retired.helperDirectory, 'job.json')), { code: 'ENOENT' })
+        await assert.rejects(readFile(join(retired.helperDirectory, 'job.json')), {
+          code: 'ENOENT',
+        })
         await assert.rejects(readdir(retired.workRoot), { code: 'ENOENT' })
       }
       if (action !== 'cancel')
-        assert.equal(JSON.parse(await readFile(join(task.helperDirectory, 'job.json'), 'utf8')).jobId, task.jobId)
+        assert.equal(
+          JSON.parse(await readFile(join(task.helperDirectory, 'job.json'), 'utf8')).jobId,
+          task.jobId
+        )
       assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'old exe')
       parent.send(action)
       const [code] = await exited
       assert.equal(code, 0, error)
       if (action === 'cancel') {
-        await assert.rejects(readFile(join(job.userDataDir, 'windows-update-owner.json')), { code: 'ENOENT' })
+        await assert.rejects(readFile(join(job.userDataDir, 'windows-update-owner.json')), {
+          code: 'ENOENT',
+        })
         assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'old exe')
         return
       }
@@ -439,18 +467,31 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
         const rejected = startParent('recover', '1.0.1')
         rejected.stderr.resume()
         assert.equal((await once(rejected, 'exit'))[0], 1)
-        assert.equal(JSON.parse(await readFile(join(task.helperDirectory, 'job.json'), 'utf8')).jobId, task.jobId)
-        assert.equal(await readFile(join(task.workRoot, 'previous', job.executable), 'utf8'), 'old exe')
+        assert.equal(
+          JSON.parse(await readFile(join(task.helperDirectory, 'job.json'), 'utf8')).jobId,
+          task.jobId
+        )
+        assert.equal(
+          await readFile(join(task.workRoot, 'previous', job.executable), 'utf8'),
+          'old exe'
+        )
         await writeFile(resultPath, JSON.stringify(result))
       }
       const successor = startParent('recover', '1.0.1')
       let recoveryError = ''
-      successor.stderr.on('data', (bytes) => { recoveryError += bytes.toString() })
+      successor.stderr.on('data', (bytes) => {
+        recoveryError += bytes.toString()
+      })
       assert.equal((await once(successor, 'exit'))[0], 0, recoveryError)
       await assert.rejects(readFile(join(task.helperDirectory, 'job.json')), { code: 'ENOENT' })
       await assert.rejects(readdir(task.workRoot), { code: 'ENOENT' })
-      await assert.rejects(readFile(join(job.userDataDir, 'windows-update-owner.json')), { code: 'ENOENT' })
-      await assert.rejects(readFile(join(job.userDataDir, `windows-update-result-${task.jobId}.json`)), { code: 'ENOENT' })
+      await assert.rejects(readFile(join(job.userDataDir, 'windows-update-owner.json')), {
+        code: 'ENOENT',
+      })
+      await assert.rejects(
+        readFile(join(job.userDataDir, `windows-update-result-${task.jobId}.json`)),
+        { code: 'ENOENT' }
+      )
       assert.equal(await readFile(join(untouched, 'sentinel'), 'utf8'), 'preserve')
     }
   )

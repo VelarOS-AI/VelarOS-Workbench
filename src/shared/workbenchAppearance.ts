@@ -134,11 +134,13 @@ function neutralScale(theme: WorkbenchThemeId): Scale {
 export function getWorkbenchNativeAppearance(theme: WorkbenchThemeId): {
   colorScheme: 'light' | 'dark'
   backgroundColor: string
+  foregroundColor: string
 } {
   return {
     colorScheme: isWorkbenchDarkTheme(theme) ? 'dark' : 'light',
     backgroundColor:
       neutralScale(theme)[isWorkbenchDarkTheme(theme) || theme === 'warm-paper' ? 1 : 0]!,
+    foregroundColor: neutralScale(theme)[11]!,
   }
 }
 

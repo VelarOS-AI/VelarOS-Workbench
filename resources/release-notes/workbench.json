@@ -3,6 +3,34 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.26",
+      "releasedAt": "2026-11-17",
+      "title": {
+        "zh": "修复更新准备卡住与主题标题栏不同步",
+        "en": "Fix stalled update preparation and synchronize themed window chrome"
+      },
+      "added": {
+        "zh": ["更新区使用标题旁版本标签与单个操作控件，下载进度支持点击暂停和继续。"],
+        "en": [
+          "Show the current version beside the Updates heading and use one action slot with pausable download progress."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "使用真实文件系统处理程序包，已完成更新的占用备份延后清理，不再阻塞后续更新。",
+          "校验、解压和安装文件检查分别显示进度，准备子进程无响应时超时退出并允许重试。",
+          "补全启动、定时、窗口恢复焦点与休眠恢复后的自动检查，失败后定时重试。",
+          "Windows 标题栏保留系统窗口按钮，使用主题语义色同步明暗配色，并禁用标题文字选中。"
+        ],
+        "en": [
+          "Use the physical filesystem for application archives and defer locked completed backups without blocking subsequent updates.",
+          "Report verification, extraction and installation-file checks separately; time out unresponsive preparation workers so updates can be retried.",
+          "Check automatically at startup, periodically, on window focus and after system resume, with scheduled retries after failures.",
+          "Retain Windows system caption buttons while synchronizing semantic theme colors and preventing title-text selection."
+        ]
+      }
+    },
+    {
       "version": "0.4.25",
       "releasedAt": "2026-11-17",
       "title": {
@@ -189,7 +217,10 @@
         "zh": "接入新版运行时与语言服务改进",
         "en": "Updated runtime and language service improvements"
       },
-      "added": { "zh": [], "en": [] },
+      "added": {
+        "zh": [],
+        "en": []
+      },
       "fixed": {
         "zh": [
           "接入 Platform v0.6.111（Velaros 0.7.0）和 UI 1.0.0，沿用经过校验的正式归档。",

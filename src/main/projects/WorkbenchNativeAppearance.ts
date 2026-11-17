@@ -1,6 +1,8 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
+import type { BrowserWindowConstructorOptions } from 'electron'
+
 import {
   getWorkbenchNativeAppearance,
   isWorkbenchTheme,
@@ -10,6 +12,7 @@ import {
 interface AppearanceWindow {
   isDestroyed(): boolean
   setBackgroundColor(color: string): void
+  setTitleBarOverlay?(options: { color: string; symbolColor: string; height: number }): void
 }
 
 interface NativeAppearanceOptions {
@@ -21,6 +24,7 @@ interface NativeAppearanceOptions {
 /** Persist only the native appearance hint; renderer preferences remain authoritative. */
 export class WorkbenchNativeAppearance {
   private theme: WorkbenchThemeId = 'light-modern'
+  private readonly captionWindows = new WeakSet<AppearanceWindow>()
 
   public constructor(private readonly options: NativeAppearanceOptions) {
     try {
@@ -43,13 +47,42 @@ export class WorkbenchNativeAppearance {
     return getWorkbenchNativeAppearance(this.theme).backgroundColor
   }
 
+  public get titleBarOverlay(): { color: string; symbolColor: string; height: number } {
+    const appearance = getWorkbenchNativeAppearance(this.theme)
+    return {
+      color: appearance.backgroundColor,
+      symbolColor: appearance.foregroundColor,
+      height: 32,
+    }
+  }
+
+  public frameOptions(
+    platform: NodeJS.Platform,
+    settings = false
+  ): BrowserWindowConstructorOptions {
+    if (platform === 'win32')
+      return { frame: true, titleBarStyle: 'hidden', titleBarOverlay: this.titleBarOverlay }
+    return {
+      frame: true,
+      titleBarStyle: platform === 'darwin' && !settings ? 'hiddenInset' : 'default',
+    }
+  }
+
+  /** Window Controls Overlay retains Windows' own minimize/maximize/close controls. */
+  public registerCaptionWindow(window: AppearanceWindow): void {
+    this.captionWindows.add(window)
+    window.setTitleBarOverlay?.(this.titleBarOverlay)
+  }
+
   public setTheme(theme: unknown): void {
     if (!isWorkbenchTheme(theme)) throw new TypeError('Invalid Workbench theme')
     if (theme === this.theme) return
     this.theme = theme
     this.options.nativeTheme.themeSource = getWorkbenchNativeAppearance(theme).colorScheme
     for (const window of this.options.windows()) {
-      if (!window.isDestroyed()) window.setBackgroundColor(this.backgroundColor)
+      if (window.isDestroyed()) continue
+      window.setBackgroundColor(this.backgroundColor)
+      if (this.captionWindows.has(window)) window.setTitleBarOverlay?.(this.titleBarOverlay)
     }
     mkdirSync(dirname(this.options.file), { recursive: true })
     const temporary = `${this.options.file}.tmp`

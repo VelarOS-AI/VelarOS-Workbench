@@ -12,9 +12,12 @@ test('native chrome follows the app theme across windows and the next launch', (
   const file = join(directory, 'appearance.json')
   const nativeTheme: { themeSource: 'system' | 'light' | 'dark' } = { themeSource: 'system' }
   const backgrounds: string[] = []
+  const captions: Array<{ color: string; symbolColor: string; height: number }> = []
   const window = {
     isDestroyed: () => false,
     setBackgroundColor: (color: string) => backgrounds.push(color),
+    setTitleBarOverlay: (options: { color: string; symbolColor: string; height: number }) =>
+      captions.push(options),
   }
   const destroyed = {
     isDestroyed: () => true,
@@ -28,9 +31,25 @@ test('native chrome follows the app theme across windows and the next launch', (
       nativeTheme,
       windows: () => [window, window, destroyed],
     })
+    appearance.registerCaptionWindow(window)
+    expect(appearance.frameOptions('win32')).toEqual({
+      frame: true,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: appearance.titleBarOverlay,
+    })
+    expect(appearance.frameOptions('win32', true)).toEqual(appearance.frameOptions('win32'))
+    expect(appearance.frameOptions('darwin')).toEqual({ frame: true, titleBarStyle: 'hiddenInset' })
+    expect(appearance.frameOptions('darwin', true)).toEqual({
+      frame: true,
+      titleBarStyle: 'default',
+    })
+    expect(appearance.frameOptions('linux')).toEqual({ frame: true, titleBarStyle: 'default' })
     appearance.setTheme('midnight-blue')
     expect(nativeTheme.themeSource).toBe('dark')
     expect(backgrounds).toEqual([appearance.backgroundColor, appearance.backgroundColor])
+    expect(captions.at(-1)).toEqual(appearance.titleBarOverlay)
+    expect(captions.at(-1)?.color).toBe(appearance.backgroundColor)
+    expect(captions.at(-1)?.symbolColor).not.toBe(appearance.backgroundColor)
     expect(appearance.backgroundColor).toBe(
       getWorkbenchNativeAppearance('midnight-blue').backgroundColor
     )

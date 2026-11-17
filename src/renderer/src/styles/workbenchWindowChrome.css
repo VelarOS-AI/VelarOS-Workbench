@@ -1,0 +1,38 @@
+.workbench-native-window {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+.workbench-native-window-content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.workbench-native-caption {
+  display: flex;
+  flex: 0 0 32px;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 148px 0 12px;
+  overflow: hidden;
+  background: var(--workbench-bg);
+  color: var(--workbench-text);
+  font:
+    12px 'Segoe UI',
+    sans-serif;
+  white-space: nowrap;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.workbench-native-caption > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workbench-native-caption-icon {
+  font-size: 10px;
+  font-weight: 800;
+}

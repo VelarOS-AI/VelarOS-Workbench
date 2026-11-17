@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron'
 
 import { Log } from '@velaros-ai/velaros/core'
 import { Result } from '@velaros-ai/velaros/core/result'
@@ -24,8 +24,8 @@ import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesSto
 import { WorkbenchUpdateService } from './WorkbenchUpdateService'
 
 export function installWorkbenchUpdateRuntime(): void {
-  const preferences = Result.wrapSync(() =>
-    new WorkbenchUpdatePreferencesStore(app.getPath('userData'))
+  const preferences = Result.wrapSync(
+    () => new WorkbenchUpdatePreferencesStore(app.getPath('userData'))
   )
   const removeHandlers = (): void => {
     for (const channel of Object.values(WorkbenchUpdateChannels))
@@ -55,15 +55,16 @@ export function installWorkbenchUpdateRuntime(): void {
     minimumRevision: WorkbenchCloudRoutingMinimumRevision,
     manifestStore: new WorkbenchCloudRoutingManifestFileStore(app.getPath('userData'), market),
   })
-  const windowsUpdater = process.platform === 'win32' && app.isPackaged
-    ? new WindowsArchiveUpdater({
-        appId: 'com.velaros.workbench',
-        executable: process.execPath,
-        nodeExecutable: resolveWorkbenchNodeExecutable(),
-        workerFile: join(process.resourcesPath, 'windows-update.cjs'),
-        userDataDirectory: app.getPath('userData'),
-      })
-    : null
+  const windowsUpdater =
+    process.platform === 'win32' && app.isPackaged
+      ? new WindowsArchiveUpdater({
+          appId: 'com.velaros.workbench',
+          executable: process.execPath,
+          nodeExecutable: resolveWorkbenchNodeExecutable(),
+          workerFile: join(process.resourcesPath, 'windows-update.cjs'),
+          userDataDirectory: app.getPath('userData'),
+        })
+      : null
   const service = new WorkbenchUpdateService(
     new CloudWorkbenchReleaseSource(endpointResolver),
     windowsUpdater ?? (async () => (await import('electron-updater')).default.autoUpdater),
@@ -83,6 +84,9 @@ export function installWorkbenchUpdateRuntime(): void {
     }
   }
   service.subscribe(broadcast)
+  const wake = (): void => service.wake()
+  app.on('browser-window-focus', wake)
+  powerMonitor.on('resume', wake)
 
   ipcMain.handle(WorkbenchUpdateChannels.getState, () => service.getState())
   ipcMain.handle(WorkbenchUpdateChannels.check, () => service.checkForUpdates())
@@ -102,15 +106,14 @@ export function installWorkbenchUpdateRuntime(): void {
 
   app.once('will-quit', () => {
     void service.dispose()
+    app.removeListener('browser-window-focus', wake)
+    powerMonitor.removeListener('resume', wake)
     removeHandlers()
   })
-  if (windowsUpdater) {
-    void windowsUpdater.recovery
-      .then(() => {
-        if (service.getState().phase !== 'error') service.start()
-      })
-      .catch((error) => {
-        Log.tag('WorkbenchUpdate').caught('Windows update startup recovery failed', error)
-      })
-  } else service.start()
+  // Catalog checks do not depend on deleting a previous installation backup.
+  // Installation still awaits the validated recovery receipt in WindowsArchiveUpdater.
+  void windowsUpdater?.recovery.catch((error) => {
+    Log.tag('WorkbenchUpdate').caught('Windows update startup recovery failed', error)
+  })
+  service.start()
 }

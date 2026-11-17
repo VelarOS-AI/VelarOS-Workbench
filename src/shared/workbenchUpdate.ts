@@ -45,7 +45,14 @@ export interface WorkbenchUpdateState {
   readonly totalBytes?: number
   readonly bytesPerSecond?: number
   readonly retryAttempt?: number
+  readonly preparationStep?: 'extracting' | 'checking-files'
   readonly error?: string
+}
+
+export interface WorkbenchUpdatePreparationProgress {
+  readonly phase: 'verifying' | 'preparing'
+  readonly percent: number
+  readonly step?: 'extracting' | 'checking-files'
 }
 
 export interface WorkbenchUpdateBridge {

@@ -12,6 +12,7 @@ import { registerWorkbenchLanguageService } from '@shared/workbenchLanguageServi
 import { WorkbenchSettingsWindowQuery } from '@shared/workbenchSettingsWindow'
 
 import { StandaloneWorkbenchApp } from './app/StandaloneWorkbenchApp'
+import { WorkbenchWindowChrome } from './components/chrome/WorkbenchWindowChrome'
 import { installStandaloneWorkbenchHost } from './host/standaloneWorkbenchHost'
 import { VelarWorkbenchEditorLanguage } from './models/editor/velarEditor'
 
@@ -35,12 +36,14 @@ const isSettingsWindow =
 
 ReactDOM.createRoot(rootElement).render(
   <WorkbenchRuntimeProvider runtime={workbenchRuntime}>
-    {isSettingsWindow ? (
-      <Suspense fallback={null}>
-        <SettingsWindow />
-      </Suspense>
-    ) : (
-      <StandaloneWorkbenchApp />
-    )}
+    <WorkbenchWindowChrome settings={isSettingsWindow}>
+      {isSettingsWindow ? (
+        <Suspense fallback={null}>
+          <SettingsWindow />
+        </Suspense>
+      ) : (
+        <StandaloneWorkbenchApp />
+      )}
+    </WorkbenchWindowChrome>
   </WorkbenchRuntimeProvider>
 )

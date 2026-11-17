@@ -209,7 +209,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     autoHideMenuBar: process.platform !== 'darwin',
     backgroundColor: workbenchWindowBackground(),
     title: getWorkbenchWindowTitle(hub.getState().currentProject?.name ?? null),
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    ...nativeAppearance!.frameOptions(process.platform),
     webPreferences: {
       sandbox: false,
       webviewTag: true,
@@ -217,6 +217,8 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
       preload: join(__dirname, '../preload/index.mjs'),
     },
   })
+
+  if (process.platform === 'win32') nativeAppearance!.registerCaptionWindow(window)
 
   installWorkbenchExternalNavigation(
     (handler) => window.webContents.setWindowOpenHandler(handler),
@@ -479,8 +481,7 @@ if (hasSingleInstanceLock)
           minHeight: 480,
           parent: owner,
           modal: false,
-          frame: true,
-          titleBarStyle: 'default',
+          ...nativeAppearance!.frameOptions(process.platform, true),
           show: false,
           autoHideMenuBar: true,
           backgroundColor: workbenchWindowBackground(),
@@ -494,6 +495,8 @@ if (hasSingleInstanceLock)
             webviewTag: false,
           },
         })
+        if (process.platform === 'win32') nativeAppearance!.registerCaptionWindow(settings)
+        installWorkbenchWindowState(settings)
         settings.setMenu(null)
         installWorkbenchExternalNavigation(
           (handler) => settings.webContents.setWindowOpenHandler(handler),

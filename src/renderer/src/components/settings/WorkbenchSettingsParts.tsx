@@ -70,40 +70,52 @@ export function SettingsDisclosure({
   description,
   defaultOpen = false,
   onExpandedChange,
+  badge,
+  headerAction,
   children,
 }: {
   title: string
   description?: string
   defaultOpen?: boolean
   onExpandedChange?: (expanded: boolean) => void
+  badge?: ReactNode
+  headerAction?: ReactNode
   children: ReactNode
 }): ReactElement {
   const [expanded, setExpanded] = useState(defaultOpen)
   return (
-    <details
-      className={styles.workbenchSettingsDisclosure}
-      open={expanded}
-      onToggle={(event) => {
-        const next = event.currentTarget.open
-        setExpanded(next)
-        onExpandedChange?.(next)
-      }}
-    >
-      <summary className={styles.workbenchSettingsDisclosureSummary}>
-        <span className={styles.workbenchSettingsDisclosureCopy}>
-          <span className={styles.workbenchSettingsDisclosureTitle}>{title}</span>
-          {description && (
-            <span className={styles.workbenchSettingsDisclosureDescription}>{description}</span>
-          )}
-        </span>
-        <CaretRightIcon
-          size={18}
-          className={styles.workbenchSettingsDisclosureCaret}
-          aria-hidden="true"
-        />
-      </summary>
-      {expanded && <div className={styles.workbenchSettingsDisclosureContent}>{children}</div>}
-    </details>
+    <div className={headerAction ? styles.workbenchSettingsDisclosureWithAction : undefined}>
+      <details
+        className={styles.workbenchSettingsDisclosure}
+        open={expanded}
+        onToggle={(event) => {
+          const next = event.currentTarget.open
+          setExpanded(next)
+          onExpandedChange?.(next)
+        }}
+      >
+        <summary className={styles.workbenchSettingsDisclosureSummary}>
+          <span className={styles.workbenchSettingsDisclosureCopy}>
+            <span className={styles.workbenchSettingsDisclosureTitle}>
+              {title}
+              {badge}
+            </span>
+            {description && (
+              <span className={styles.workbenchSettingsDisclosureDescription}>{description}</span>
+            )}
+          </span>
+          <CaretRightIcon
+            size={18}
+            className={styles.workbenchSettingsDisclosureCaret}
+            aria-hidden="true"
+          />
+        </summary>
+        {expanded && <div className={styles.workbenchSettingsDisclosureContent}>{children}</div>}
+      </details>
+      {headerAction && (
+        <div className={styles.workbenchSettingsDisclosureAction}>{headerAction}</div>
+      )}
+    </div>
   )
 }
 
