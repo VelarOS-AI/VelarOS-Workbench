@@ -1,3 +1,5 @@
+import { Text } from '@codemirror/state'
+
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import { fileLanguage } from '../shared/workbenchUtils'
@@ -37,6 +39,15 @@ const DECLARATION_PATTERN =
 const MAX_CONTEXT_FILES = 800
 const MAX_SYMBOLS_PER_FILE = 120
 const MAX_CONTEXT_SYMBOLS = 400
+const fileSymbolCache = new WeakMap<
+  WorkbenchOpenFileSnapshot,
+  {
+    content: string
+    path: string
+    language: string
+    symbols: WorkbenchProjectContextSymbol[]
+  }
+>()
 
 function uniqueSortedFiles(files: WorkbenchProjectContextFile[]): WorkbenchProjectContextFile[] {
   const byPath = new Map<string, WorkbenchProjectContextFile>()
@@ -74,25 +85,22 @@ function buildFileContextFromTree(
   return uniqueSortedFiles(files)
 }
 
-function lineColumnFromOffset(content: string, offset: number): { line: number; column: number } {
-  const before = content.slice(0, offset)
-  const line = before.split('\n').length
-  const lineStart = before.lastIndexOf('\n') + 1
-
-  return {
-    line,
-    column: offset - lineStart + 1,
-  }
-}
-
 function extractFileSymbols(file: WorkbenchOpenFileSnapshot): WorkbenchProjectContextSymbol[] {
+  const cached = fileSymbolCache.get(file)
+  if (
+    cached &&
+    cached.content === file.content &&
+    cached.path === file.path &&
+    cached.language === file.language
+  )
+    return cached.symbols
+
   const counts = new Map<
     string,
     {
       count: number
       kind: 'declaration' | 'reference'
-      line: number
-      column: number
+      offset: number
     }
   >()
 
@@ -105,7 +113,7 @@ function extractFileSymbols(file: WorkbenchOpenFileSnapshot): WorkbenchProjectCo
       if (current.kind === 'reference' && kind === 'declaration') {
         Object.assign(current, {
           kind,
-          ...lineColumnFromOffset(file.content, offset),
+          offset,
         })
       }
       return
@@ -114,7 +122,7 @@ function extractFileSymbols(file: WorkbenchOpenFileSnapshot): WorkbenchProjectCo
     counts.set(label, {
       count: 1,
       kind,
-      ...lineColumnFromOffset(file.content, offset),
+      offset,
     })
   }
 
@@ -132,7 +140,10 @@ function extractFileSymbols(file: WorkbenchOpenFileSnapshot): WorkbenchProjectCo
     recordSymbol(match[0], match.index ?? 0, 'reference')
   }
 
-  return [...counts.entries()]
+  // Resolve coordinates only for the retained symbols, using one shared line
+  // index instead of splitting every prefix of the document on each keystroke.
+  const doc = Text.of(file.content.split('\n'))
+  const symbols = [...counts.entries()]
     .sort(
       (left, right) =>
         +(right[1].kind === 'declaration') - +(left[1].kind === 'declaration') ||
@@ -140,15 +151,25 @@ function extractFileSymbols(file: WorkbenchOpenFileSnapshot): WorkbenchProjectCo
         left[0].localeCompare(right[0])
     )
     .slice(0, MAX_SYMBOLS_PER_FILE)
-    .map(([label, metadata]) => ({
-      label,
-      path: file.path,
-      language: file.language,
-      count: metadata.count,
-      kind: metadata.kind,
-      line: metadata.line,
-      column: metadata.column,
-    }))
+    .map(([label, metadata]) => {
+      const line = doc.lineAt(metadata.offset)
+      return {
+        label,
+        path: file.path,
+        language: file.language,
+        count: metadata.count,
+        kind: metadata.kind,
+        line: line.number,
+        column: metadata.offset - line.from + 1,
+      }
+    })
+  fileSymbolCache.set(file, {
+    content: file.content,
+    path: file.path,
+    language: file.language,
+    symbols,
+  })
+  return symbols
 }
 
 function sortContextSymbols(

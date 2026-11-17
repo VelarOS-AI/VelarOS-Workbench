@@ -37,10 +37,8 @@ import GoPlain from 'devicons-react/icons/GoPlain'
 import Html5Plain from 'devicons-react/icons/Html5Plain'
 import JavaPlain from 'devicons-react/icons/JavaPlain'
 import JavascriptPlain from 'devicons-react/icons/JavascriptPlain'
-import JsonPlain from 'devicons-react/icons/JsonPlain'
 import KotlinPlain from 'devicons-react/icons/KotlinPlain'
 import LessPlainWordmark from 'devicons-react/icons/LessPlainWordmark'
-import MarkdownOriginal from 'devicons-react/icons/MarkdownOriginal'
 import OpenglPlain from 'devicons-react/icons/OpenglPlain'
 import PythonPlain from 'devicons-react/icons/PythonPlain'
 import ReactOriginal from 'devicons-react/icons/ReactOriginal'
@@ -100,11 +98,9 @@ const BuiltinLanguageIcons: Partial<
   html: Html5Plain,
   java: JavaPlain,
   javascript: JavascriptPlain,
-  json: JsonPlain,
   jsx: ReactOriginal,
   kotlin: KotlinPlain,
   less: LessPlainWordmark,
-  markdown: MarkdownOriginal,
   python: PythonPlain,
   rust: RustOriginal,
   sass: SassOriginal,

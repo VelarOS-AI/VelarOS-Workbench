@@ -1,4 +1,4 @@
-import { type EditorState, type Extension, RangeSetBuilder, StateEffect } from '@codemirror/state'
+import { type EditorState, type Extension, RangeSetBuilder, StateEffect, Text } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -29,6 +29,7 @@ const WORD_PART_PATTERN = /[\p{L}\p{N}_$]/u
 /** 至少含一个字母或 _/$ 才算「单词」，纯数字/纯符号不高亮，避免噪音。 */
 const WORD_HAS_LETTER_PATTERN = /[\p{L}_$]/u
 const TOKEN_OCCURRENCE_BG_ALPHA = 0.16
+const SemanticOccurrenceDelayMs = 150
 
 interface WorkbenchCaretToken {
   from: number
@@ -108,9 +109,10 @@ export function buildWorkbenchSemanticOccurrenceDecorations(
   content: string,
   highlights: readonly WorkbenchLanguageServiceDocumentHighlight[]
 ): DecorationSet {
+  const doc = Text.of(content.split('\n'))
   const ranges = new Map<string, { from: number; to: number }>()
   for (const highlight of highlights) {
-    const range = languageServiceRangeToOffsets(content, highlight.range)
+    const range = languageServiceRangeToOffsets(doc, highlight.range)
     if (!range || range.from >= range.to) continue
     ranges.set(`${range.from}:${range.to}`, range)
   }
@@ -146,11 +148,15 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet = Decoration.none
-      private tokenText: Nullable<string> = null
+      private token: Nullable<WorkbenchCaretToken> = null
+      private semanticDecorations: Nullable<DecorationSet> = null
       private requestGeneration = 0
+      private timer: Nullable<ReturnType<typeof setTimeout>> = null
 
       constructor(view: EditorView) {
-        this.sync(view)
+        this.token = view.hasFocus ? resolveCaretToken(view.state) : null
+        this.applyToken(view, this.token)
+        this.scheduleSemantic(view, this.token)
       }
 
       public update(update: ViewUpdate): void {
@@ -163,25 +169,35 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
           return
 
         const token = update.view.hasFocus ? resolveCaretToken(update.state) : null
-        const tokenChanged = token?.text !== this.tokenText
-        // 光标仍在同一个词、且文档与视口都没变时，无需重建。
-        if (!tokenChanged && !update.docChanged && !update.viewportChanged && !update.focusChanged)
-          return
+        const tokenChanged = token?.text !== this.token?.text || token?.from !== this.token?.from
+        const semanticChanged = tokenChanged || update.docChanged || update.focusChanged
+        if (!semanticChanged && !update.viewportChanged) return
 
-        this.tokenText = token?.text ?? null
-        this.applyToken(
-          update.view,
-          token,
-          tokenChanged || update.selectionSet || update.docChanged || update.focusChanged
-        )
-        void this.loadSemantic(update.view, token)
+        this.token = token
+        if (semanticChanged) {
+          this.semanticDecorations = null
+          this.scheduleSemantic(update.view, token)
+        }
+        // Semantic ranges cover the document. Scrolling only redraws local fallback
+        // matches while a request is pending; it must not re-query the same symbol.
+        if (this.semanticDecorations) this.decorations = this.semanticDecorations
+        else this.applyToken(update.view, token, semanticChanged)
       }
 
-      private sync(view: EditorView): void {
-        const token = view.hasFocus ? resolveCaretToken(view.state) : null
-        this.tokenText = token?.text ?? null
-        this.applyToken(view, token)
-        void this.loadSemantic(view, token)
+      public destroy(): void {
+        this.requestGeneration += 1
+        if (this.timer !== null) clearTimeout(this.timer)
+      }
+
+      private scheduleSemantic(view: EditorView, token: Nullable<WorkbenchCaretToken>): void {
+        const generation = ++this.requestGeneration
+        if (this.timer !== null) clearTimeout(this.timer)
+        this.timer = null
+        if (!runtime || !token) return
+        this.timer = setTimeout(() => {
+          this.timer = null
+          void this.loadSemantic(view, token, generation)
+        }, SemanticOccurrenceDelayMs)
       }
 
       private applyToken(
@@ -208,10 +224,10 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
 
       private async loadSemantic(
         view: EditorView,
-        token: Nullable<WorkbenchCaretToken>
+        token: WorkbenchCaretToken,
+        generation: number
       ): Promise<void> {
-        const generation = ++this.requestGeneration
-        if (!runtime || !token) return
+        if (!runtime) return
         const doc = view.state.doc
         const line = doc.lineAt(token.from)
         let highlights: Nullable<readonly WorkbenchLanguageServiceDocumentHighlight[]>
@@ -227,11 +243,15 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
         if (
           generation !== this.requestGeneration ||
           view.state.doc !== doc ||
-          this.tokenText !== token.text ||
+          this.token?.from !== token.from ||
           !highlights
         )
           return
-        this.decorations = buildWorkbenchSemanticOccurrenceDecorations(doc.toString(), highlights)
+        this.semanticDecorations = buildWorkbenchSemanticOccurrenceDecorations(
+          doc.toString(),
+          highlights
+        )
+        this.decorations = this.semanticDecorations
         view.dispatch({ effects: semanticOccurrenceRefreshEffect.of() })
       }
     },

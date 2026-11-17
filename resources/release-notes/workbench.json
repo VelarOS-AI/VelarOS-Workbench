@@ -3,6 +3,52 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.28",
+      "releasedAt": "2026-11-17",
+      "title": {
+        "zh": "优化编辑器流畅度并修复悬浮提示布局",
+        "en": "Improve editor responsiveness and fix hover layouts"
+      },
+      "added": { "zh": [], "en": [] },
+      "fixed": {
+        "zh": [
+          "悬浮提示异步加载后保留代码布局，修复代码块过窄、右侧留白与长内容滚动异常。",
+          "语法着色与同词高亮复用行索引，避免逐个标记反复拆分全文造成输入和滚动停顿。",
+          "项目符号索引缓存未修改文件，只为保留的符号计算位置，减少每次输入的主线程耗时。",
+          "连续输入合并同词高亮请求，滚动复用已有结果，并修复跨作用域同名单词的高亮刷新。",
+          "恢复 Markdown 文档和 JSON 花括号图标，统一标签栏图标间距并缩小置顶图标。"
+        ],
+        "en": [
+          "Preserve the code layout when asynchronous hover content arrives, fixing narrow code blocks, empty space and scrolling of long signatures.",
+          "Reuse line indexes for semantic tokens and symbol occurrences to avoid repeatedly splitting entire documents while typing and scrolling.",
+          "Cache unchanged files in the project symbol index and resolve positions only for retained symbols, reducing main-thread work on each keystroke.",
+          "Coalesce occurrence requests during continuous typing, reuse results while scrolling and refresh same-name symbols across scopes.",
+          "Restore Markdown document and JSON braces icons, consistent tab icon spacing and a smaller pin glyph."
+        ]
+      }
+    },
+    {
+      "version": "0.4.27",
+      "releasedAt": "2026-11-17",
+      "title": {
+        "zh": "调整文件图标与标签栏间距",
+        "en": "Refine file icons and editor tab spacing"
+      },
+      "added": { "zh": [], "en": [] },
+      "fixed": {
+        "zh": [
+          "Markdown 恢复文档图标，JSON 恢复花括号图标，并在文件树、标签栏和搜索结果中保持一致。",
+          "标签栏和标签列表的图标与文件名之间统一留出 6px 间距。",
+          "缩小标签右侧的置顶图标，保留原有点击范围。"
+        ],
+        "en": [
+          "Restore the document icon for Markdown and braces for JSON across the file tree, editor tabs and search results.",
+          "Use a consistent 6px gap between file icons and names in tabs and the tab list.",
+          "Reduce the pin glyph beside editor tabs while preserving its click target."
+        ]
+      }
+    },
+    {
       "version": "0.4.26",
       "releasedAt": "2026-11-17",
       "title": {

@@ -139,6 +139,9 @@ try {
     await expect(tabs.nth(2).locator('.wb_editorTabClose')).toHaveCSS('opacity', '1')
     await expect(pin).toHaveCSS('opacity', '1')
     await expect(pin).toHaveCSS('pointer-events', 'auto')
+    await expect(pin).toHaveCSS('width', '18px')
+    await expect(pin.locator('svg')).toHaveCSS('width', '10px')
+    await expect(pin.locator('svg')).toHaveCSS('height', '10px')
   })
   await check('hover reveals close without shifting tab layout', async () => {
     await inactive.hover()

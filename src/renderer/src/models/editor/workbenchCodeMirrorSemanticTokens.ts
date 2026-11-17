@@ -1,4 +1,4 @@
-import { type Extension, StateEffect } from '@codemirror/state'
+import { type Extension, StateEffect, Text } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 
 import { type WorkbenchLanguageServiceSemanticToken } from '@shared/contracts/workbench'
@@ -145,15 +145,18 @@ export function buildWorkbenchSemanticTokenDecorations(
   content: string,
   tokens: readonly WorkbenchLanguageServiceSemanticToken[]
 ): DecorationSet {
+  // Reuse CodeMirror's line index for the entire batch. Splitting the whole file
+  // for each endpoint makes a semantic refresh quadratic in document size.
+  const doc = Text.of(content.split('\n'))
   const callableNames = new Set(
     tokens.flatMap((token) => {
       if (token.type !== 'function' && token.type !== 'method') return []
-      const range = languageServiceRangeToOffsets(content, token.range)
+      const range = languageServiceRangeToOffsets(doc, token.range)
       return range ? [content.slice(range.from, range.to)] : []
     })
   )
   const ranges = tokens.slice(0, 10_000).flatMap((token) => {
-    const range = languageServiceRangeToOffsets(content, token.range)
+    const range = languageServiceRangeToOffsets(doc, token.range)
     if (!range || range.from >= range.to) return []
 
     const tokenText = content.slice(range.from, range.to)

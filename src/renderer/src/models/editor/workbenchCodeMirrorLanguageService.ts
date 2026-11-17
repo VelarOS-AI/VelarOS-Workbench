@@ -1,4 +1,4 @@
-import type { EditorState } from '@codemirror/state'
+import { type EditorState, Text } from '@codemirror/state'
 
 import { type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceOpenFile, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
 import {
@@ -109,23 +109,22 @@ export function buildWorkbenchLanguageServiceRequestBase({
 }
 
 export function offsetFromLineColumnInContent(
-  content: string,
+  content: string | Text,
   lineNumber: number,
   column: number
 ): number {
-  const lines = content.split('\n')
-  const lineIndex = Math.min(Math.max(1, lineNumber), Math.max(1, lines.length)) - 1
-  const lineStart = lines.slice(0, lineIndex).reduce((sum, line) => sum + line.length + 1, 0)
-  const line = lines[lineIndex] ?? ''
-  return Math.min(lineStart + Math.max(0, column - 1), lineStart + line.length)
+  const doc = typeof content === 'string' ? Text.of(content.split('\n')) : content
+  const line = doc.line(Math.min(Math.max(1, lineNumber), doc.lines))
+  return Math.min(line.from + Math.max(0, column - 1), line.to)
 }
 
 export function languageServiceRangeToOffsets(
-  content: string,
+  content: string | Text,
   range: WorkbenchLanguageServiceRange
 ): Nullable<{ from: number; to: number }> {
-  const from = offsetFromLineColumnInContent(content, range.startLine, range.startColumn)
-  const to = offsetFromLineColumnInContent(content, range.endLine, range.endColumn)
+  const doc = typeof content === 'string' ? Text.of(content.split('\n')) : content
+  const from = offsetFromLineColumnInContent(doc, range.startLine, range.startColumn)
+  const to = offsetFromLineColumnInContent(doc, range.endLine, range.endColumn)
   if (from > to) return null
 
   return { from, to: Math.max(from, to) }

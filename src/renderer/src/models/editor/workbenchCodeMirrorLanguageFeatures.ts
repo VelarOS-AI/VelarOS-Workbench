@@ -372,6 +372,8 @@ function createHoverDefinitionPreviewSection(
 
 function replaceHoverTooltipDom(target: HTMLElement, source: HTMLElement): void {
   target.className = source.className
+  if (source.dataset.layout) target.dataset.layout = source.dataset.layout
+  else delete target.dataset.layout
   target.replaceChildren(...source.childNodes)
 }
 
