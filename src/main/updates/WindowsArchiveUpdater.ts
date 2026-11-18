@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import * as nodeFs from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 
 import { AppUpdater } from 'electron-updater'
 import type { DownloadUpdateOptions } from 'electron-updater/out/AppUpdater'
@@ -18,9 +18,8 @@ import type { WorkbenchUpdatePreparationProgress } from '../../shared/workbenchU
 const require = createRequire(import.meta.url)
 // Electron's ASAR-aware lstat/readdir turn app.asar into a virtual directory.
 // Installation backups contain physical archives: recursive cleanup must never traverse them.
-const { copyFile, mkdir, open, readFile, readdir, rename, rm, writeFile } = process.versions[
-  'electron'
-]
+const { copyFile, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile } = process
+  .versions['electron']
   ? (require('original-fs') as { promises: typeof nodeFs }).promises
   : nodeFs
 
@@ -121,7 +120,8 @@ export class WindowsArchiveUpdater extends AppUpdater {
     await this.recovery
     await this.cancelPreparedUpdate()
     const jobId = randomUUID()
-    const helperDirectory = join(resolve(tmpdir()), `velaros-update-helper-${jobId}`)
+    // Windows can expose TEMP through an 8.3 alias; validate the physical helper path.
+    const helperDirectory = join(await realpath(tmpdir()), `velaros-update-helper-${jobId}`)
     const job: WindowsUpdateTask = {
       schema: 1,
       jobId,

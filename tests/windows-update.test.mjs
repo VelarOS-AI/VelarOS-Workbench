@@ -10,6 +10,7 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -276,6 +277,8 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
     { timeout: 30_000, skip: process.platform !== 'win32' },
     async (t) => {
       const { root, job } = await fixture(t)
+      const temporaryAlias = join(root, 'temporary-alias')
+      await symlink(root, temporaryAlias, 'junction')
       const bundledWorker = join(root, 'worker.cjs')
       await build({
         entryPoints: [workerPath],
@@ -381,9 +384,9 @@ for (const action of ['close', 'install', 'replace', 'cancel']) {
           stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
           env: {
             ...process.env,
-            TMPDIR: root,
-            TMP: root,
-            TEMP: root,
+            TMPDIR: temporaryAlias,
+            TMP: temporaryAlias,
+            TEMP: temporaryAlias,
             UPDATE_ACTION: nextAction,
             UPDATE_VERSION: version,
             UPDATE_EXIT_LEDGER: exitLedger,

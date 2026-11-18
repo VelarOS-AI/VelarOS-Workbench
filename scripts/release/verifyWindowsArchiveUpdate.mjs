@@ -13,6 +13,7 @@ import {
   realpath,
   rm,
   stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -35,6 +36,8 @@ const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-update-e2e-中
 const installed = join(root, 'Application')
 const profile = join(root, 'User Data')
 const harness = join(root, 'Harness')
+const temporaryDirectory = join(root, 'Temporary Files')
+const temporaryAlias = join(root, 'Temporary Alias')
 const startupLog = join(root, 'startup.log')
 const requests = []
 const info = JSON.parse(await readFile(join(unpackedPath, 'windows-update-manifest.json'), 'utf8'))
@@ -74,7 +77,8 @@ let child
 let output = ''
 try {
   await cp(unpackedPath, installed, { recursive: true })
-  await Promise.all([mkdir(profile), mkdir(harness)])
+  await Promise.all([mkdir(profile), mkdir(harness), mkdir(temporaryDirectory)])
+  await symlink(temporaryDirectory, temporaryAlias, 'junction')
   await writeFile(join(profile, 'conversations.json'), 'keep my conversation')
   await writeFile(join(installed, 'Uninstall fixture.exe'), 'keep uninstaller')
   await writeFile(join(installed, 'user-note.txt'), 'keep extra file')
@@ -155,6 +159,7 @@ try {
   await createPackage(harness, join(installed, 'resources/app.asar'))
   child = spawn(join(installed, info.executable), [], {
     cwd: installed,
+    env: { ...process.env, TEMP: temporaryAlias, TMP: temporaryAlias },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   for (const stream of [child.stdout, child.stderr])

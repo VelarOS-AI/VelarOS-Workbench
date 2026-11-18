@@ -3,6 +3,36 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.32",
+      "releasedAt": "2026-11-18",
+      "title": {
+        "zh": "独立历史窗口与编辑器图标优化",
+        "en": "Independent history windows and refined editor icons"
+      },
+      "added": {
+        "zh": ["本地历史与 Git 文件历史使用独立窗口，支持与主编辑器并排查看、搜索和对比版本。"],
+        "en": [
+          "Open local and Git file history in an independent window for browsing, searching and comparing versions alongside the editor."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "历史列表、搜索框、切换按钮、代码预览与差异视图统一使用编辑器配色，并跟随四套主题变化。",
+          "恢复历史版本始终对应原文件，保护新产生的草稿，并正确处理文件关闭、只读与重新打开。",
+          "修复主窗口销毁后清理历史窗口监听器时发生的主进程异常。",
+          "缩小 JS、TS 实心图标，保留图标槽位与标签文字间距，并按明暗主题柔化配色。",
+          "修复 Windows 临时目录使用短路径或目录别名时，更新准备被错误拒绝的问题。"
+        ],
+        "en": [
+          "Match history lists, search fields, controls, code previews and comparisons to the editor palette across all four themes.",
+          "Restore versions to their original file while protecting newer drafts and handling closed, read-only and reopened files.",
+          "Prevent a main-process exception while cleaning up history-window listeners after their owner is destroyed.",
+          "Reduce solid JS and TS marks without changing icon slots or tab spacing, with softer colors for light and dark themes.",
+          "Resolve physical temporary directories before preparing Windows updates so short paths and directory aliases are accepted safely."
+        ]
+      }
+    },
+    {
       "version": "0.4.31",
       "releasedAt": "2026-11-18",
       "title": {
