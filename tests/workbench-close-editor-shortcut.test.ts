@@ -60,7 +60,10 @@ void describe('Cmd/Ctrl+W closes the editor tab, Shift closes the window', () =>
 
       // 没有焦点窗口（或是不认识的窗口）：什么也不做，更不会为此新开一个窗口。
       windows.sendMenuCommandToWindow(null, 'close-editor')
-      windows.sendMenuCommandToWindow(new FakeProjectWindow() as unknown as BrowserWindow, 'close-editor')
+      windows.sendMenuCommandToWindow(
+        new FakeProjectWindow() as unknown as BrowserWindow,
+        'close-editor'
+      )
       assert.equal(created.length, 2)
       assert.equal(first.sent.length + second.sent.length, 1)
     } finally {
@@ -99,15 +102,20 @@ void describe('Cmd/Ctrl+W closes the editor tab, Shift closes the window', () =>
     )
     // 与画面一致的前台顺序；最后才是普通文件标签，没有选中的文件就什么也不做。
     const order = [
-      'setFileHistoryMode(null)',
       'activeAuxiliaryTab.onClose?.()',
       'onCloseDiffTab?.()',
       'lightTab.onClose()',
       // 固定标签不随 ⌘W 关掉。
       'if (selectedFilePath && !selectedTabPinned) onCloseOpenFile(selectedFilePath)',
     ].map((snippet) => closeActive.indexOf(snippet))
-    assert.ok(order.every((index) => index >= 0), String(order))
-    assert.deepEqual([...order].sort((left, right) => left - right), order)
+    assert.ok(
+      order.every((index) => index >= 0),
+      String(order)
+    )
+    assert.deepEqual(
+      [...order].sort((left, right) => left - right),
+      order
+    )
     assert.match(
       editorPanel,
       /handledCloseActiveTabRequestIdRef\.current === closeActiveTabRequestId\) return[\s\S]*?closeActiveEditorTab\(\)/u

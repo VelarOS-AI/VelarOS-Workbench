@@ -3,8 +3,11 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { chromium } from '@playwright/test'
-import { test } from 'bun:test'
-import { build } from 'esbuild'
+import { afterAll, test } from 'bun:test'
+import { build, stop } from 'esbuild'
+
+// Reap the shared compiler service before the isolated test process exits.
+afterAll(() => stop())
 
 test('terminal selection copies, output clicks do not interrupt, and input clicks do', async () => {
   const bundle = await build({

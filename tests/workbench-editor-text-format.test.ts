@@ -186,7 +186,7 @@ void describe('Workbench editor text format', () => {
     const autosave = readSource('src/renderer/src/hooks/useWorkbenchEditorAutosave.ts')
     const lightEditor = readSource('src/renderer/src/models/lightEditorModel.ts')
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
-    const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
+    const historyOwner = readSource('src/renderer/src/hooks/useWorkbenchHistoryWindowOwner.ts')
 
     // 保存 / 全部保存 / 自动保存（saveTab）、恢复被删的文件、窗口关闭前的同步保存。
     assert.match(
@@ -215,7 +215,10 @@ void describe('Workbench editor text format', () => {
       lightEditor,
       /encoding: toOptional\(tab\.encoding\),\n\s*eol: toOptional\(tab\.eol\),/u
     )
-    assert.match(editorPanel, /onEditorContentChange\(normalizeWorkbenchTextEol\(content\)\)/u)
+    assert.match(
+      historyOwner,
+      /current\.restore\(normalizeWorkbenchTextEol\(request\.content\), request\.path\)/u
+    )
   })
 
   void test('the status bar shows the format next to the cursor position', () => {
