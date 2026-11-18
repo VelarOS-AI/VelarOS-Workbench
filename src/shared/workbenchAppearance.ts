@@ -329,6 +329,12 @@ export function getWorkbenchColorTokens(
   } as const
   for (const [name, family] of Object.entries(fileFamilies))
     tokens[`--workbench-file-${name}`] = tokens[`--status-${family}`]!
+  // Solid JS/TS marks need less saturation than thin file outlines. Derive their
+  // ink from the same light/dark palettes so custom accents remain independent.
+  for (const name of ['javascript', 'typescript'] as const) {
+    const base = tokens[`--workbench-file-${name}`]!
+    tokens[`--workbench-file-${name}`] = mix(base, secondary, dark ? 0.18 : 0.14)
+  }
   tokens['--workbench-run-fg'] = tokens['--status-green']!
   tokens['--status-blue-selection-bg'] = palettes.blue[mode][3]!
   tokens['--status-blue-selection-inactive'] = neutral[3]!

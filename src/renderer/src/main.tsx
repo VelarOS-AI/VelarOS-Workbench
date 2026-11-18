@@ -8,6 +8,7 @@ import { WorkbenchRuntimeProvider } from '@renderer/composition/WorkbenchRuntime
 import { registerWorkbenchEditorLanguage } from '@renderer/models/editor/workbenchEditorLanguageContributions'
 
 import { VelarWorkbenchLanguageService } from '@shared/contributions/velar/service'
+import { WorkbenchHistoryWindowQuery } from '@shared/workbenchHistoryWindow'
 import { registerWorkbenchLanguageService } from '@shared/workbenchLanguageServices'
 import { WorkbenchSettingsWindowQuery } from '@shared/workbenchSettingsWindow'
 
@@ -34,10 +35,17 @@ const SettingsWindow = lazy(async () => ({
 const isSettingsWindow =
   new URLSearchParams(window.location.search).get('view') === WorkbenchSettingsWindowQuery
 
+const HistoryWindow = lazy(async () => ({
+  default: (await import('./app/StandaloneWorkbenchHistoryWindow')).StandaloneWorkbenchHistoryWindow,
+}))
+const isHistoryWindow = new URLSearchParams(window.location.search).get('view') === WorkbenchHistoryWindowQuery
+
 ReactDOM.createRoot(rootElement).render(
   <WorkbenchRuntimeProvider runtime={workbenchRuntime}>
-    <WorkbenchWindowChrome settings={isSettingsWindow}>
-      {isSettingsWindow ? (
+    <WorkbenchWindowChrome settings={isSettingsWindow || isHistoryWindow}>
+      {isHistoryWindow ? (
+        <Suspense fallback={null}><HistoryWindow /></Suspense>
+      ) : isSettingsWindow ? (
         <Suspense fallback={null}>
           <SettingsWindow />
         </Suspense>

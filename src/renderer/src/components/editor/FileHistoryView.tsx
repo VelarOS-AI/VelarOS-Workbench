@@ -1,5 +1,5 @@
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import { CaretDownIcon, CaretUpIcon, ClockCounterClockwiseIcon, XIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, CaretUpIcon, ClockCounterClockwiseIcon } from '@phosphor-icons/react'
 import {
   useWorkbenchFileHistory,
   type WorkbenchFileHistoryMode,
@@ -18,8 +18,10 @@ import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 import { isEmpty, isNotNull, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 import { WorkbenchDiffLayoutToggle } from '../git/WorkbenchDiffLayoutToggle'
 import type { WorkbenchUnifiedDiffRowsHandle } from '../git/WorkbenchUnifiedDiffRows'
 import { WorkbenchUnifiedDiffRows } from '../git/WorkbenchUnifiedDiffRows'
@@ -40,21 +42,23 @@ export function FileHistoryView({
   initialMode,
   currentContent,
   onRestore,
-  onClose,
+  restoreDisabledReason,
 }: {
   projectRoot: string
   path: string
   workbenchTheme: WorkbenchThemeId
   initialMode: FileHistoryMode
   currentContent: string
-  onRestore: (content: string) => void
-  onClose: () => void
+  onRestore: (content: string) => void | Promise<void>
+  restoreDisabledReason?: string
 }): ReactElement {
   const { t, locale } = useWorkbenchI18n()
   const [mode, setMode] = useState<FileHistoryMode>(initialMode)
   const [view, setView] = useState<'content' | 'diff'>('content')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<Nullable<string>>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
+  const [restoreError, setRestoreError] = useState<string | null>(null)
   const diffViewRef = useRef<WorkbenchUnifiedDiffRowsHandle>(null)
   const source = useWorkbenchFileHistory({
     mode,
@@ -122,7 +126,8 @@ export function FileHistoryView({
     return count
   }, [diffRows])
   const selectedRecord = source.records.find((record) => record.id === selectedId)
-  const canRestore = isNotNull(selected.content) && !selected.isLoading
+  const canRestore =
+    isNotNull(selected.content) && !selected.isLoading && !isRestoring && !restoreDisabledReason
   const showIndexing = searchActive && searchIndex.isIndexing
   const emptyMessage = searchActive
     ? t('workbench.fileHistorySearchNoMatch')
@@ -137,55 +142,38 @@ export function FileHistoryView({
 
   return (
     <div className={styles.fileHistoryRoot}>
-      <header className={styles.editorGitHistoryHeader}>
-        <div className={styles.editorHistoryHeaderMain}>
-          <Text truncate className={styles.editorGitHistoryTitle}>
-            {t('workbench.fileHistoryTitle', { file: fileNameFromPath(path) })}
-          </Text>
-          <SegmentedControl
-            ariaLabel={t('workbench.fileHistoryTitle', { file: fileNameFromPath(path) })}
-            value={mode}
-            options={[
-              { value: 'local', label: t('workbench.editorContextLocalHistory') },
-              { value: 'git', label: t('workbench.editorContextGitHistory') },
-            ]}
-            onChange={setMode}
-          />
+      <header className={styles.fileHistoryHeader}>
+        <div className={styles.fileHistoryIdentity}>
+          <WorkbenchFileTypeIcon fileName={path} size={18} />
+          <div className={styles.fileHistoryFile}>
+            <Text truncate className={styles.fileHistoryFileName}>
+              {fileNameFromPath(path)}
+            </Text>
+            <Text truncate className={styles.fileHistoryFilePath}>
+              {path}
+            </Text>
+          </div>
         </div>
-        <div className={styles.editorLocalHistoryActions}>
-          <SegmentedControl
-            ariaLabel={t('workbench.fileHistoryViewContent')}
-            value={view}
-            options={[
-              { value: 'content', label: t('workbench.fileHistoryViewContent') },
-              { value: 'diff', label: t('workbench.fileHistoryViewDiff') },
-            ]}
-            onChange={setView}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canRestore}
-            onClick={() => {
-              if (isNotNull(selected.content)) onRestore(selected.content)
-            }}
-          >
-            <ClockCounterClockwiseIcon size={14} />
-            <Text truncate>{t('workbench.localHistoryRestore')}</Text>
-          </Button>
-          <IconButton
-            variant="ghost"
-            size="icon-sm"
-            label={t('workbench.fileHistoryClose')}
-            title={t('workbench.fileHistoryClose')}
-            onClick={onClose}
-          >
-            <XIcon size={14} />
-          </IconButton>
-        </div>
+        <SegmentedControl
+          variant="subtle"
+          ariaLabel={t('workbench.fileHistoryTitle', { file: fileNameFromPath(path) })}
+          value={mode}
+          options={[
+            { value: 'local', label: t('workbench.editorContextLocalHistory') },
+            { value: 'git', label: t('workbench.editorContextGitHistory') },
+          ]}
+          onChange={setMode}
+        />
       </header>
-      <div className={styles.editorGitHistoryBody}>
-        <div className={styles.editorHistoryLeft}>
+      <div className={styles.fileHistoryBody}>
+        <aside
+          className={styles.fileHistorySidebar}
+          aria-label={t('workbench.fileHistoryVersions')}
+        >
+          <div className={styles.fileHistoryListHeading}>
+            <Text>{t('workbench.fileHistoryVersions')}</Text>
+            <span className={styles.fileHistoryRecordCount}>{filteredRecords.length}</span>
+          </div>
           <div className={styles.editorHistorySearch}>
             <SearchField
               size="sm"
@@ -215,8 +203,55 @@ export function FileHistoryView({
               />
             )}
           </ScrollArea>
-        </div>
-        <div className={styles.editorHistoryRight}>{renderRight()}</div>
+        </aside>
+        <section
+          className={styles.editorHistoryRight}
+          aria-label={t('workbench.fileHistoryViewContent')}
+        >
+          <div className={styles.fileHistoryPreviewHeader}>
+            <Text truncate className={styles.fileHistorySelectedVersion}>
+              {selectedRecord?.title ?? ''}
+            </Text>
+            <SegmentedControl
+              variant="subtle"
+              ariaLabel={t('workbench.fileHistoryViewContent')}
+              value={view}
+              options={[
+                { value: 'content', label: t('workbench.fileHistoryViewContent') },
+                { value: 'diff', label: t('workbench.fileHistoryViewDiff') },
+              ]}
+              onChange={setView}
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              className={styles.fileHistoryRestoreButton}
+              disabled={!canRestore}
+              onClick={() => {
+                if (!isNotNull(selected.content) || !canRestore) return
+                setIsRestoring(true)
+                setRestoreError(null)
+                void Promise.resolve()
+                  .then(() => onRestore(selected.content!))
+                  .catch((error: unknown) => {
+                    setRestoreError(AppError.getMessage(error))
+                  })
+                  .finally(() => setIsRestoring(false))
+              }}
+            >
+              <ClockCounterClockwiseIcon size={14} />
+              {isRestoring
+                ? t('workbench.fileHistoryRestoring')
+                : t('workbench.localHistoryRestore')}
+            </Button>
+          </div>
+          {(restoreError || restoreDisabledReason) && (
+            <p className={styles.fileHistoryNotice} role={restoreError ? 'alert' : 'status'}>
+              {restoreError ?? restoreDisabledReason}
+            </p>
+          )}
+          {renderRight()}
+        </section>
       </div>
     </div>
   )

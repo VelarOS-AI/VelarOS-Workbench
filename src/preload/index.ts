@@ -24,6 +24,7 @@ import {
 } from '../shared/workbenchDebugger'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
+import { type WorkbenchHistoryWindowBridge, WorkbenchHistoryWindowChannels } from '../shared/workbenchHistoryWindow'
 import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
@@ -315,6 +316,18 @@ const updateBridge: WorkbenchUpdateBridge = {
   onChanged: (listener) => subscribe(WorkbenchUpdateChannels.changed, listener),
 }
 
+const historyWindowBridge: WorkbenchHistoryWindowBridge = {
+  open: (file) => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.open, file),
+  getState: () => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.state),
+  onChanged: (listener) => subscribe(WorkbenchHistoryWindowChannels.changed, listener),
+  onOpened: (listener) => subscribe(WorkbenchHistoryWindowChannels.opened, listener),
+  synchronize: (state) => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.synchronize, state),
+  close: () => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.close),
+  restore: (request) => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.restore, request),
+  onRestoreRequested: (listener) => subscribe(WorkbenchHistoryWindowChannels.restoreRequested, listener),
+  resolveRestore: (response) => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.restoreResolved, response),
+}
+
 const settingsWindowBridge: WorkbenchSettingsWindowBridge = {
   open: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.open),
   close: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.close),
@@ -362,6 +375,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchSettingsWindow', settingsWindowBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchHistoryWindow', historyWindowBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWindowState', windowStateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWindowClose', windowCloseBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)

@@ -15,6 +15,7 @@ import {
   normalizeWorkbenchBrowserPageUrl,
   WorkbenchBrowserPartition,
 } from '../shared/workbenchBrowser'
+import { WorkbenchHistoryWindowChannels, WorkbenchHistoryWindowQuery } from '../shared/workbenchHistoryWindow'
 import {
   WorkbenchSettingsWindowChannels,
   WorkbenchSettingsWindowQuery,
@@ -61,6 +62,7 @@ import {
   installWorkbenchExternalNavigation,
   isWorkbenchAgentConsoleRequest,
 } from './projects/WorkbenchExternalNavigation'
+import { WorkbenchHistoryWindows } from './projects/WorkbenchHistoryWindows'
 import { WorkbenchNativeAppearance } from './projects/WorkbenchNativeAppearance'
 import { WorkbenchProjectRegistry } from './projects/WorkbenchProjectRegistry'
 import { WorkbenchSettingsWindows } from './projects/WorkbenchSettingsWindows'
@@ -471,51 +473,54 @@ if (hasSingleInstanceLock)
         }
       },
     })
+    const createAuxiliaryWindow = (
+      owner: BrowserWindow,
+      title: string,
+      dimensions = { width: 1040, height: 720, minWidth: 640, minHeight: 480 }
+    ): BrowserWindow => {
+      const settings = new BrowserWindow({
+        ...dimensions,
+        parent: owner,
+        modal: false,
+        ...nativeAppearance!.frameOptions(process.platform, true),
+        show: false,
+        autoHideMenuBar: true,
+        backgroundColor: workbenchWindowBackground(),
+        icon: WorkbenchApplicationIconPath,
+        title,
+        webPreferences: {
+          preload: join(__dirname, '../preload/index.mjs'),
+          sandbox: false,
+          contextIsolation: true,
+          nodeIntegration: false,
+          webviewTag: false,
+        },
+      })
+      if (process.platform === 'win32') nativeAppearance!.registerCaptionWindow(settings)
+      installWorkbenchWindowState(settings)
+      settings.setMenu(null)
+      installWorkbenchExternalNavigation(
+        (handler) => settings.webContents.setWindowOpenHandler(handler),
+        (url) => shell.openExternal(url)
+      )
+      settings.webContents.on('will-navigate', (event) => event.preventDefault())
+      return settings
+    }
+    const loadAuxiliaryWindow = (settings: BrowserWindow, view: string): void => {
+      const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+      if (rendererUrl) {
+        const target = new URL(rendererUrl)
+        target.searchParams.set('view', view)
+        void settings.loadURL(target.href)
+      } else
+        void settings.loadFile(join(__dirname, '../renderer/index.html'), {
+          query: { view },
+        })
+    }
     const settingsWindows = new WorkbenchSettingsWindows({
       windows: windowManager,
-      createWindow: (owner) => {
-        const settings = new BrowserWindow({
-          width: 1040,
-          height: 720,
-          minWidth: 640,
-          minHeight: 480,
-          parent: owner,
-          modal: false,
-          ...nativeAppearance!.frameOptions(process.platform, true),
-          show: false,
-          autoHideMenuBar: true,
-          backgroundColor: workbenchWindowBackground(),
-          icon: WorkbenchApplicationIconPath,
-          title: 'VelarOS Workbench Settings',
-          webPreferences: {
-            preload: join(__dirname, '../preload/index.mjs'),
-            sandbox: false,
-            contextIsolation: true,
-            nodeIntegration: false,
-            webviewTag: false,
-          },
-        })
-        if (process.platform === 'win32') nativeAppearance!.registerCaptionWindow(settings)
-        installWorkbenchWindowState(settings)
-        settings.setMenu(null)
-        installWorkbenchExternalNavigation(
-          (handler) => settings.webContents.setWindowOpenHandler(handler),
-          (url) => shell.openExternal(url)
-        )
-        settings.webContents.on('will-navigate', (event) => event.preventDefault())
-        return settings
-      },
-      loadWindow: (settings) => {
-        const rendererUrl = process.env['ELECTRON_RENDERER_URL']
-        if (rendererUrl) {
-          const target = new URL(rendererUrl)
-          target.searchParams.set('view', WorkbenchSettingsWindowQuery)
-          void settings.loadURL(target.href)
-        } else
-          void settings.loadFile(join(__dirname, '../renderer/index.html'), {
-            query: { view: WorkbenchSettingsWindowQuery },
-          })
-      },
+      createWindow: (owner) => createAuxiliaryWindow(owner, 'VelarOS Workbench Settings'),
+      loadWindow: (window) => loadAuxiliaryWindow(window, WorkbenchSettingsWindowQuery),
     })
     ipcMain.handle(WorkbenchSettingsWindowChannels.open, (event) =>
       settingsWindows.open(event.sender)
@@ -526,6 +531,23 @@ if (hasSingleInstanceLock)
     ipcMain.handle(WorkbenchSettingsWindowChannels.exitProject, (event) =>
       settingsWindows.exitProject(event.sender)
     )
+    const historyWindows = new WorkbenchHistoryWindows({
+      windows: windowManager,
+      createWindow: (owner) => {
+        const window = createAuxiliaryWindow(owner, 'File History', {
+          width: 1120, height: 760, minWidth: 760, minHeight: 480,
+        })
+        installWorkbenchEditorZoom(window)
+        return window
+      },
+      loadWindow: (window) => loadAuxiliaryWindow(window, WorkbenchHistoryWindowQuery),
+    })
+    ipcMain.handle(WorkbenchHistoryWindowChannels.open, (event, file) => historyWindows.open(event.sender, file))
+    ipcMain.handle(WorkbenchHistoryWindowChannels.state, (event) => historyWindows.getState(event.sender))
+    ipcMain.handle(WorkbenchHistoryWindowChannels.synchronize, (event, update) => historyWindows.synchronize(event.sender, update))
+    ipcMain.handle(WorkbenchHistoryWindowChannels.close, (event) => historyWindows.close(event.sender))
+    ipcMain.handle(WorkbenchHistoryWindowChannels.restore, (event, request) => historyWindows.restore(event.sender, request))
+    ipcMain.handle(WorkbenchHistoryWindowChannels.restoreResolved, (event, response) => historyWindows.resolveRestore(event.sender, response))
     // 项目准入由同一个窗口 record 持有；先完成真实 owner，再注册会新建资源的入口。
     registerWorkbenchTerminalIpc(providers.parts.terminal, windowManager)
     const disposeDebugIpc = registerWorkbenchDebugIpc(providers.parts.debug, windowManager)
@@ -582,6 +604,7 @@ if (hasSingleInstanceLock)
 
       shutdownStarted = true
       settingsWindows.dispose()
+      historyWindows.dispose()
       event.preventDefault()
       // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker
       // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。

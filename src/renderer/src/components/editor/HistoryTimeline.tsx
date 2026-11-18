@@ -21,10 +21,10 @@ export type HistoryTimelineBucket = 'today' | 'week' | 'month' | 'older'
 export type HistoryTimelinePalette = Record<HistoryTimelineBucket, string>
 
 const DefaultTimelinePalette: HistoryTimelinePalette = {
-  today: 'var(--status-violet)',
-  week: 'var(--status-blue)',
-  month: 'var(--status-green)',
-  older: 'var(--muted-foreground)',
+  today: 'var(--workbench-theme-color)',
+  week: 'var(--workbench-text-secondary)',
+  month: 'var(--workbench-text-muted)',
+  older: 'var(--workbench-text-muted)',
 }
 const DayMs = 86_400_000
 
@@ -67,6 +67,7 @@ export function HistoryTimeline({
               className={styles.historyTimelineRow}
               title={toOptional(item.tooltip)}
               data-active={selectedId === item.id}
+              aria-current={selectedId === item.id ? 'true' : undefined}
               onClick={() => onSelect(item.id)}
             >
               <span className={styles.historyTimelineRail} aria-hidden>

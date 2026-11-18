@@ -74,14 +74,229 @@
   font-size: 11px;
 }
 
-/*
- * 文件历史：铺满编辑区视口的竖向布局（头部 + 主体）。它在主窗口的编辑区里就地展开，上方始终压着顶栏，
- * 碰不到 macOS 红绿灯，也不当窗口拖拽区——头部用 editorGitHistoryHeader 的常规内边距。
- */
+/* The native history window shares the editor's tokens, controls and code viewer. */
+.fileHistoryWindow {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.fileHistoryWindowEmpty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: var(--workbench-text-muted);
+  font-size: 12px;
+}
+
 .fileHistoryRoot {
   @apply flex h-full min-h-0 w-full flex-col;
   background: var(--workbench-editor-bg, var(--card));
   color: var(--workbench-text, var(--foreground));
+}
+
+.fileHistoryHeader {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 62px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--workbench-border-soft);
+  background: var(--workbench-editor-bg);
+}
+
+.fileHistoryIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fileHistoryFile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fileHistoryFileName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--workbench-text);
+}
+
+.fileHistoryFilePath {
+  font-size: 11px;
+  color: var(--workbench-text-muted);
+}
+
+.fileHistoryBody {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.fileHistorySidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--workbench-border-soft);
+  background: var(--workbench-surface-muted);
+}
+
+.fileHistoryListHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 2px;
+  color: var(--workbench-text-secondary);
+  font-size: 11px;
+}
+
+.fileHistoryListHeading > span {
+  font-size: inherit;
+  color: inherit;
+}
+.fileHistoryRecordCount {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--workbench-hover);
+  font-variant-numeric: tabular-nums;
+}
+
+.fileHistorySidebar .editorHistorySearch {
+  padding: 8px 10px;
+  border: 0;
+}
+
+.fileHistoryRoot :global(.velar-search-field) {
+  border-color: var(--workbench-border-soft);
+  border-radius: 6px;
+  background: var(--workbench-control-bg);
+  box-shadow: none;
+}
+
+.fileHistoryRoot :global(.velar-search-field:focus-within) {
+  border-color: var(--workbench-border);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--workbench-text) 6%, transparent);
+}
+
+.fileHistoryRoot :global(.velar-search-field-icon) {
+  color: var(--workbench-text-muted);
+}
+
+.fileHistoryRoot :global(.velar-segmented-control) {
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--workbench-control-bg);
+}
+.fileHistoryRoot :global(.velar-segmented-control-item) {
+  min-height: 26px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--workbench-text-secondary);
+}
+.fileHistoryRoot :global(.velar-segmented-control-active) {
+  background: var(--workbench-editor-bg);
+  color: var(--workbench-text);
+  box-shadow: 0 1px 3px color-mix(in oklab, var(--workbench-text) 9%, transparent);
+}
+
+.fileHistoryPreviewHeader {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--workbench-border-soft);
+  background: var(--workbench-editor-bg);
+}
+.fileHistorySelectedVersion {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--workbench-text-secondary);
+}
+.fileHistoryRestoreButton {
+  height: 28px;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--workbench-selection-bg);
+  color: var(--workbench-theme-color);
+  font-size: 11px;
+}
+.fileHistoryRestoreButton:hover {
+  background: var(--workbench-hover);
+}
+.fileHistoryNotice {
+  margin: 0;
+  padding: 7px 12px;
+  color: var(--workbench-text-secondary);
+  background: var(--workbench-surface-muted);
+  font-size: 11px;
+}
+.fileHistoryRoot .historyTimeline {
+  padding: 2px 6px 8px;
+}
+.fileHistoryRoot .historyTimelineRow {
+  padding: 5px 8px 5px 4px;
+  border-radius: 5px;
+}
+.fileHistoryRoot .historyTimelineRow:hover {
+  background: var(--workbench-hover);
+}
+.fileHistoryRoot .historyTimelineRow[data-active='true'] {
+  background: var(--workbench-selection-bg);
+}
+.fileHistoryRoot .historyTimelinePrimary {
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 400;
+}
+.fileHistoryRoot .historyTimelineRow[data-active='true'] .historyTimelinePrimary {
+  color: var(--workbench-theme-color);
+  font-weight: 500;
+}
+.fileHistoryRoot .historyTimelineSecondary,
+.fileHistoryRoot .historyTimelineMeta {
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+}
+.fileHistoryRoot .historyTimelineRail::before {
+  width: 1px;
+  background: var(--workbench-border);
+}
+.fileHistoryRoot .historyTimelineDot {
+  box-shadow: 0 0 0 3px var(--workbench-surface-muted);
+}
+.fileHistoryRoot .historyTimelineRow[data-active='true'] .historyTimelineDot {
+  --timeline-node-color: var(--workbench-theme-color);
+}
+.fileHistoryRoot .historyTimelineDot[data-special='true'] {
+  background: var(--workbench-surface-muted);
+}
+.fileHistoryRoot .editorHistoryDiffLabel {
+  color: var(--workbench-text-secondary);
+  font-size: 11px;
+}
+
+@media (max-width: 850px) {
+  .fileHistoryBody {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .fileHistoryPreviewHeader {
+    gap: 6px;
+    padding-inline: 8px;
+  }
 }
 
 .editorHistoryCodeViewer {

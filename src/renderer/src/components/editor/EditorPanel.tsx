@@ -81,11 +81,12 @@ import {
   type WorkbenchLanguageServiceLocation,
 } from '@shared/contracts/workbench'
 import { resolveWorkbenchTextOffset } from '@shared/workbenchSearchText'
-import { normalizeWorkbenchTextEol, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
+import { type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import { useWorkbenchGitBlame } from '../../hooks/useWorkbenchGitBlame'
 import { useWorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
+import { useStableWorkbenchMessageTranslate } from '../../runtime/useStableWorkbenchMessaging'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'
 import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInteract'
@@ -111,7 +112,6 @@ import {
   type WorkbenchEditorAuxiliaryTabItem,
 } from './EditorTabBar'
 import { EditorTextFormatNotice } from './EditorTextFormatNotice'
-import { type FileHistoryMode, FileHistoryView } from './FileHistoryView'
 import type { EditorSymbolLocations } from './useEditorSymbolLocations'
 import { WorkbenchImagePreview } from './WorkbenchImagePreview'
 import { WorkbenchLightFilePanel } from './WorkbenchLightFilePanel'
@@ -391,6 +391,7 @@ export function EditorPanel({
     externalRevision,
   } = workbenchEditor
   const { t } = useWorkbenchI18n()
+  const { messageLatest } = useStableWorkbenchMessageTranslate()
   const onCursorPositionLatest = useLatest(onCursorPositionChange)
   const editorContentLatest = useLatest(editorContent)
   const editorRef = useRef<CodeMirrorEditorHandle>(null)
@@ -418,7 +419,6 @@ export function EditorPanel({
   }, [])
   const [goToLineInput, setGoToLineInput] = useState('')
   const [externalConflictDialogOpen, setExternalConflictDialogOpen] = useState(false)
-  const [fileHistoryMode, setFileHistoryMode] = useState<Nullable<FileHistoryMode>>(null)
   const [dismissedExternalConflictKey, setDismissedExternalConflictKey] =
     useState<Nullable<string>>(null)
   const [tabContextMenu, setTabContextMenu] = useState<
@@ -631,8 +631,7 @@ export function EditorPanel({
     !!selectedFile &&
     !selectedImagePreview &&
     !hasEditorOverlayTab &&
-    !markdownPreviewActive &&
-    !fileHistoryMode
+    !markdownPreviewActive
   const codeEditorPath = selectedFile?.path ?? null
   useLayoutEffect(() => {
     if (!codeEditorVisible) return
@@ -837,12 +836,7 @@ export function EditorPanel({
     )
     setIsGoToLineOpen(false)
     setGoToLineInput('')
-    setFileHistoryMode(null)
   }, [selectedFilePath])
-
-  useEffect(() => {
-    setFileHistoryMode(null)
-  }, [activeDiffItem, activeAuxiliaryTab, lightTab])
 
   useEffect(() => {
     queueNavigationRequest()
@@ -909,12 +903,8 @@ export function EditorPanel({
     onDismiss: () => setTabContextMenu(null),
   })
 
-  /** 关掉编辑区前台的那个标签，顺序与画面一致：文件历史、辅助标签、差异、轻量预览、文件。 */
+  /** 关掉编辑区前台的那个标签：辅助标签、差异、轻量预览、文件。 */
   function closeActiveEditorTab(): void {
-    if (fileHistoryMode && selectedFile) {
-      setFileHistoryMode(null)
-      return
-    }
     if (activeAuxiliaryTab) {
       activeAuxiliaryTab.onClose?.()
       return
@@ -1097,21 +1087,7 @@ export function EditorPanel({
         </Dialog>
         <div className={styles.editorViewport}>
           {debugTabsLayer}
-          {!!fileHistoryMode && selectedFile ? (
-            <FileHistoryView
-              projectRoot={projectRoot}
-              path={selectedFile.path}
-              workbenchTheme={workbenchTheme}
-              initialMode={fileHistoryMode}
-              currentContent={editorContent}
-              onRestore={(content) => {
-                // 历史快照可能带着 CRLF：编辑缓冲一律是 LF，保存时再换回文件的换行符。
-                onEditorContentChange(normalizeWorkbenchTextEol(content))
-                setFileHistoryMode(null)
-              }}
-              onClose={() => setFileHistoryMode(null)}
-            />
-          ) : activeAuxiliaryTab ? (
+          {activeAuxiliaryTab ? (
             <>{toNullable(activeAuxiliaryTab.content)}</>
           ) : activeDiffItem ? (
             <GitDiffEditorPanel
@@ -1309,7 +1285,13 @@ export function EditorPanel({
                         onApplyLanguageServiceRename={onApplyLanguageServiceRename}
                         onApplyLanguageServiceEdit={onApplyLanguageServiceEdit}
                         onRunPackageScript={onRunPackageScript}
-                        onOpenFileHistory={setFileHistoryMode}
+                        onOpenFileHistory={(mode) => {
+                          if (!selectedFile) return
+                          void window.velarosWorkbenchHistoryWindow.open({
+                            projectRoot, path: selectedFile.path, mode,
+                            currentContent: editorContent, editable: canEditSelectedFile,
+                          }).catch(() => messageLatest.current.error({ title: t('workbench.fileHistoryRestoreUnavailable') }))
+                        }}
                         onAddToChat={
                           onAddFilesToChat ? () => onAddFilesToChat([selectedFile.path]) : undefined
                         }

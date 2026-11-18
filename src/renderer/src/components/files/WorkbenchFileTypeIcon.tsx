@@ -173,6 +173,29 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
     : style?.transform
   const LanguageIcon = BuiltinLanguageIcons[builtinVariant]
 
+  // Add space inside the square marks, preserving the shared icon slot and tab gap.
+  if (LanguageIcon && !presentation.icon && (builtinVariant === 'javascript' || builtinVariant === 'typescript'))
+    return (
+      <svg
+        {...iconProps}
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 128 128"
+        data-file-icon-kind={presentation.variant}
+        data-language-logo="devicon"
+        data-compact-language-mark="true"
+        aria-label={iconProps['aria-label'] ?? alt}
+        aria-hidden={iconProps['aria-label'] || alt ? undefined : true}
+        style={{
+          ...style, width: size, height: size, fill: iconColor, color: iconColor,
+          ...(transform ? { transform, transformOrigin: 'center' } : {}),
+        }}
+      >
+        <g data-language-mark-paint="true" transform="translate(8.64 8.64) scale(.865)">
+          <LanguageIcon size={128} color={iconColor} aria-hidden="true" focusable="false" />
+        </g>
+      </svg>
+    )
+
   if (LanguageIcon && !presentation.icon)
     return (
       <LanguageIcon

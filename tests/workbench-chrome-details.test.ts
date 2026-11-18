@@ -194,10 +194,12 @@ void describe('Workbench window and chat chrome details', () => {
     )
     assert.doesNotMatch(settingsStyles, /-webkit-app-region: drag/u)
 
-    // 文件历史在编辑区里就地展开，头部压不到红绿灯，也不是窗口拖拽区。
-    assert.match(editorPanel, /<FileHistoryView/u)
-    assert.match(historyView, /<header className=\{styles\.editorGitHistoryHeader\}>/u)
-    assert.doesNotMatch(historyStyles, /78px|-webkit-app-region|fileHistoryWindow/u)
+    // 文件历史使用独立原生窗口；内容头部不重复实现窗口关闭与拖拽区。
+    assert.doesNotMatch(editorPanel, /<FileHistoryView|fileHistoryMode/u)
+    assert.match(editorPanel, /velarosWorkbenchHistoryWindow\.open/u)
+    assert.match(readSource('src/renderer/src/app/StandaloneWorkbenchHistoryWindow.tsx'), /<FileHistoryView/u)
+    assert.match(historyView, /<header className=\{styles\.fileHistoryHeader\}>/u)
+    assert.doesNotMatch(historyStyles, /78px|-webkit-app-region/u)
   })
 
   void test('loads the shared UI stylesheets before every app module', () => {

@@ -104,6 +104,7 @@ import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesCha
 
 import { useWorkbenchEditorAutosave } from './useWorkbenchEditorAutosave'
 import { useWorkbenchEditorTabLayout } from './useWorkbenchEditorTabLayout'
+import { useWorkbenchHistoryWindowOwner } from './useWorkbenchHistoryWindowOwner'
 
 const EXTERNAL_FILE_READ_MAX_CHARS = 300_000
 /** 跨文件改动写回没打开的文件时最多读这么多字（与主进程的保存上限一致；更大的文件读回来是截断的，不能改）。 */
@@ -316,6 +317,14 @@ export function useWorkbenchEditorController({
     if (!file || !isWorkbenchFileEditable(file, chosenEditModes.get(file.path))) return
 
     updateOpenTabContent(file, content)
+  })
+
+  useWorkbenchHistoryWindowOwner({
+    projectRoot: activeProject?.rootPath ?? null,
+    openTabs,
+    editModes: chosenEditModes,
+    getOpenTab: (path) => openTabsByPathLatest.current.get(path),
+    restore: updateEditorContent,
   })
 
   /** 把一组语言服务的改动套到文件上（格式化这类），不报告结果；见 applyLanguageServiceEditsToFiles。 */

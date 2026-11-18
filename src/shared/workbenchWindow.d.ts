@@ -6,6 +6,7 @@ import type { WorkbenchConversationBridge } from './workbenchConversation'
 import type { WorkbenchDebuggerBridge } from './workbenchDebugger'
 import type { WorkbenchFsBridge } from './workbenchFs'
 import type { WorkbenchGitBridge } from './workbenchGit'
+import type { WorkbenchHistoryWindowBridge } from './workbenchHistoryWindow'
 import type { WorkbenchLanguageBridge } from './workbenchLanguage'
 import type { WorkbenchMemoryBridge } from './workbenchMemory'
 import type { WorkbenchModelBridge } from './workbenchModel'
@@ -21,6 +22,7 @@ import type { WorkbenchWorkspaceBridge } from './workbenchWorkspace'
 
 declare global {
   interface Window {
+    velarosWorkbenchHistoryWindow: WorkbenchHistoryWindowBridge
     velarosWorkbenchSettingsWindow: WorkbenchSettingsWindowBridge
     velarosWorkbenchAccount: WorkbenchAccountBridge
     velarosWorkbenchBrowser: WorkbenchBrowserBridge
