@@ -332,6 +332,9 @@ const settingsWindowBridge: WorkbenchSettingsWindowBridge = {
   open: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.open),
   close: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.close),
   exitProject: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.exitProject),
+  getTavilyConfigured: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.tavilyConfigured),
+  setTavilyApiKey: (apiKey) =>
+    ipcRenderer.invoke(WorkbenchSettingsWindowChannels.setTavilyApiKey, apiKey),
 }
 
 const windowStateBridge: WorkbenchWindowStateBridge = {

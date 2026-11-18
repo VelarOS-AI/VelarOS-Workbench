@@ -102,6 +102,7 @@ import {
   WorkbenchSettingsPill,
 } from './WorkbenchSettingsParts'
 import { WorkbenchSettingsUpdateAction } from './WorkbenchSettingsUpdateAction'
+import { WorkbenchTavilySettings } from './WorkbenchTavilySettings'
 
 type WorkbenchSettingsSectionId = 'appearance' | 'editor' | 'ai' | 'system' | 'account'
 
@@ -1220,6 +1221,7 @@ export function WorkbenchSettingsDialog({
           description={t('workbench.settingsWebSearchSummary')}
         >
           <div className={styles.workbenchSettingsSectionPanel}>
+            <WorkbenchTavilySettings />
             <SettingRow
               title={t('workbench.settingsWebSearchEngine')}
               description={t('workbench.settingsWebSearchEngineDescription')}

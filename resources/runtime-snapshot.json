@@ -4,8 +4,8 @@
     "platform": {
       "kind": "github-release",
       "repository": "VelarOS-AI/VelarOS-Platform",
-      "tag": "v0.7.13",
-      "sourceCommit": "4bdd09df58fd86898543992d6e36cdd5a5f64925"
+      "tag": "v0.7.14",
+      "sourceCommit": "953d8b3561c6b23feee4e3423d0a7551c9912be6"
     },
     "ui": {
       "kind": "github-release",
@@ -17,21 +17,21 @@
   "packages": [
     {
       "name": "@velaros-ai/velaros",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "source": "platform",
-      "fileName": "velaros-ai-velaros-0.12.1.tgz",
-      "sizeBytes": 2265153,
-      "sha256": "191e4391ce31e98517f785a1f354d37337cca17d1f63ee2c86a3f8523caab76c",
-      "integrity": "sha512-UyR1NsMtLK1dMo2mVlL3DwwfoDoWBpomF2u/W8ND3gkCxEzyY3R006oUhrudKWZDPHMiS8fV7FSe2+UV4wy0Tw=="
+      "fileName": "velaros-ai-velaros-0.12.2.tgz",
+      "sizeBytes": 2265152,
+      "sha256": "9eff6875785f1cefd2e98c7d486890af319b294c405d91cee7a1a5674b5839a0",
+      "integrity": "sha512-+6HokjxOeuQxLJhngzmkmWWc4aNmGYcAVXpKkMiOmV4hb2Q9ywhh/5e+vELRpdNcuDCvCtyobVRuoSP2o7hSdA=="
     },
     {
       "name": "@velaros-ai/capabilities",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "source": "platform",
-      "fileName": "velaros-ai-capabilities-0.12.1.tgz",
-      "sizeBytes": 7165756,
-      "sha256": "bca6216940a39becd0424dfcf9eae20b934a8e7e72fbe73084c831746ebb9865",
-      "integrity": "sha512-//iRs4uHlOx+YShNxMCiJPosgn+kzmg3JBCuFxA7qFOnpvPMYG8Y9G+MMtWAiFsCHFqnyhsesuwoBS50eG0RcQ=="
+      "fileName": "velaros-ai-capabilities-0.12.2.tgz",
+      "sizeBytes": 7168017,
+      "sha256": "e279ce9e330f068bf1ff55af0c3a360f7524c649f84e4125357d870e4d5506a4",
+      "integrity": "sha512-VxtvGloKNS7bt1ceUL8W74kgWu+65OVpbBBFyxuguQL2RjSiXu5PtlafX1vf0vq0wbBZzInmHOByYb08SQBmgQ=="
     },
     {
       "name": "@velaros-ai/ui",

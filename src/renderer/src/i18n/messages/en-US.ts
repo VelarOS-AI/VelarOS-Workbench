@@ -1204,7 +1204,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsConnectionDescription: 'Service address and API key',
     settingsUpdatePreferences: 'Update preferences',
     settingsPermissionsSummary: 'Approvals and sandbox',
-    settingsWebSearchSummary: 'Default search engine',
+    settingsWebSearchSummary: 'Tavily API and browser search',
     settingsMemorySummary: 'Preferences and saved memories',
     settingsAiRulesSummary: 'Rules for this project',
     settingsKeymapSummary: 'Preset and keyboard shortcuts',
@@ -1343,10 +1343,17 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsAiRules: 'AI Rules',
     settingsWebSearch: 'Web search',
     settingsWebSearchDescription:
-      'The agent searches and reads web pages in a hidden browser, without your sign-ins from the built-in browser and without leaving history.',
+      'Search through Tavily or a browser. Opening a specific web page uses a separate browser session.',
     settingsWebSearchEngine: 'Search engine',
+    settingsTavilyApiKey: 'Tavily API key',
+    settingsTavilyApiKeyDescription:
+      'Save a key to use only Tavily for web searches. Remove it to restore browser search.',
+    settingsTavilyConfigured: 'Configured',
+    settingsTavilySave: 'Save',
+    settingsTavilyClear: 'Remove',
+    settingsTavilyError: 'Could not load or save Tavily settings.',
     settingsWebSearchEngineDescription:
-      'Searches start with this engine and switch to the other one if it fails.',
+      'Preferred browser search engine when Tavily is unconfigured.',
     settingsMemory: 'Long-term memory',
     settingsMemoryDescription:
       'The model saves what it should remember across conversations as memories, one set per project. During a conversation, it searches the project memories when relevant information is needed.',

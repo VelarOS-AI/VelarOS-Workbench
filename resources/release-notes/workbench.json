@@ -3,6 +3,26 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.33",
+      "releasedAt": "2026-11-18",
+      "title": {
+        "zh": "网页搜索设置与修复",
+        "en": "Web search settings and fixes"
+      },
+      "added": {
+        "zh": ["可在 AI 的网上查资料设置中保存 Tavily API Key，让助手的网页搜索直接使用 Tavily。"],
+        "en": [
+          "Save a Tavily API key in AI web search settings to route assistant web searches through Tavily."
+        ]
+      },
+      "fixed": {
+        "zh": ["Bing 搜索遇到地区参数循环跳转时，会用标准搜索地址重试一次。"],
+        "en": [
+          "Retry Bing once with its canonical search URL when a regional redirect loop occurs."
+        ]
+      }
+    },
+    {
       "version": "0.4.32",
       "releasedAt": "2026-11-18",
       "title": {

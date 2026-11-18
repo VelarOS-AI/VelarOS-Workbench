@@ -1,10 +1,20 @@
 import { statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { app, BrowserWindow, ipcMain, nativeTheme, session, shell, webContents } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  type IpcMainInvokeEvent,
+  nativeTheme,
+  session,
+  shell,
+  webContents,
+} from 'electron'
 
 import { createElectronBrowserRuntime } from '@velaros-ai/capabilities/browser/electron'
-import { Log } from '@velaros-ai/velaros/core'
+import { isString, Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 import { createShellEnvironment } from '@velaros-ai/velaros/execution/local'
 import { createModelRuntimeComposition } from '@velaros-ai/velaros/model'
 
@@ -52,6 +62,7 @@ import { CodexEngine } from './engines/CodexEngine'
 import { WorkbenchEngineConversationRuntime } from './engines/WorkbenchEngineConversationRuntime'
 import { WorkbenchEngineSessionStore } from './engines/WorkbenchEngineSessionStore'
 import { setWorkbenchSystemLanguageSource } from './i18n/workbenchMainLocale'
+import { WorkbenchModelCredentialStore } from './model/WorkbenchModelCredentialStore'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
@@ -380,9 +391,10 @@ if (hasSingleInstanceLock)
     // 本机 shell 宿主全应用共用：Agent 起的后台任务才能活过一轮运行；交互式命令跑在 node-pty 的真终端里。
     const shellHosts = new WorkbenchShellHostRegistry(shellEnvironment, loadWorkbenchShellTerminal)
     const syncAgentEdits = languageSyncOnAgentEdits(providers.language)
-    // 长期记忆与网上查资料（与 Desktop 同一套）：记忆按项目各一份，查资料跑在不显示的页面里。
+    // 长期记忆按项目划分；Tavily 连接配置在应用内共用。
     const memory = new WorkbenchMemoryService(providers.parts.storagePaths.getMemoryDir())
     const webPages = new WorkbenchWebSearchPages()
+    const webSearchCredentials = new WorkbenchModelCredentialStore(join(dataRootDir, 'web-search'))
     // Agent 浏览器（与 Desktop 同一套运行时）：运行时一个进程一份；页面发起的权限请求交给运行时变成模型处理的待办，
     // 无人管理的一律拒绝。
     const browserService = new WorkbenchBrowserService({
@@ -418,6 +430,7 @@ if (hasSingleInstanceLock)
         (await providers.workspace.projectRules(projectRoot)).files,
       memory: (workspace) => memory.forRun(workspace),
       webPages,
+      tavilyApiKey: () => webSearchCredentials.getApiKey('tavily'),
       browser: browserService,
     })
     // 外部引擎（本机装好的 Claude Code 与 Codex 命令行）：会话选了它们时由它们执行。
@@ -531,6 +544,26 @@ if (hasSingleInstanceLock)
     ipcMain.handle(WorkbenchSettingsWindowChannels.exitProject, (event) =>
       settingsWindows.exitProject(event.sender)
     )
+    const assertSearchSettingsSender = (event: IpcMainInvokeEvent): void => {
+      if (event.senderFrame !== event.sender.mainFrame)
+        throw new AppError('PERMISSION', 'Web search settings require the main settings frame.')
+      settingsWindows.assertSettingsWindow(event.sender)
+    }
+    ipcMain.handle(WorkbenchSettingsWindowChannels.tavilyConfigured, async (event) => {
+      assertSearchSettingsSender(event)
+      return Boolean(await webSearchCredentials.getApiKey('tavily'))
+    })
+    ipcMain.handle(
+      WorkbenchSettingsWindowChannels.setTavilyApiKey,
+      async (event, value: unknown) => {
+        assertSearchSettingsSender(event)
+        if (!isString(value) || value.length > 512)
+          throw new AppError('VALIDATION', 'Invalid Tavily API key.')
+        const apiKey = value.trim()
+        await webSearchCredentials.setApiKey('tavily', apiKey)
+        return Boolean(apiKey)
+      }
+    )
     const historyWindows = new WorkbenchHistoryWindows({
       windows: windowManager,
       createWindow: (owner) => {
@@ -604,6 +637,8 @@ if (hasSingleInstanceLock)
 
       shutdownStarted = true
       settingsWindows.dispose()
+      ipcMain.removeHandler(WorkbenchSettingsWindowChannels.tavilyConfigured)
+      ipcMain.removeHandler(WorkbenchSettingsWindowChannels.setTavilyApiKey)
       historyWindows.dispose()
       event.preventDefault()
       // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker

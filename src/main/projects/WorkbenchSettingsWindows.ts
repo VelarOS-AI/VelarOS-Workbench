@@ -54,14 +54,19 @@ export class WorkbenchSettingsWindows {
   }
 
   public exitProject(sender: WebContents): void {
-    const settings = [...this.windows.values()].find(
-      (candidate) => candidate.webContents.id === sender.id
-    )
-    if (!settings || settings.isDestroyed())
-      throw new AppError('PERMISSION', 'Not a settings window')
+    this.assertSettingsWindow(sender)
     const owner = this.options.windows.getWindowForWebContents(sender)
     // The project renderer still owns its unsaved-editor check.
     this.options.windows.sendMenuCommandToWindow(owner, 'close-project')
+  }
+
+  public assertSettingsWindow(sender: WebContents): void {
+    if (
+      ![...this.windows.values()].some(
+        (window) => !window.isDestroyed() && window.webContents.id === sender.id
+      )
+    )
+      throw new AppError('PERMISSION', 'Not a settings window')
   }
 
   public dispose(): void {

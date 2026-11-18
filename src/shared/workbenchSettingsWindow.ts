@@ -5,10 +5,14 @@ export const WorkbenchSettingsWindowChannels = {
   open: 'workbench-app:settings-window:open',
   close: 'workbench-app:settings-window:close',
   exitProject: 'workbench-app:settings-window:exit-project',
+  tavilyConfigured: 'workbench-app:settings-window:tavily-configured',
+  setTavilyApiKey: 'workbench-app:settings-window:set-tavily-api-key',
 } as const
 
 export interface WorkbenchSettingsWindowBridge {
   open: () => Promise<void>
   close: () => Promise<void>
   exitProject: () => Promise<void>
+  getTavilyConfigured: () => Promise<boolean>
+  setTavilyApiKey: (apiKey: string) => Promise<boolean>
 }
