@@ -40,13 +40,26 @@ void describe('Workbench command cancellation', () => {
     let descendant: number | undefined
     const signals: NodeJS.Signals[] = []
     class EarlyExitShell extends CommandHelper {
-      public override shouldDetachForegroundProcess(): boolean { return true }
-      public override getForceKillDelayMs(): number { return 150 }
+      public override shouldDetachForegroundProcess(): boolean {
+        return true
+      }
+      public override getForceKillDelayMs(): number {
+        return 150
+      }
       public override getShellSpec() {
         const child = `process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(${JSON.stringify(marker)},String(process.pid));setInterval(()=>{},1000)`
-        return { file: 'node', args: ['-e', `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(child)}],{stdio:'ignore',detached:true}).unref();setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(stopShell)}))process.exit(0)},5)`] }
+        return {
+          file: 'node',
+          args: [
+            '-e',
+            `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(child)}],{stdio:'ignore',detached:true}).unref();setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(stopShell)}))process.exit(0)},5)`,
+          ],
+        }
       }
-      public override terminateForegroundProcess(_pid: number | undefined, signal: NodeJS.Signals = 'SIGTERM'): void {
+      public override terminateForegroundProcess(
+        _pid: number | undefined,
+        signal: NodeJS.Signals = 'SIGTERM'
+      ): void {
         signals.push(signal)
         // 单独结束 shell，留下真实子进程；模拟 POSIX 子孙关闭 stdio 后继续运行的边界。
         if (signal === 'SIGTERM') writeFileSync(stopShell, 'exit')
@@ -55,7 +68,9 @@ void describe('Workbench command cancellation', () => {
     }
     const controller = new AbortController()
     const running = new CommandRunner(new PathResolver(), new EarlyExitShell()).runCommand(
-      { projectRoot, command: 'echo fixture', timeoutMs: 5_000 }, undefined, controller.signal
+      { projectRoot, command: 'echo fixture', timeoutMs: 5_000 },
+      undefined,
+      controller.signal
     )
     try {
       descendant = Number(await waitForFile(marker, 3_000))
@@ -69,7 +84,7 @@ void describe('Workbench command cancellation', () => {
       controller.abort()
       if (descendant && isProcessAlive(descendant)) process.kill(descendant, 'SIGKILL')
       await running.catch(() => undefined)
-      await rm(projectRoot, { recursive: true, force: true })
+      await rm(projectRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
     }
   })
 
@@ -97,11 +112,15 @@ void describe('Workbench command cancellation', () => {
         'setInterval(() => {}, 1_000)',
       ].join(';')
 
-      commandPromise = runner.runCommand({
-        projectRoot,
-        command: `exec node -e ${quotePosixShellArgument(childScript)}`,
-        timeoutMs: 10_000,
-      }, undefined, controller.signal)
+      commandPromise = runner.runCommand(
+        {
+          projectRoot,
+          command: `exec node -e ${quotePosixShellArgument(childScript)}`,
+          timeoutMs: 10_000,
+        },
+        undefined,
+        controller.signal
+      )
 
       childPid = Number(await waitForFile(markerPath, 3_000))
       assert.ok(Number.isInteger(childPid) && childPid > 1)
@@ -134,10 +153,14 @@ void describe('Workbench command cancellation', () => {
     controller.abort(new Error('stopped before start'))
     try {
       await assert.rejects(
-        new CommandRunner(new PathResolver(), new CommandHelper()).runCommand({
-          projectRoot,
-          command: 'echo never',
-        }, undefined, controller.signal),
+        new CommandRunner(new PathResolver(), new CommandHelper()).runCommand(
+          {
+            projectRoot,
+            command: 'echo never',
+          },
+          undefined,
+          controller.signal
+        ),
         /stopped before start/u
       )
     } finally {
@@ -156,11 +179,15 @@ void describe('Workbench command cancellation', () => {
     const runner = new CommandRunner(new PathResolver(), commandHelper)
 
     try {
-      const result = await runner.runCommand({
-        projectRoot,
-        command: `exec node -e ${quotePosixShellArgument("process.stdout.write('done')")}`,
-        timeoutMs: 5_000,
-      }, undefined, controller.signal)
+      const result = await runner.runCommand(
+        {
+          projectRoot,
+          command: `exec node -e ${quotePosixShellArgument("process.stdout.write('done')")}`,
+          timeoutMs: 5_000,
+        },
+        undefined,
+        controller.signal
+      )
 
       assert.equal(result.success, true)
       assert.equal(result.stdout, 'done')

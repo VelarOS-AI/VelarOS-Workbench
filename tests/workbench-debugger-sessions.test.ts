@@ -432,10 +432,12 @@ void describe('controlling a running debug session', () => {
       const evaluate = (expression: string, frameId?: string) =>
         project.sessions.evaluate({ sessionId, expression, frameId }, 1)
       assert.equal((await evaluate('typeof process.pid')).value?.text, '"number"')
+      const executable = (await evaluate('process.execPath')).value?.text
+      assert.ok(executable)
+      // Bun's CI install may expose the same executable through a package-store link.
       assert.equal(
-        (await evaluate(`process.execPath === ${JSON.stringify(resolveWorkbenchNodeExecutable())}`))
-          .value?.text,
-        'true'
+        await realpath(JSON.parse(executable) as string),
+        await realpath(resolveWorkbenchNodeExecutable())
       )
       assert.match((await evaluate('ticks')).error ?? '', /ReferenceError: ticks is not defined/u)
       assert.equal((await evaluate('typeof ticks', outside.frames[0]!.id)).value?.text, '"number"')

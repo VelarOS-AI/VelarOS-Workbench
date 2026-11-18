@@ -15,23 +15,32 @@ export function withinDeadline(promise, deadlineAt, label = 'Process cleanup') {
       Math.max(0, deadlineAt - Date.now())
     )
   })
-  return Promise.race([promise, expired]).then((value) => {
-    if (Date.now() > deadlineAt) throw new Error(`${label} deadline exceeded`)
-    return value
-  }).finally(() => clearTimeout(timer))
+  return Promise.race([promise, expired])
+    .then((value) => {
+      if (Date.now() > deadlineAt) throw new Error(`${label} deadline exceeded`)
+      return value
+    })
+    .finally(() => clearTimeout(timer))
 }
 
 function observeClose(child) {
   let record
   let failure
   const closed = new Promise((resolve) => {
-    child.once('error', (error) => { failure = error })
+    child.once('error', (error) => {
+      failure = error
+    })
     child.once('close', (code, signal) => {
       record = { code, signal, error: failure }
       resolve(record)
     })
   })
-  return { closed, get record() { return record } }
+  return {
+    closed,
+    get record() {
+      return record
+    },
+  }
 }
 
 /** Release event-loop references only after reporting an unconfirmed cleanup failure. */
@@ -86,14 +95,22 @@ async function terminateProcessTree(child, signal, deadlineAt) {
     } catch (error) {
       if (!observation.record) {
         let killError
-        try { command.kill('SIGKILL') } catch (failure) { killError = failure }
+        try {
+          command.kill('SIGKILL')
+        } catch (failure) {
+          killError = failure
+        }
         try {
           await withinDeadline(observation.closed, deadlineAt, `taskkill close for PID ${pid}`)
         } catch (closeError) {
           unrefUnclosedProcess(command)
-          throw new AggregateError([error, ...(killError ? [killError] : []), closeError], `Unconfirmed taskkill close for PID ${pid}`)
+          throw new AggregateError(
+            [error, ...(killError ? [killError] : []), closeError],
+            `Unconfirmed taskkill close for PID ${pid}`
+          )
         }
-        if (killError) throw new AggregateError([error, killError], `Failed to stop taskkill for PID ${pid}`)
+        if (killError)
+          throw new AggregateError([error, killError], `Failed to stop taskkill for PID ${pid}`)
       }
       throw error
     }
@@ -122,14 +139,20 @@ export class OwnedChildProcess {
     this.observation = observeClose(child)
     this.closed = this.observation.closed
     this.timedOut = false
-    this.stopStarted = new Promise((resolve) => { this.resolveStopStarted = resolve })
+    this.stopStarted = new Promise((resolve) => {
+      this.resolveStopStarted = resolve
+    })
     this.done = this.monitor()
   }
 
-  get record() { return this.observation.record }
+  get record() {
+    return this.observation.record
+  }
 
   stop(signal = 'SIGTERM') {
     if (!this.stopping) {
+      // Draining descendants after a successful root exit is cleanup, not an interruption.
+      this.interruptedBeforeClose = !this.record
       // Publish the promise before any callback can report a synchronous close.
       this.stopping = Promise.resolve().then(() => this.stopOwned(signal))
       void this.stopping.catch(() => {}) // monitor awaits the same failure below.
@@ -144,31 +167,55 @@ export class OwnedChildProcess {
     const forceAt = deadlineAt - Math.min(finalCloseReserveMilliseconds, Math.floor(remaining / 2))
     const errors = []
     let force
-    const escalation = setTimeout(() => {
-      force = Promise.resolve().then(() => {
-        if (this.record && !ownedGroupAlive(this.child)) return
-        return terminateProcessTree(this.child, 'SIGKILL', deadlineAt)
-      })
-      void force.catch(() => {})
-    }, Math.max(0, (this.cooperativeStop ? forceAt : Math.min(forceAt, Date.now() + forceKillDelayMilliseconds)) - Date.now()))
+    const escalation = setTimeout(
+      () => {
+        force = Promise.resolve().then(() => {
+          if (this.record && !ownedGroupAlive(this.child)) return
+          return terminateProcessTree(this.child, 'SIGKILL', deadlineAt)
+        })
+        void force.catch(() => {})
+      },
+      Math.max(
+        0,
+        (this.cooperativeStop
+          ? forceAt
+          : Math.min(forceAt, Date.now() + forceKillDelayMilliseconds)) - Date.now()
+      )
+    )
     try {
       try {
         if (this.cooperativeStop)
-          await withinDeadline(this.cooperativeStop(forceAt), forceAt, `${this.label} stop delivery`)
+          await withinDeadline(
+            this.cooperativeStop(forceAt),
+            forceAt,
+            `${this.label} stop delivery`
+          )
         else await terminateProcessTree(this.child, signal, forceAt)
-      } catch (error) { errors.push(error) }
+      } catch (error) {
+        errors.push(error)
+      }
       try {
         await withinDeadline(this.closed, deadlineAt, `${this.label} close`)
         await waitForOwnedGroupExit(this.child, deadlineAt)
-      } catch (error) { errors.push(error) }
+      } catch (error) {
+        errors.push(error)
+      }
       if (force) {
-        try { await force } catch (error) { errors.push(error) }
+        try {
+          await force
+        } catch (error) {
+          errors.push(error)
+        }
       }
     } finally {
       clearTimeout(escalation)
       if (!this.record) unrefUnclosedProcess(this.child)
     }
-    if (errors.length) throw new AggregateError(errors, `Failed to close ${this.label} (PID ${this.child.pid ?? 'unknown'})`)
+    if (errors.length)
+      throw new AggregateError(
+        errors,
+        `Failed to close ${this.label} (PID ${this.child.pid ?? 'unknown'})`
+      )
   }
 
   async monitor() {
@@ -186,13 +233,16 @@ export class OwnedChildProcess {
       await Promise.race([this.closed, this.stopStarted, expired])
       if (this.stopping) await this.stopping
       else if (this.timedOut || ownedGroupAlive(this.child)) await this.stop()
-    } catch (failure) { error = failure }
-    finally { clearTimeout(timeout) }
+    } catch (failure) {
+      error = failure
+    } finally {
+      clearTimeout(timeout)
+    }
     if (Date.now() > this.deadlineAt) this.timedOut = true
     return {
       record: this.record,
       timedOut: this.timedOut,
-      stopped: !!this.stopping,
+      stopped: !!this.interruptedBeforeClose,
       error: error ?? this.record?.error,
     }
   }
