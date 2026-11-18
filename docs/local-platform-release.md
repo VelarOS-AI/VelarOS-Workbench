@@ -32,6 +32,10 @@ gh workflow run release-workbench.yml --repo VelarOS-AI/VelarOS-Workbench --ref 
 The environment must provide the release repository token, catalog attestation key, and Apple
 signing/notarization credentials (`CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`,
 `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`). Credentials stay in GitHub environment secrets.
+The existing `release-workbench.yml` in `VelarOS-AI/VelarOS-Desktop` can also build this exact
+immutable source using Desktop's `release-candidates` environment. Dispatch only one repository's
+workflow for a version at a time; concurrency groups do not serialize runs across repositories.
+This reuses Desktop's Apple signing credentials without exporting or copying their values.
 Source checkout and public Platform/UI archive verification use the job's read-only GitHub token.
 The workflow restores
 the pinned Platform archives, installs the frozen lock, checks each native environment, verifies the

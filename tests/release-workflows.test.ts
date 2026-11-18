@@ -53,6 +53,7 @@ void describe('release workflows', () => {
         {
           if?: string
           environment?: string
+          env?: Record<string, string>
           strategy?: { matrix: { include: Array<{ platform_key: string }> } }
         }
       >
@@ -64,6 +65,7 @@ void describe('release workflows', () => {
     assert.equal(parsed.concurrency['cancel-in-progress'], false)
     assert.equal(parsed.jobs.source.if, "github.ref == 'refs/heads/main'")
     assert.equal(parsed.jobs.native.environment, 'release-candidates')
+    assert.equal(parsed.jobs.native.env?.GH_TOKEN, '${{ github.token }}')
     assert.deepEqual(
       parsed.jobs.native.strategy?.matrix.include.map((entry) => entry.platform_key).sort(),
       ['darwin-arm64', 'linux-x64', 'win32-x64']

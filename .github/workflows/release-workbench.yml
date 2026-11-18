@@ -114,6 +114,7 @@ jobs:
       RELEASE_PLATFORM_KEY: ${{ matrix.platform_key }}
       PACKAGE_TARGET: ${{ matrix.target }}
       PACKAGE_ARCH: ${{ matrix.arch }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Preserve source bytes
         run: |
