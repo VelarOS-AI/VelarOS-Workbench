@@ -92,7 +92,6 @@ import {
   withSettledWorkerThreads,
   type WorkbenchConversationWorkerThread,
 } from './conversation/workbenchConversationNotices'
-import { WorkbenchNotebook } from './conversation/WorkbenchNotebook'
 import {
   type WorkbenchRunChangesScope,
   WorkbenchRunChangesScopeContext,
@@ -109,6 +108,7 @@ import {
   EmptyWorkbenchComposerContext,
   forgetStandaloneChatDraft,
   snapshotWorkbenchComposerContext,
+  updateStandaloneChatDraft,
   useStandaloneChatDraft,
   type WorkbenchComposerContext,
 } from './standaloneChatDrafts'
@@ -174,8 +174,8 @@ import {
 } from './standaloneWorkbenchManagedModels'
 import { createStandaloneWorkbenchModelSelectorProviders } from './standaloneWorkbenchModelCatalog'
 import {
+  getStandaloneWorkbenchModelConfig,
   selectStandaloneWorkbenchAgentModel,
-  selectStandaloneWorkbenchModelProvider,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
 import {
@@ -226,6 +226,8 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
    * 就定下来，引擎的上下文在引擎那边，换执行体要新开会话。
    */
   readonly engine: Nullable<WorkbenchConversationEngineSelection>
+  readonly modelSelection?: { provider: string; model: string }
+  readonly reasoningLevel?: ReasoningLevel
   readonly revision: number
 }
 
@@ -380,6 +382,7 @@ function restoreStoredState(
 ): StandaloneChatState | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const stored = value as Partial<StandaloneChatState>
+  const modelSelection = asRecord(stored.modelSelection)
   if (!Array.isArray(stored.messages)) return null
   // 重开后未收尾的执行按中断恢复，下一条消息继续这一轮；脚本、交互与未读引导分别收尾。
   const restoredStatus = restoreStandaloneRunStatus(stored, runStoppedText())
@@ -402,6 +405,13 @@ function restoreStoredState(
     folderId: typeof stored.folderId === 'string' ? stored.folderId : empty.folderId,
     messages,
     engine: readWorkbenchEngineSelection(stored.engine),
+    modelSelection:
+      typeof modelSelection.provider === 'string' &&
+      typeof modelSelection.model === 'string' &&
+      modelSelection.model.trim()
+        ? { provider: modelSelection.provider, model: modelSelection.model }
+        : undefined,
+    reasoningLevel: readReasoningLevel(stored.reasoningLevel),
     ...restoredStatus,
     checkpoints: Array.isArray(stored.checkpoints)
       ? stored.checkpoints.filter(isStoredStandaloneCheckpoint)
@@ -1247,8 +1257,31 @@ function buildStandaloneProjectRuntime(
       addProjectSession: async () => {
         const key = stateKey(normalizedRoot)
         const active = getState(normalizedRoot)
-        const next = { ...createState(normalizedRoot, false), engine: active.engine }
-        inactiveStates.set(key, [active, ...(inactiveStates.get(key) ?? [])])
+        const inactive = inactiveStates.get(key) ?? []
+        const unstarted = inactive.find(
+          (candidate) =>
+            candidate.engine?.id === active.engine?.id &&
+            candidate.messages.length === 0 &&
+            !isActiveChatRun(candidate.status)
+        )
+        const { provider, model } = getStandaloneWorkbenchModelConfig()
+        const configuration = {
+          engine: active.engine,
+          modelSelection:
+            active.modelSelection?.provider === provider ? active.modelSelection : { provider, model },
+          reasoningLevel: active.reasoningLevel ?? readStoredReasoningLevel(),
+        }
+        const next = { ...(unstarted ?? createState(normalizedRoot, false)), ...configuration }
+        if (unstarted)
+          updateStandaloneChatDraft(runKey(normalizedRoot, unstarted.sessionId), (draft) =>
+            draft.context
+              ? { ...draft, context: { ...draft.context, reasoningLevel: configuration.reasoningLevel } }
+              : draft
+          )
+        inactiveStates.set(key, [
+          { ...active, ...configuration },
+          ...inactive.filter((candidate) => candidate !== unstarted),
+        ])
         states.set(key, next)
         persistState(next, { immediate: true })
         for (const listener of listeners) listener()
@@ -1304,12 +1337,7 @@ function StandaloneWorkbenchChatSessionActions({
 }: WorkbenchChatSessionActionsProps): Nullable<ReactElement> {
   const chat = useStandaloneChatState(projectRoot)
   if (chat.engine || chat.sessionId !== sessionId) return null
-  return (
-    <>
-      <WorkbenchAgentProcesses projectRoot={projectRoot} sessionId={sessionId} />
-      <WorkbenchNotebook projectRoot={projectRoot} sessionId={sessionId} />
-    </>
-  )
+  return <WorkbenchAgentProcesses projectRoot={projectRoot} sessionId={sessionId} />
 }
 
 function StandaloneWorkbenchChatSessionSurface({
@@ -1330,7 +1358,13 @@ function StandaloneWorkbenchChatSessionSurface({
   const hasActiveRun = !!findActiveRun(projectRoot, chat.sessionId)
   const { t, locale } = useWorkbenchI18n()
   const conversationTranslator = useConversationTranslatorRuntime()
-  const modelConfig = useStandaloneWorkbenchModelConfig()
+  const settingsModelConfig = useStandaloneWorkbenchModelConfig()
+  const sessionModel =
+    chat.modelSelection?.provider === settingsModelConfig.provider ? chat.modelSelection.model : ''
+  const modelConfig = useMemo(
+    () => (sessionModel ? { ...settingsModelConfig, model: sessionModel } : settingsModelConfig),
+    [sessionModel, settingsModelConfig]
+  )
   const managedModelState = useStandaloneWorkbenchManagedModels()
   const selectedManagedProvider = getStandaloneWorkbenchManagedProvider(
     modelConfig.provider,
@@ -1370,7 +1404,7 @@ function StandaloneWorkbenchChatSessionSurface({
     setReasoningLevel,
   } = useStandaloneChatDraft(`${projectRoot}\0${chat.sessionId}`, {
     currentFilePath,
-    reasoningLevel: readStoredReasoningLevel(),
+    reasoningLevel: chat.reasoningLevel ?? readStoredReasoningLevel(),
   })
   const [showThinkingProcess, setShowThinkingProcess] = useState(true)
   const [accountSignInSessions, setAccountSignInSessions] = useState<ReadonlySet<string>>(
@@ -1540,16 +1574,6 @@ function StandaloneWorkbenchChatSessionSurface({
       ),
     [includedCurrentFilePath, selectedFileReferencePaths]
   )
-
-  useEffect(() => {
-    if (
-      managedModelState.status !== 'ready' ||
-      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) ||
-      selectedManagedProvider
-    )
-      return
-    selectStandaloneWorkbenchModelProvider('openrouter')
-  }, [managedModelState.status, modelConfig.provider, selectedManagedProvider])
 
   async function stop(): Promise<void> {
     const run = findActiveRun(projectRoot, chat.sessionId)
@@ -1858,7 +1882,7 @@ function StandaloneWorkbenchChatSessionSurface({
           return false
         }
       } else {
-        // VelarOS 自己的 Agent：要有模型、登录 VelarOS，托管模型还要在线授权。
+        // 使用自配模型时直接提交；VelarOS 托管模型需要登录并查询在线授权。
         if (!modelConfig.provider.trim() || !modelConfig.model.trim()) {
           workbenchMessage.warning({
             title: t('workbench.chatModelMissingTitle'),
@@ -1866,22 +1890,22 @@ function StandaloneWorkbenchChatSessionSurface({
           })
           return false
         }
-        setAccountSignInPending(true)
-        try {
-          const account = await window.velarosWorkbenchAccount.ensureSignedIn()
-          if (account.status !== 'signed-in') return false
-        } catch (error) {
-          workbenchMessage.warning({
-            title: t('workbench.chatSignInFailedTitle'),
-            description: t('workbench.chatSignInFailedDescription', {
-              error: error instanceof Error ? error.message : String(error),
-            }),
-          })
-          return false
-        } finally {
-          setAccountSignInPending(false)
-        }
         if (isStandaloneWorkbenchManagedProviderId(modelConfig.provider)) {
+          setAccountSignInPending(true)
+          try {
+            const account = await window.velarosWorkbenchAccount.ensureSignedIn()
+            if (account.status !== 'signed-in') return false
+          } catch (error) {
+            workbenchMessage.warning({
+              title: t('workbench.chatSignInFailedTitle'),
+              description: t('workbench.chatSignInFailedDescription', {
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            })
+            return false
+          } finally {
+            setAccountSignInPending(false)
+          }
           try {
             const snapshot = await refreshStandaloneWorkbenchManagedModels()
             const managedProvider = snapshot.managedModels.find(
@@ -2277,8 +2301,14 @@ function StandaloneWorkbenchChatSessionSurface({
             (entry) =>
               entry.value === provider && entry.models.some((option) => option.value === model)
           )
-        )
+        ) {
+          updateSession(projectRoot, chat.sessionId, (state) => ({
+            ...state,
+            modelSelection: { provider, model },
+            revision: state.revision + 1,
+          }))
           selectStandaloneWorkbenchAgentModel(provider, model)
+        }
       },
     }
   }, [
@@ -2297,7 +2327,8 @@ function StandaloneWorkbenchChatSessionSurface({
     t,
   ])
   useEffect(() => {
-    if (engine || isRunActive || providerCatalog.loading || providerCatalog.error) return
+    if (engine || sessionModel || isRunActive || providerCatalog.loading || providerCatalog.error)
+      return
     const provider = modelSelector?.providers.find((entry) => entry.value === modelConfig.provider)
     if (
       !provider?.models.length ||
@@ -2313,6 +2344,7 @@ function StandaloneWorkbenchChatSessionSurface({
     modelSelector,
     providerCatalog.error,
     providerCatalog.loading,
+    sessionModel,
   ])
   const composerControl = useMemo<ChatComposerControl>(
     () => ({
@@ -2389,6 +2421,11 @@ function StandaloneWorkbenchChatSessionSurface({
           disabled: isRunActive,
           onChange: (value: ReasoningLevel) => {
             setReasoningLevel(value)
+            updateSession(projectRoot, chat.sessionId, (state) => ({
+              ...state,
+              reasoningLevel: value,
+              revision: state.revision + 1,
+            }))
             storeReasoningLevel(value)
           },
         },
@@ -2698,8 +2735,7 @@ function isTextAttachment(file: File): boolean {
 }
 
 /**
- * 思考力度的本地档位（与 Desktop 同五档）：按**产品**记忆（跨会话保留），换项目、换会话不会把用户刚调好的档
- * 悄悄打回默认。存的不是这五档之一就用默认档。
+ * 未保存推理强度的会话沿用产品最近的档位；存的值不合法时回到默认档。
  */
 const WorkbenchReasoningLevels = new Set<ReasoningLevel>(['low', 'medium', 'high', 'xhigh', 'max'])
 const DefaultWorkbenchReasoningLevel: ReasoningLevel = 'medium'
@@ -2707,10 +2743,14 @@ const ReasoningLevelStorageKey = 'velaros.workbench.thinking-depth'
 
 function readStoredReasoningLevel(): ReasoningLevel {
   if (typeof window === 'undefined') return DefaultWorkbenchReasoningLevel
-  const stored = window.localStorage.getItem(ReasoningLevelStorageKey) ?? ''
-  return WorkbenchReasoningLevels.has(stored as ReasoningLevel)
-    ? (stored as ReasoningLevel)
-    : DefaultWorkbenchReasoningLevel
+  return (
+    readReasoningLevel(window.localStorage.getItem(ReasoningLevelStorageKey)) ??
+    DefaultWorkbenchReasoningLevel
+  )
+}
+
+function readReasoningLevel(value: unknown): ReasoningLevel | undefined {
+  return WorkbenchReasoningLevels.has(value as ReasoningLevel) ? (value as ReasoningLevel) : undefined
 }
 
 function storeReasoningLevel(level: ReasoningLevel): void {
@@ -2813,6 +2853,8 @@ function readPersistedFieldIdentities(state: StandaloneChatState): unknown[] {
     state.contextUsage,
     state.usageTelemetry,
     state.engine,
+    state.modelSelection,
+    state.reasoningLevel,
   ]
 }
 
@@ -2823,6 +2865,8 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     sessionId: state.sessionId,
     folderId: state.folderId,
     engine: toOptional(state.engine),
+    modelSelection: state.modelSelection,
+    reasoningLevel: state.reasoningLevel,
     messages: state.messages,
     lastRunStartedAt: state.lastRunStartedAt,
     lastRunFinishedAt: state.lastRunFinishedAt,

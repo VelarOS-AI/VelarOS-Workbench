@@ -3,6 +3,30 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.34",
+      "releasedAt": "2026-11-22",
+      "title": {
+        "zh": "会话模型继承与网络修复",
+        "en": "Conversation model inheritance and network fixes"
+      },
+      "added": {
+        "zh": ["新会话沿用当前会话的模型和推理强度。"],
+        "en": ["New conversations inherit the current conversation's model and reasoning level."]
+      },
+      "fixed": {
+        "zh": [
+          "模型与账号请求遵循系统代理。模型请求重连时显示实际重试进度，网络恢复后重新加载模型目录。",
+          "子 Agent 展示派发时指定的任务标题，Tavily 密钥在验证成功后才保存。",
+          "移除工作笔记入口，并进一步缩小 JS 和 TS 方块图标。"
+        ],
+        "en": [
+          "Model and account requests follow the system proxy. The chat reports model retry progress and refreshes the catalog when connectivity returns.",
+          "Child agents display their assigned task titles, and Tavily keys are verified before saving.",
+          "Remove the working-notes entry and reduce the size of the square JavaScript and TypeScript icons."
+        ]
+      }
+    },
+    {
       "version": "0.4.33",
       "releasedAt": "2026-11-18",
       "title": {

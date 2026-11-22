@@ -64,6 +64,8 @@ import { WorkbenchEngineSessionStore } from './engines/WorkbenchEngineSessionSto
 import { setWorkbenchSystemLanguageSource } from './i18n/workbenchMainLocale'
 import { WorkbenchModelCredentialStore } from './model/WorkbenchModelCredentialStore'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
+import { fetchThroughWorkbenchSystemProxy } from './model/WorkbenchSystemHttpTransport'
+import { WorkbenchTavilySettings } from './model/WorkbenchTavilySettings'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -87,6 +89,7 @@ import { registerWorkbenchWindowStateIpc } from './projects/WorkbenchWindowState
 import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
 import { registerWorkbenchDebugIpc } from './workspace/debug/WorkbenchDebugIpc'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
+import { callWithEnvelope } from './workspace/ipcBoundary'
 import { WorkbenchInlineCompletionGenerator } from './workspace/language/WorkbenchInlineCompletion'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
 import {
@@ -352,8 +355,11 @@ if (hasSingleInstanceLock)
       ),
       reporter: productAnalytics,
     })
-    const accountService = new WorkbenchAccountService(new WorkbenchSharedAccountStore(), (url) =>
-      shell.openExternal(url)
+    const accountService = new WorkbenchAccountService(
+      new WorkbenchSharedAccountStore(),
+      (url) => shell.openExternal(url),
+      undefined,
+      fetchThroughWorkbenchSystemProxy
     )
     const disposeAccountIpc = registerWorkbenchAccountIpc(accountService)
     // 界面里的调试浏览器（用户自己开的网页标签）：闸门只负责记下挂上来的页面，退出时一并关掉。
@@ -370,6 +376,7 @@ if (hasSingleInstanceLock)
     void providers.parts.files.purgePreviousDeleteUndoCopies()
     const modelComposition = createModelRuntimeComposition({
       environment: Object.freeze({ ...process.env }),
+      fetch: fetchThroughWorkbenchSystemProxy,
       providerCatalog: {
         attribution: {
           referer: websiteOrigin,
@@ -394,7 +401,10 @@ if (hasSingleInstanceLock)
     // 长期记忆按项目划分；Tavily 连接配置在应用内共用。
     const memory = new WorkbenchMemoryService(providers.parts.storagePaths.getMemoryDir())
     const webPages = new WorkbenchWebSearchPages()
-    const webSearchCredentials = new WorkbenchModelCredentialStore(join(dataRootDir, 'web-search'))
+    const tavilySettings = new WorkbenchTavilySettings(
+      new WorkbenchModelCredentialStore(join(dataRootDir, 'web-search')),
+      fetchThroughWorkbenchSystemProxy
+    )
     // Agent 浏览器（与 Desktop 同一套运行时）：运行时一个进程一份；页面发起的权限请求交给运行时变成模型处理的待办，
     // 无人管理的一律拒绝。
     const browserService = new WorkbenchBrowserService({
@@ -430,7 +440,7 @@ if (hasSingleInstanceLock)
         (await providers.workspace.projectRules(projectRoot)).files,
       memory: (workspace) => memory.forRun(workspace),
       webPages,
-      tavilyApiKey: () => webSearchCredentials.getApiKey('tavily'),
+      tavilyApiKey: () => tavilySettings.getApiKey(),
       browser: browserService,
     })
     // 外部引擎（本机装好的 Claude Code 与 Codex 命令行）：会话选了它们时由它们执行。
@@ -551,18 +561,17 @@ if (hasSingleInstanceLock)
     }
     ipcMain.handle(WorkbenchSettingsWindowChannels.tavilyConfigured, async (event) => {
       assertSearchSettingsSender(event)
-      return Boolean(await webSearchCredentials.getApiKey('tavily'))
+      return Boolean(await tavilySettings.getApiKey())
     })
     ipcMain.handle(
       WorkbenchSettingsWindowChannels.setTavilyApiKey,
-      async (event, value: unknown) => {
-        assertSearchSettingsSender(event)
-        if (!isString(value) || value.length > 512)
-          throw new AppError('VALIDATION', 'Invalid Tavily API key.')
-        const apiKey = value.trim()
-        await webSearchCredentials.setApiKey('tavily', apiKey)
-        return Boolean(apiKey)
-      }
+      (event, value: unknown) =>
+        callWithEnvelope(async () => {
+          assertSearchSettingsSender(event)
+          if (!isString(value) || value.length > 512)
+            throw new AppError('VALIDATION', 'Invalid Tavily API key.')
+          return tavilySettings.setApiKey(value.trim())
+        })
     )
     const historyWindows = new WorkbenchHistoryWindows({
       windows: windowManager,

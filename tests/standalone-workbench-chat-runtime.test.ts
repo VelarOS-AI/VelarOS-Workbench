@@ -94,6 +94,7 @@ void describe('standalone Workbench conversation runtime', () => {
     runtime = apply(runtime, {
       kind: 'reconnecting',
       attempt: 1,
+      maxAttempts: 3,
       message: '  已到每小时的模型用量上限，约 3 分钟后自动继续。  ',
     })
     assert.deepEqual(readProgress(runtime), {
@@ -102,7 +103,7 @@ void describe('standalone Workbench conversation runtime', () => {
       activeTurn: 2,
       completedTurns: 0,
       retryAttempt: 1,
-      retryMaxAttempts: null,
+      retryMaxAttempts: 3,
       retryMessage: '已到每小时的模型用量上限，约 3 分钟后自动继续。',
     })
     assert.equal(apply(runtime, { kind: 'reconnecting', attempt: 0 }).connectionRetryAttempt, 1)

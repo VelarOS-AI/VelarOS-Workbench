@@ -190,7 +190,7 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
           ...(transform ? { transform, transformOrigin: 'center' } : {}),
         }}
       >
-        <g data-language-mark-paint="true" transform="translate(8.64 8.64) scale(.865)">
+        <g data-language-mark-paint="true" transform="translate(11.52 11.52) scale(.82)">
           <LanguageIcon size={128} color={iconColor} aria-hidden="true" focusable="false" />
         </g>
       </svg>

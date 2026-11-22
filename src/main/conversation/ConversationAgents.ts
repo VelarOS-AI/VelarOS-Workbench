@@ -72,6 +72,7 @@ export class ConversationAgentBoard {
           agentId: agent.id,
           model: this.model(),
           anchorId: anchorOf(agent.executionId),
+          title: agent.title?.trim().slice(0, ConversationAgentTextMaxChars) || undefined,
           task: agent.task.slice(0, ConversationAgentTextMaxChars),
           profile: agent.profile,
           status: StatusBySummary[agent.status],
@@ -241,7 +242,11 @@ export class ConversationAgentBoard {
     phaseStartedAt?: number
   ): void {
     const current = this.threads.get(content.id)
-    const next = { ...content, activity: content.activity ?? current?.content.activity }
+    const next = {
+      ...content,
+      title: content.title ?? current?.content.title,
+      activity: content.activity ?? current?.content.activity,
+    }
     const startedAt = phaseStartedAt ?? current?.startedAt ?? Date.now()
     if (
       current &&

@@ -1,4 +1,4 @@
-// Native package smoke test: node tests/workbench-editor-behavior.electron.mjs <application.exe>
+// Native package smoke test: node tests/workbench-editor-behavior.electron.mjs --show-window <application.exe>
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -6,7 +6,11 @@ import path from 'node:path'
 
 import { _electron as electron, expect } from '@playwright/test'
 
-const executablePath = process.argv[2]
+import { manualElectronTestArgs } from './helpers/manualElectronTest.mjs'
+
+const nativeTestArgs = manualElectronTestArgs()
+
+const executablePath = nativeTestArgs[0]
 assert.ok(executablePath, 'Pass the native packaged application executable')
 const temporary = await mkdtemp(path.join(tmpdir(), 'wb-editor-package-'))
 const profile = path.join(temporary, 'profile')

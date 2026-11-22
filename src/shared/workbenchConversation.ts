@@ -8,7 +8,6 @@ import type {
   StreamUsageTelemetryPayload,
   TeamExecutionPhase,
 } from '@velaros-ai/ui/conversation/contracts'
-import type { RuntimeNoteContent, RuntimeNoteRead, VelarosSession } from '@velaros-ai/velaros'
 import type { ActInvocationSummary } from '@velaros-ai/velaros/contracts'
 import type { ModelSelection } from '@velaros-ai/velaros/model'
 
@@ -25,9 +24,6 @@ export const WorkbenchConversationChannels = {
   input: 'workbench-app:conversation:input',
   answer: 'workbench-app:conversation:answer',
   getGoal: 'workbench-app:conversation:get-goal',
-  listNotes: 'workbench-app:conversation:list-notes',
-  readNote: 'workbench-app:conversation:read-note',
-  notesChanged: 'workbench-app:conversation:notes-changed',
   updateGoal: 'workbench-app:conversation:update-goal',
   deleteSession: 'workbench-app:conversation:delete-session',
   backupHistory: 'workbench-app:conversation:backup-history',
@@ -240,6 +236,7 @@ export interface ConversationAgentProjection {
   >
   /** 派发它的脚本卡；对不上卡时为 null。 */
   anchorId: Nullable<string>
+  title?: string
   task: string
   profile: string
   status: ConversationAgentStatus
@@ -324,7 +321,7 @@ export type WorkbenchConversationState =
   | { kind: 'phase'; teamPhase: TeamExecutionPhase }
   | { kind: 'turn-start'; turn: number }
   | { kind: 'turn-end'; turn: number }
-  | { kind: 'reconnecting'; attempt: number; message?: string }
+  | { kind: 'reconnecting'; attempt: number; maxAttempts?: number; message?: string }
   | { kind: 'input-applied'; inputId: string }
   | ({
       kind: 'usage-telemetry'
@@ -402,13 +399,6 @@ export interface WorkbenchConversationBridge {
   guidance(request: WorkbenchConversationGuidanceRequest): Promise<WorkbenchFsCallResult<void>>
   input(request: WorkbenchConversationInputRequest): Promise<WorkbenchFsCallResult<void>>
   answer(request: WorkbenchConversationAnswerRequest): Promise<WorkbenchFsCallResult<void>>
-  listNotes(
-    request: WorkbenchConversationSessionRequest & { after?: string; limit?: number }
-  ): Promise<WorkbenchFsCallResult<Awaited<ReturnType<VelarosSession['listNotes']>>>>
-  readNote(
-    request: WorkbenchConversationSessionRequest & RuntimeNoteRead
-  ): Promise<WorkbenchFsCallResult<RuntimeNoteContent>>
-  onNotesChanged(listener: (ref: WorkbenchConversationSessionRequest) => void): () => void
   getGoal(
     request: WorkbenchConversationSessionRequest
   ): Promise<WorkbenchFsCallResult<WorkbenchConversationGoalResult>>

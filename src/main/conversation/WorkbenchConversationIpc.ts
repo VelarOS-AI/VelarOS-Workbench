@@ -3,7 +3,7 @@ import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 import { z } from 'zod'
 
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
@@ -133,43 +133,6 @@ export function registerWorkbenchConversationIpc(
     })
   }
 
-  const unsubscribeNotes = runtime.subscribeNotesChanged((ref) => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (window.isDestroyed()) continue
-      const project = options.windows
-        .getHubForWebContents(window.webContents)
-        ?.getState().currentProject
-      if (project && resolve(project.path) === resolve(ref.projectRoot))
-        window.webContents.send(WorkbenchConversationChannels.notesChanged, ref)
-    }
-  })
-  ipcMain.handle(WorkbenchConversationChannels.listNotes, (event, raw: unknown) =>
-    callWithEnvelope(async () => {
-      const ref = ownedRef(event, parseSessionRequest(raw))
-      const input = z
-        .object({
-          after: z.string().max(512).optional(),
-          limit: z.number().int().min(1).max(64).optional(),
-        })
-        .parse(raw)
-      return runtime.listNotes(ref, input)
-    })
-  )
-  ipcMain.handle(WorkbenchConversationChannels.readNote, (event, raw: unknown) =>
-    callWithEnvelope(async () => {
-      const ref = ownedRef(event, parseSessionRequest(raw))
-      const input = z
-        .object({
-          key: z.string().min(1).max(512),
-          revision: z.number().int().min(1),
-          offset: z.number().int().min(0).optional(),
-          limit: z.number().int().min(1).max(32000).optional(),
-        })
-        .parse(raw)
-      return runtime.readNote(ref, input)
-    })
-  )
-
   ipcMain.handle(WorkbenchConversationChannels.recover, (event, raw: unknown) =>
     callWithEnvelope(async () => {
       const ref = ownedRef(event, parseSessionRequest(raw))
@@ -274,7 +237,6 @@ export function registerWorkbenchConversationIpc(
   )
 
   return () => {
-    unsubscribeNotes()
     for (const channel of [
       WorkbenchConversationChannels.recover,
       WorkbenchConversationChannels.send,
@@ -282,8 +244,6 @@ export function registerWorkbenchConversationIpc(
       WorkbenchConversationChannels.guidance,
       WorkbenchConversationChannels.input,
       WorkbenchConversationChannels.answer,
-      WorkbenchConversationChannels.listNotes,
-      WorkbenchConversationChannels.readNote,
       WorkbenchConversationChannels.getGoal,
       WorkbenchConversationChannels.updateGoal,
       WorkbenchConversationChannels.deleteSession,

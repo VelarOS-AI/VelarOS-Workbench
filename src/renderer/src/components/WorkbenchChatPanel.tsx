@@ -136,10 +136,6 @@ function resolveWorkbenchChatSessionLabel(
   return member.title.trim() || member.workspaceTitle.trim() || fallbackTitle
 }
 
-function isWorkbenchChatSessionMemberUnstarted(member: WorkbenchChatFolderMember): boolean {
-  return member.isEmpty
-}
-
 function WorkbenchChatSessionMenu({
   engineId,
   activeMemberSessionId,
@@ -318,9 +314,6 @@ export function WorkbenchChatPanel({
     ? resolveWorkbenchChatSessionLabel(activeProjectMember, t('sidebar.newChat'))
     : t('sidebar.newChat')
   const activeGroupId = activeGroup?.folderId ?? ''
-  const unstartedWorkbenchChatSessionMember = workbenchProjectChatMembers.find(
-    isWorkbenchChatSessionMemberUnstarted
-  )
   const isActiveWorkbenchChatSessionUnstarted = !!activeProjectMember && activeProjectMember.isEmpty
   const isActiveGroupStreaming = workbenchProjectChatMembers.some((member) => member.isStreaming)
   const isDeletingActiveGroup = !!activeGroup && deletingSessionId === activeGroup.folderId
@@ -348,11 +341,6 @@ export function WorkbenchChatPanel({
     if (pendingStartFolderIdRef.current) return null
 
     if (workbenchProjectFolderGroup) {
-      if (unstartedWorkbenchChatSessionMember) {
-        selectWorkbenchChatSessionMember(unstartedWorkbenchChatSessionMember)
-        return workbenchProjectFolderGroup.folderId
-      }
-
       pendingStartFolderIdRef.current = workbenchProjectFolderGroup.folderId
       setPendingStartFolderId(workbenchProjectFolderGroup.folderId)
       try {
@@ -374,9 +362,7 @@ export function WorkbenchChatPanel({
   }, [
     addProjectSession,
     normalizedProjectRoot,
-    selectWorkbenchChatSessionMember,
     startProjectChat,
-    unstartedWorkbenchChatSessionMember,
     workbenchProjectFolderGroup,
   ])
 

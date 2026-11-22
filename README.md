@@ -37,8 +37,8 @@ capability discovery. Agents read contracts and import npm tools when needed. Wo
 ts-morph, Prettier, jsonc-parser, ast-grep and Playwright alongside the base Node tools; dependencies
 installed in the project take precedence. Package discovery reads metadata, and implementations load
 on import. Settings → AI manages memory and the project sandbox. Long-term memory is scoped to each
-project and recalled on demand. The chat header's notebook button shows the current session's versioned working
-notes and refreshes as the run progresses. The console button opens a separate window for the chat's
+project and recalled on demand. Settings → AI → Web search configures Tavily and the preferred
+browser search engine. The console button opens a separate window for the chat's
 development servers and background commands, with live output, interactive input and stop controls. Process ownership
 uses the launch project and chat, even if a command changes its working directory.
 
@@ -96,7 +96,7 @@ apply to engine sessions.
 
 ## Development
 
-当前使用 Platform `v0.7.13` 正式发布的配套 Velaros / capabilities `0.12.1`，UI 版本为 `1.1.3`。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+当前使用 Platform `v0.7.17` 正式发布的配套 Velaros / capabilities `0.12.4`，UI 版本为 `1.1.4`。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
 
 `resources/runtime-snapshot.json` 分别记录 Platform 和 UI 正式发布的来源、版本与哈希，锁文件固定完整依赖。
 首次使用从声明的 GitHub Release 恢复归档；已有缓存时可用 `--verify-only` 离线核验：
@@ -124,6 +124,9 @@ Actions 仍是静态停用哨兵；正式发布由本公开仓库的 `release-wo
 
 Platform 的本地存储用 `node:sqlite`，bun 里没有：会话运行时的集成测试
 （`scripts/test/conversationRuntime.test.mjs`）先用 bun 打包，再在 Node 里跑，`bun run test` 已包含它。
+
+会打开应用窗口的原生 UI 测试需要显式传入 `--show-window`，例如
+`node tests/workbench-history-window.electron.mjs --show-window`。
 
 Workbench ships syntax support for VelarScript, JavaScript / TypeScript, Python, Java, C#, Go,
 Rust, Vue, Dart, Swift, Kotlin, WebAssembly text, GLSL, and related Web/project formats.

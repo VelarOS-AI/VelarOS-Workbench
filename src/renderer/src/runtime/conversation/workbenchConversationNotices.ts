@@ -385,6 +385,7 @@ function applyAgent(
     threadId: payload.id,
     agentId: identity,
     title:
+      payload.title?.trim() ||
       (resumesInterrupted && prior?.title) ||
       previous?.title ||
       workbenchWorkerTaskTitle(payload.task),
@@ -656,6 +657,8 @@ function isAgentProjection(value: unknown): value is ConversationAgentProjection
     isString(value.id) &&
     value.id.startsWith('conversation:agent:') &&
     (value.anchorId === null || isString(value.anchorId)) &&
+    (value.title === undefined ||
+      (isString(value.title) && value.title.length <= ConversationAgentTextMaxChars)) &&
     isString(value.task) &&
     value.task.length <= ConversationAgentTextMaxChars &&
     isString(value.profile) &&

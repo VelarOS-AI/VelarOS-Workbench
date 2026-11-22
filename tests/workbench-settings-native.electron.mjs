@@ -5,9 +5,13 @@ import path from 'node:path'
 
 import { _electron as electron, expect } from '@playwright/test'
 
-// node tests/workbench-settings-native.electron.mjs <application.exe> [output-directory]
+import { manualElectronTestArgs } from './helpers/manualElectronTest.mjs'
+
+const nativeTestArgs = manualElectronTestArgs()
+
+// node tests/workbench-settings-native.electron.mjs --show-window <application.exe> [output-directory]
 assert.equal(process.platform, 'win32', 'Native Windows caption verification requires Windows')
-const output = path.resolve(process.argv[3] ?? 'artifacts/native-settings')
+const output = path.resolve(nativeTestArgs[1] ?? 'artifacts/native-settings')
 await fs.mkdir(output, { recursive: true })
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'wb-settings-package-'))
 const project = path.join(temp, 'project')
@@ -17,7 +21,7 @@ const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 delete env.NODE_OPTIONS
 const app = await electron.launch({
-  executablePath: path.resolve(process.argv[2]),
+  executablePath: path.resolve(nativeTestArgs[0]),
   args: [`--user-data-dir=${path.join(temp, 'profile')}`, project],
   env,
   cwd: temp,

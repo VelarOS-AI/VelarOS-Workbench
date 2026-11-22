@@ -1,3 +1,5 @@
+import type { WorkbenchFsCallResult } from './workbenchFs'
+
 /** The settings renderer shares the app origin and its preference stores. */
 export const WorkbenchSettingsWindowQuery = 'settings'
 
@@ -14,5 +16,5 @@ export interface WorkbenchSettingsWindowBridge {
   close: () => Promise<void>
   exitProject: () => Promise<void>
   getTavilyConfigured: () => Promise<boolean>
-  setTavilyApiKey: (apiKey: string) => Promise<boolean>
+  setTavilyApiKey: (apiKey: string) => Promise<WorkbenchFsCallResult<boolean>>
 }

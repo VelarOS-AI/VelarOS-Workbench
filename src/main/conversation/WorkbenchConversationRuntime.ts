@@ -4,7 +4,6 @@ import type { SessionsSpacePort } from '@velaros-ai/capabilities/sessions'
 import type { SessionAnswer } from '@velaros-ai/capabilities/sessions/contracts'
 import type { WebSpacePort } from '@velaros-ai/capabilities/web'
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
-import type { RuntimeNoteRead, VelarosSession } from '@velaros-ai/velaros'
 import type { GoalControl, GoalState } from '@velaros-ai/velaros/contracts'
 import { isNotUndefined, Log, toNullable } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
@@ -145,15 +144,6 @@ export interface WorkbenchConversationRuntimeApi {
   input(ref: WorkbenchConversationRef, answer: string): Promise<void>
   /** 交互卡上的回答。 */
   answer(ref: WorkbenchConversationRef, requestId: string, answer: InteractionAnswer): Promise<void>
-  listNotes(
-    ref: WorkbenchConversationRef,
-    input?: { after?: string; limit?: number }
-  ): ReturnType<VelarosSession['listNotes']>
-  readNote(
-    ref: WorkbenchConversationRef,
-    input: RuntimeNoteRead
-  ): ReturnType<VelarosSession['readNote']>
-  subscribeNotesChanged(listener: (ref: WorkbenchConversationRef) => void): () => void
   /** 读取当前目标。 */
   getGoal(ref: WorkbenchConversationRef): Promise<Nullable<GoalState>>
   /** 以当前版本执行用户的目标操作；除了继续，其余操作会停下正在跑的这一轮。 */
@@ -183,7 +173,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
   private readonly interactions = new WeakMap<ActiveConversationRun, ConversationInteractionBoard>()
   private readonly controlOperations = new Map<string, Promise<unknown>>()
   private readonly deleting = new Set<string>()
-  private readonly notebookListeners = new Set<(ref: WorkbenchConversationRef) => void>()
   private readonly settledListeners = new Set<(ref: WorkbenchConversationRef) => void>()
   private readonly outcomeListeners = new Set<(outcome: WorkbenchConversationRunOutcome) => void>()
   private closing?: Promise<void>
@@ -226,7 +215,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       })
       .finally(() => {
         this.active.delete(key)
-        this.notifyNotesChanged(request)
         if (run.outcome)
           for (const listener of this.outcomeListeners) {
             try {
@@ -314,36 +302,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     this.interactionBoard(ref)?.answer(request.id, answer)
   }
 
-  public listNotes(ref: WorkbenchConversationRef, input: { after?: string; limit?: number } = {}) {
-    return this.withSessionControl(
-      ref,
-      (session) => session.listNotes(input),
-      { items: [], nextAfter: null },
-      { readActive: true }
-    )
-  }
-
-  public readNote(ref: WorkbenchConversationRef, input: RuntimeNoteRead) {
-    return this.withSessionControl(ref, (session) => session.readNote(input), undefined, {
-      readActive: true,
-    })
-  }
-
-  public subscribeNotesChanged(listener: (ref: WorkbenchConversationRef) => void): () => void {
-    this.notebookListeners.add(listener)
-    return () => this.notebookListeners.delete(listener)
-  }
-
-  private notifyNotesChanged(ref: WorkbenchConversationRef): void {
-    for (const listener of this.notebookListeners) {
-      try {
-        listener({ sessionId: ref.sessionId, projectRoot: ref.projectRoot })
-      } catch (error) {
-        log.warn('工作笔记刷新通知失败', { error })
-      }
-    }
-  }
-
   public getGoal(ref: WorkbenchConversationRef): Promise<Nullable<GoalState>> {
     return this.withSessionControl(ref, (session) => session.getGoal(), null, { readActive: true })
   }
@@ -407,7 +365,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         ...runs.map((run) => run.completed),
         ...this.controlOperations.values(),
       ])
-      this.notebookListeners.clear()
     })
     return this.closing
   }
@@ -631,7 +588,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           if (lastTurn) await traces.read(lastTurn, false)
           turns.set(event.turnId, event.runId)
           lastTurn = event.turnId
-          this.notifyNotesChanged(request)
           await traces.read(event.turnId, false)
         }
         if (event.type === 'state')
@@ -814,13 +770,30 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       case 'input-applied':
         if (event.inputId) sink.state({ kind: 'input-applied', inputId: event.inputId })
         break
+      case 'model-retry':
+        run.isReconnecting = true
+        sink.state({
+          kind: 'reconnecting',
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          message: event.message,
+        })
+        break
       case 'turn':
-        if (run.presentation?.turn === prior?.turn) break
+        if (run.isReconnecting || run.presentation?.turn === prior?.turn) break
         sink.state({ kind: 'turn-start', turn: run.presentation?.turn ?? 0 })
         break
       case 'accepted':
-        if (run.presentation?.messages.length === prior?.messages.length) break
+        if (!run.isReconnecting && run.presentation?.messages.length === prior?.messages.length)
+          break
+        run.isReconnecting = false
         sink.state({ kind: 'turn-end', turn: run.presentation?.turn ?? 0 })
+        break
+      case 'text':
+        if (run.isReconnecting) {
+          run.isReconnecting = false
+          sink.state({ kind: 'phase', teamPhase: 'synthesizing' })
+        }
         break
       case 'interaction':
         this.interactions.get(run)?.open(event.runId, event.request)
@@ -830,6 +803,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         sink.state({ kind: 'phase', teamPhase: 'executing' })
         break
       case 'state':
+        if (event.status === 'thinking' && run.isReconnecting) break
         if (event.status === 'thinking' || event.status === 'executing')
           sink.state({
             kind: 'phase',

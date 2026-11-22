@@ -451,54 +451,33 @@ test(
   }
 )
 
-test(
-  'notes persist across controls and subsequent runs, with versioned reads and notifications',
-  { timeout: 30_000 },
-  async (t) => {
-    const f = await fixture(t, async function* (frame, _signal, call) {
-      if (call === 1)
-        yield execute(
-          frame,
-          "// 记录工作笔记\nimport {memory} from 'velaros:system';await memory.update({key:'progress',title:'工作进展',baseRevision:0,body:'NOTE-PERSISTENCE-PROOF'});"
-        )
-      else if (call === 3)
-        yield execute(
-          frame,
-          "// 更新工作笔记\nimport {memory} from 'velaros:system';await memory.update({key:'progress',baseRevision:1,body:'SECOND-REVISION',resident:false});"
-        )
-      else yield done(frame)
-      yield { type: 'finish', reason: 'stop' }
-    })
-    const ref = { projectRoot: f.workspace, sessionId: 'session-1' }
-    assert.deepEqual(await f.runtime.listNotes(ref), { items: [], nextAfter: null })
-    let changes = 0
-    const unsubscribe = f.runtime.subscribeNotesChanged((changed) => {
-      assert.deepEqual(changed, ref)
-      changes++
-    })
-    await f.runtime.submit(f.sink, f.request('记录')).completed
-    assert.equal((await f.runtime.listNotes(ref)).items[0].title, '工作进展')
-    assert.equal(
-      (await f.runtime.readNote(ref, { key: 'progress', revision: 1 })).text,
-      'NOTE-PERSISTENCE-PROOF'
-    )
-    await f.runtime.submit(f.sink, f.request('更新')).completed
-    const entry = (await f.runtime.listNotes(ref)).items[0]
-    assert.equal(entry.revision, 2)
-    assert.equal(entry.resident, false)
-    assert.equal(
-      (await f.runtime.readNote(ref, { key: 'progress', revision: 2, offset: 7, limit: 8 })).text,
-      'REVISION'
-    )
-    await assert.rejects(f.runtime.readNote(ref, { key: 'progress', revision: 1 }), {
-      code: 'WORKSPACE_CONFLICT',
-    })
-    assert(changes >= 2)
-    unsubscribe()
-    await f.runtime.deleteSession(ref)
-    assert.deepEqual(await f.runtime.listNotes(ref), { items: [], nextAfter: null })
-  }
-)
+test('reports model reconnection until a retried response succeeds', async (t) => {
+  const f = await fixture(t, async function* (frame, _signal, call) {
+    if (call === 1)
+      throw Object.assign(new Error('Connection interrupted'), {
+        code: 'MODEL_PROVIDER',
+        retryAfterMs: 0,
+      })
+    yield done(frame)
+    yield { type: 'finish', reason: 'stop' }
+  })
+  await f.runtime.submit(f.sink, f.request('重连测试')).completed
+  const states = f.events.filter((event) => event.type === 'state').map((event) => event.payload)
+  const retry = states.findIndex((state) => state.kind === 'reconnecting')
+  assert.notEqual(retry, -1, JSON.stringify(states))
+  assert.equal(states[retry].attempt, 1)
+  assert(states[retry].maxAttempts >= 1)
+  assert.equal(states[retry].message, 'Connection interrupted')
+  const nextProgress = states.slice(retry + 1).find(
+    (state) => state.kind === 'turn-start' || state.kind === 'turn-end' || state.kind === 'phase'
+  )
+  assert(
+    nextProgress?.kind === 'turn-end' ||
+      (nextProgress?.kind === 'phase' && nextProgress.teamPhase !== 'researching'),
+    JSON.stringify(states)
+  )
+  assert.equal(f.lastState()?.kind, 'done')
+})
 
 test('rejects a concurrent submission and cancellation aborts the active model', async (t) => {
   const f = await fixture(t, async function* (_frame, signal) {
@@ -831,7 +810,7 @@ test(
       if (call === 1)
         yield execute(
           frame,
-          "// 派发独立审查\nimport {start,wait} from 'velaros:agents';const job=await start({task:'打印 CHILD_TRACE_PROOF 再完成'});await wait({id:job.id});"
+          "// 派发独立审查\nimport {start,wait} from 'velaros:agents';const job=await start({title:'检查输出，保留标点',task:'打印 CHILD_TRACE_PROOF 再完成'});await wait({id:job.id});"
         )
       else if (call === 2)
         yield execute(frame, "// 检查项目\nconsole.log('CHILD_TRACE_PROOF'.repeat(800))")
@@ -846,7 +825,11 @@ test(
     const agents = f.events
       .filter((event) => event.kind === 'conversation-agent')
       .map((event) => event.payload)
-    assert(agents.some((agent) => agent.status === 'completed' && agent.agentId))
+    assert(
+      agents.some(
+        (agent) => agent.status === 'completed' && agent.agentId && agent.title === '检查输出，保留标点'
+      )
+    )
     assert(
       agents.some((agent) =>
         agent.activity?.some(

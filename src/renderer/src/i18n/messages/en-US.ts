@@ -94,12 +94,6 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     agentProcessStop: 'Stop',
     agentProcessForceStop: 'Force stop',
     agentProcessStatus: { running: 'Running', exited: 'Exited', unknown: 'Unknown' },
-    notebookTitle: 'Working notes',
-    notebookDescription: 'Read the Agent’s working notes for this task.',
-    notebookLoading: 'Loading notes…',
-    notebookEmpty: 'This conversation has no working notes yet.',
-    notebookActive: 'Active',
-    notebookArchived: 'Archived',
 
     title: 'Workbench',
     addProject: 'Add Project',

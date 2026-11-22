@@ -78,6 +78,15 @@ function anchorOf(executionId: string): string {
   return `conversation:script:run-1:turn-1:${executionId}`
 }
 
+test('uses the delegated title without shortening it and keeps it on later status updates', () => {
+  const { board, threads } = createBoard()
+  const title = '审计发布产物，检查完整性'
+  board.trace(turnTrace('parent', [agentSummary({ title })]), anchorOf)
+  board.trace(turnTrace('parent', [agentSummary({ status: 'completed' })]), anchorOf)
+  assert.equal(threads()[0]?.title, title)
+  assert.equal(threads()[0]?.status, 'completed')
+})
+
 test('cold worker activity keeps phase time and separates a same-run continuation', () => {
   const { board, emitted } = createBoard()
   board.trace(turnTrace('parent', [agentSummary({ startedAt: 3000 })]), anchorOf)

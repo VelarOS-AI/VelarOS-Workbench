@@ -26,8 +26,6 @@ import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosure
 
 import styles from '../../styles/workbenchPageStyles'
 
-import { workbenchWorkerTaskTitle } from './workbenchWorkerPresentation'
-
 /** 卡片里嵌的时间线与聊天页落到同一组宿主入口：项目根、打开路径、文件改动。 */
 export interface WorkbenchWorkerThreadScope {
   readonly projectRoot: string
@@ -88,7 +86,7 @@ function WorkbenchWorkerThreadCard({
   // 还没有时间线时，显示主进程给出的错误或回答。
   const fallbackBody = thread.error ?? thread.output
   const expandable = hasTimeline || !!fallbackBody || !!thread.input
-  const taskTitle = workbenchWorkerTaskTitle(thread.title)
+  const taskTitle = thread.title
   const agentName = thread.agentName
   const modelName = thread.model?.split('/').at(-1)
   const identity = [agentName, modelName ? `(${modelName})` : null]

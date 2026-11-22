@@ -124,7 +124,7 @@ function applyStandaloneConversationState<TState extends StandaloneConversationR
         ...clearAwaitingRuntime(),
         status: 'running',
         connectionRetryAttempt: readPositiveInteger(runtime.attempt) ?? 1,
-        connectionRetryMaxAttempts: null,
+        connectionRetryMaxAttempts: readPositiveInteger(runtime.maxAttempts),
         connectionRetryMessage: runtime.message?.trim() || null,
       })
     case 'awaiting-input':

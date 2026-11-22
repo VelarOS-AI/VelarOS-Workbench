@@ -47,13 +47,16 @@ async function withModelBridge(
   listManagedProviders: () => Promise<WorkbenchManagedModelAccessSnapshot>,
   run: (events: {
     accountChanged(state: WorkbenchAccountState): void
-    focus(): void
+    online(): void
     observers(): { account: number; focus: number; installed: number; removed: number }
   }) => Promise<void>
 ): Promise<void> {
   const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
   const accounts = new Set<(state: WorkbenchAccountState) => void>()
-  const focus = new Set<() => void>()
+  const listeners = {
+    focus: new Set<() => void>(),
+    online: new Set<() => void>(),
+  }
   let installed = 0
   let removed = 0
   Object.defineProperty(globalThis, 'window', {
@@ -68,25 +71,24 @@ async function withModelBridge(
           return () => { removed += 1; accounts.delete(listener) }
         },
       },
-      addEventListener: (event: string, listener: () => void) => {
-        expect(event).toBe('focus')
-        focus.add(listener)
+      addEventListener: (event: keyof typeof listeners, listener: () => void) => {
+        listeners[event].add(listener)
       },
-      removeEventListener: (event: string, listener: () => void) => {
-        expect(event).toBe('focus')
-        expect(focus.delete(listener)).toBe(true)
+      removeEventListener: (event: keyof typeof listeners, listener: () => void) => {
+        expect(listeners[event].delete(listener)).toBe(true)
       },
     },
   })
   try {
     await run({
       accountChanged: state => { for (const listener of [...accounts]) listener(state) },
-      focus: () => { for (const listener of [...focus]) listener() },
-      observers: () => ({ account: accounts.size, focus: focus.size, installed, removed }),
+      online: () => { for (const listener of [...listeners.online]) listener() },
+      observers: () => ({ account: accounts.size, focus: listeners.focus.size, installed, removed }),
     })
   } finally {
     expect(accounts.size).toBe(0)
-    expect(focus.size).toBe(0)
+    expect(listeners.focus.size).toBe(0)
+    expect(listeners.online.size).toBe(0)
     if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor)
     else Reflect.deleteProperty(globalThis, 'window')
   }
@@ -166,7 +168,7 @@ describe('Workbench managed model selection', () => {
     }
   })
 
-  test('keeps the current selector during refresh and notifies it when the model catalog changes', async () => {
+  test('refreshes the selected model catalog when connectivity returns', async () => {
     const initial = snapshot([managedProvider('velar-dev', true)])
     const changed = snapshot([managedProvider('velar-dev', true, 'velar-dev/new-model')])
     const pending = Promise.withResolvers<WorkbenchManagedModelAccessSnapshot>()
@@ -179,7 +181,7 @@ describe('Workbench managed model selection', () => {
         const initialState = getStandaloneWorkbenchManagedModelState()
         notifications = 0
         request = pending.promise
-        events.focus()
+        events.online()
         const refresh = refreshStandaloneWorkbenchManagedModels()
         expect(getStandaloneWorkbenchManagedModelState()).toBe(initialState)
         expect(notifications).toBe(0)

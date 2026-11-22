@@ -96,9 +96,11 @@ export function useWorkbenchProviderModelCatalog(
     load()
     const refresh = (): void => load(true)
     window.addEventListener('focus', refresh)
+    window.addEventListener('online', refresh)
     return () => {
       active = false
       window.removeEventListener('focus', refresh)
+      window.removeEventListener('online', refresh)
     }
   }, [enabled, managed, request])
 

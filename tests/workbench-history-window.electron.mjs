@@ -1,4 +1,4 @@
-// Native source test: node tests/workbench-history-window.electron.mjs [packaged-application.exe]
+// Native source test: node tests/workbench-history-window.electron.mjs --show-window [packaged-application.exe]
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
@@ -7,6 +7,10 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { _electron as electron, expect } from '@playwright/test'
+
+import { manualElectronTestArgs } from './helpers/manualElectronTest.mjs'
+
+const nativeTestArgs = manualElectronTestArgs()
 
 const root = process.cwd()
 const temporary = await mkdtemp(path.join(tmpdir(), 'wb-history-window-'))
@@ -44,10 +48,10 @@ git('commit', '-m', 'Original file')
 const env = { ...process.env }
 for (const key of ['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS', 'ELECTRON_RENDERER_URL']) delete env[key]
 const args = [`--user-data-dir=${path.join(temporary, 'profile')}`, projectRoot]
-if (!process.argv[2]) args.unshift(root)
+if (!nativeTestArgs[0]) args.unshift(root)
 const app = await electron.launch({
-  executablePath: process.argv[2]
-    ? path.resolve(process.argv[2])
+  executablePath: nativeTestArgs[0]
+    ? path.resolve(nativeTestArgs[0])
     : createRequire(import.meta.url)('electron'),
   args,
   cwd: temporary,

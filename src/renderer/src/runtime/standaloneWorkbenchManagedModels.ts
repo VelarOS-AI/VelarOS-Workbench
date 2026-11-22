@@ -42,7 +42,7 @@ function releaseWatchingIfIdle(): void {
   stop()
 }
 
-function refreshOnFocus(): void {
+function refreshManagedModels(): void {
   void refreshStandaloneWorkbenchManagedModels().catch(() => undefined)
 }
 
@@ -54,14 +54,16 @@ function ensureWatching(): boolean {
     publish(state.status === 'signed-out'
       ? { status: 'ready', managedModels: [], updatedAt: new Date().toISOString() }
       : InitialState)
-    if (state.status === 'signed-in' && listeners.size > 0) refreshOnFocus()
+    if (state.status === 'signed-in' && listeners.size > 0) refreshManagedModels()
     releaseWatchingIfIdle()
   })
   stopWatching = () => {
     stopAccount()
-    target.removeEventListener('focus', refreshOnFocus)
+    target.removeEventListener('focus', refreshManagedModels)
+    target.removeEventListener('online', refreshManagedModels)
   }
-  target.addEventListener('focus', refreshOnFocus)
+  target.addEventListener('focus', refreshManagedModels)
+  target.addEventListener('online', refreshManagedModels)
   return true
 }
 
@@ -140,7 +142,7 @@ export function isStandaloneWorkbenchModelProviderSelectable(providerId: string)
 export function subscribeStandaloneWorkbenchManagedModels(listener: () => void): () => void {
   const first = listeners.size === 0
   listeners.add(listener)
-  if (first) refreshOnFocus()
+  if (first) refreshManagedModels()
   return () => {
     listeners.delete(listener)
     releaseWatchingIfIdle()

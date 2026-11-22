@@ -96,8 +96,8 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /DefaultWorkbenchReasoningLevel: ReasoningLevel = 'medium'/)
     // 没有旧档位的迁移：存的不是这五档之一就用默认档。
     assert.doesNotMatch(adapter, /off: 'low'|ultra: 'max'/)
-    assert.match(adapter, /\? \(stored as ReasoningLevel\)\n\s*: DefaultWorkbenchReasoningLevel/)
-    // 思考力度按产品记忆，随每一轮与执行模式一起发给主进程。
+    assert.match(adapter, /readReasoningLevel\(window\.localStorage\.getItem\(ReasoningLevelStorageKey\)\)\s*\?\?\s*DefaultWorkbenchReasoningLevel/)
+    // 思考力度随每一轮与执行模式一起发给主进程。
     assert.match(adapter, /reasoningLevel,\n\s*executionModes,/)
     // Electron 里没有语音识别服务（与 Desktop 相同）。
     assert.match(adapter, /voiceInput: false,/)

@@ -103,7 +103,7 @@ export interface ConversationWorkspaceHandle {
 }
 
 export interface ConversationControlHandle {
-  session: Pick<VelarosSession, 'listNotes' | 'readNote' | 'getGoal' | 'controlGoal'>
+  session: Pick<VelarosSession, 'getGoal' | 'controlGoal'>
   close(): Promise<void>
 }
 
@@ -115,6 +115,7 @@ export interface ActiveConversationRun {
   handle?: ConversationWorkspaceHandle
   projector?: ActEventProjectorApi
   presentation?: ActPresentation['runs'][string]
+  isReconnecting?: boolean
   modelId?: string
   /** 这一轮解析出的服务商；用量记录带上它，按服务商计价。 */
   provider?: string

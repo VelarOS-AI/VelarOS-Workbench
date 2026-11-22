@@ -12,7 +12,7 @@ Workbench 使用配套的基础与扩展正式固定归档，不引用兄弟仓�
 不透明执行身份、Node 可执行文件和真实进程约束。`execution-binding.json` 是产品自己的不可变凭据，
 仅首次原子发布；归属、沙箱或执行身份变化、损坏和孤立 context 文件均明确拒绝，不覆写或猜测旧绑定。
 
-`WorkbenchConversationRuntime.listNotes/readNote/getGoal/controlGoal` 活跃时借原 session，空闲时
+`WorkbenchConversationRuntime.getGoal/controlGoal` 活跃时借原 session，空闲时
 经 `openSessionControl({sessionId, storage, binding})` 读取原事实，finally 关闭独立连接。
 不创建模型、Node、Host 或伪领域实现，不读核心私有 runtime:binding 记录。resume 只改变目标事实。
 从未运行时保留空页/null/NOT_FOUND 语义；并发控制、删除与关闭排斥仍由产品持有。
@@ -133,7 +133,7 @@ context source/snapshot、worker/memory/widget 装配；执行身份与授权 sc
 | 产品文件 / 公开调用 | 活动或空闲 | 真实语义 |
 | --- | --- | --- |
 | `WorkbenchConversationSession.open` / `createRuntime`、`resolveNodeRuntimeBinding` | 活动执行 | 产品核验项目与执行凭据，显式注入存储、Node、资源和领域模块。 |
-| `WorkbenchConversationRuntime.listNotes/readNote/getGoal` | 两者 | 活动借原 Session；空闲 `openSessionControl`，保留分页、版本与不存在语义。 |
+| `WorkbenchConversationRuntime.getGoal` | 两者 | 活动借原 Session；空闲 `openSessionControl`。 |
 | `WorkbenchConversationRuntime.controlGoal` / `getGoal`、`controlGoal` | 两者 | 携 revision 修改目标；空闲 resume 只改事实，UI 继续操作另外显式 submit。 |
 | `WorkbenchConversationRuntime.guidance` / `VelarosSession.steer` | 仅活动 | 缺少活动 handle 明确拒绝；peer tell 同样不启动新一轮。 |
 | `WorkbenchConversationRuntime.readTrace` / `VelarosSession.trace` | 活动及本轮收尾 | 刷新当前执行卡、用量和结果；完成最终读取后关闭 runtime。 |

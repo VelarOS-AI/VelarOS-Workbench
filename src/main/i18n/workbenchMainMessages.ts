@@ -7,6 +7,9 @@ import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import { getWorkbenchMainLocale } from './workbenchMainLocale'
 
 const zhCN = {
+  'search.tavilyInvalidKey': 'Tavily 拒绝了这个 API Key，请检查后重试。',
+  'search.tavilyVerificationUnavailable': '暂时无法验证 Tavily API Key，请检查网络后重试。',
+  'search.tavilySettingsChanged': 'Tavily 设置刚刚被更新，请重试。',
   'menu.file': '文件',
   'menu.newProject': '新建项目…',
   'menu.openProject': '打开项目…',
@@ -417,6 +420,9 @@ const zhCN = {
 export type WorkbenchMainMessageKey = keyof typeof zhCN
 
 const enUS: Record<WorkbenchMainMessageKey, string> = {
+  'search.tavilyInvalidKey': 'Tavily rejected this API key. Check the key and try again.',
+  'search.tavilyVerificationUnavailable': 'Could not verify the Tavily API key. Check your connection and try again.',
+  'search.tavilySettingsChanged': 'Tavily settings changed. Try again.',
   'menu.file': 'File',
   'menu.newProject': 'New Project…',
   'menu.openProject': 'Open Project…',

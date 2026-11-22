@@ -1,4 +1,4 @@
-// 专项验证：node tests/workbench-title-tabs.electron.mjs（无需构建完整应用）
+// 专项验证：node tests/workbench-title-tabs.electron.mjs --show-window（无需构建完整应用）
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -10,6 +10,10 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import ts from 'typescript'
 import { createServer, transformWithEsbuild } from 'vite'
+
+import { manualElectronTestArgs } from './helpers/manualElectronTest.mjs'
+
+manualElectronTestArgs()
 
 const root = process.cwd()
 const require = createRequire(import.meta.url)

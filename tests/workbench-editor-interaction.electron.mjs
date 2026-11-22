@@ -1,4 +1,4 @@
-// Native regression: node tests/workbench-editor-interaction.electron.mjs
+// Native regression: node tests/workbench-editor-interaction.electron.mjs --show-window
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -8,6 +8,10 @@ import path from 'node:path'
 import { _electron as electron, expect } from '@playwright/test'
 import tailwindcss from '@tailwindcss/vite'
 import { createServer } from 'vite'
+
+import { manualElectronTestArgs } from './helpers/manualElectronTest.mjs'
+
+manualElectronTestArgs()
 
 const root = process.cwd()
 const temporary = await mkdtemp(path.join(tmpdir(), 'wb-editor-interaction-'))

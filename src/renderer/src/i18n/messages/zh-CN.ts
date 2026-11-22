@@ -81,12 +81,6 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     agentProcessStop: '停止',
     agentProcessForceStop: '强制停止',
     agentProcessStatus: { running: '运行中', exited: '已结束', unknown: '状态未知' },
-    notebookTitle: '工作笔记',
-    notebookDescription: '查看 Agent 为当前任务保存的工作笔记。',
-    notebookLoading: '正在读取笔记…',
-    notebookEmpty: '当前会话还没有工作笔记。',
-    notebookActive: '使用中',
-    notebookArchived: '已归档',
 
     title: '工作台',
     addProject: '添加工程',

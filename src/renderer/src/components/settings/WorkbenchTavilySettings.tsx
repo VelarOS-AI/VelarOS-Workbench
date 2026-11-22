@@ -13,7 +13,7 @@ export function WorkbenchTavilySettings(): ReactElement {
   const [configured, setConfigured] = useState<Nullable<boolean>>(null)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!bridge?.getTavilyConfigured) return
@@ -23,22 +23,27 @@ export function WorkbenchTavilySettings(): ReactElement {
         if (active) setConfigured(value)
       },
       () => {
-        if (active) setFailed(true)
+        if (active) setError(t('workbench.settingsTavilyError'))
       }
     )
     return () => {
       active = false
     }
-  }, [bridge])
+  }, [bridge, t])
 
   const save = async (key: string): Promise<void> => {
     setSaving(true)
-    setFailed(false)
+    setError(null)
     try {
-      setConfigured(await bridge.setTavilyApiKey(key))
-      setDraft('')
+      const result = await bridge.setTavilyApiKey(key)
+      if (result.ok) {
+        setConfigured(result.value)
+        setDraft('')
+      } else {
+        setError(result.message)
+      }
     } catch {
-      setFailed(true)
+      setError(t('workbench.settingsTavilyError'))
     } finally {
       setSaving(false)
     }
@@ -75,7 +80,7 @@ export function WorkbenchTavilySettings(): ReactElement {
             {t('workbench.settingsTavilyClear')}
           </Button>
         )}
-        {failed && <span role="alert">{t('workbench.settingsTavilyError')}</span>}
+        {error && <span role="alert">{error}</span>}
       </Inline>
     </SettingRow>
   )

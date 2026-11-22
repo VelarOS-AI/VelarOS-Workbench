@@ -190,15 +190,6 @@ export function createWorkbenchConversationDispatcher(
         ? engines.answer(ref, requestId, answer)
         : platform.answer(ref, requestId, answer))
     },
-    listNotes: async (ref, input) => {
-      admit(ref)
-      return platform.listNotes(ref, input)
-    },
-    readNote: async (ref, input) => {
-      admit(ref)
-      return platform.readNote(ref, input)
-    },
-    subscribeNotesChanged: (listener) => platform.subscribeNotesChanged(listener),
     getGoal: async (ref) => {
       admit(ref)
       return platform.getGoal(ref)
