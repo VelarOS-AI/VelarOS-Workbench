@@ -3,6 +3,20 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.36",
+      "releasedAt": "2026-11-22",
+      "title": {
+        "zh": "模型工具调用兼容性",
+        "en": "Model tool-call compatibility"
+      },
+      "fixed": {
+        "zh": ["提高模型调用工具的兼容性，改进多行脚本和大段原文的处理。"],
+        "en": [
+          "Improve model tool-call compatibility and handling of multiline scripts and long raw text."
+        ]
+      }
+    },
+    {
       "version": "0.4.35",
       "releasedAt": "2026-11-22",
       "title": {
