@@ -55,7 +55,10 @@ describe('managed catalog feedback shared by settings and composer', () => {
     let managedCalls = 0
     let catalogCalls = 0
     const accountListeners = new Set<unknown>()
-    const focusListeners = new Set<unknown>()
+    const networkListeners = {
+      focus: new Set<unknown>(),
+      online: new Set<unknown>(),
+    }
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
@@ -67,13 +70,11 @@ describe('managed catalog feedback shared by settings and composer', () => {
             }
           },
         },
-        addEventListener: (event: string, listener: unknown) => {
-          expect(event).toBe('focus')
-          focusListeners.add(listener)
+        addEventListener: (event: keyof typeof networkListeners, listener: unknown) => {
+          networkListeners[event].add(listener)
         },
-        removeEventListener: (event: string, listener: unknown) => {
-          expect(event).toBe('focus')
-          expect(focusListeners.delete(listener)).toBe(true)
+        removeEventListener: (event: keyof typeof networkListeners, listener: unknown) => {
+          expect(networkListeners[event].delete(listener)).toBe(true)
         },
         velarosWorkbenchModel: {
           listManagedProviders: () => {
@@ -163,7 +164,8 @@ describe('managed catalog feedback shared by settings and composer', () => {
       expect(catalogCalls).toBe(0)
     } finally {
       expect(accountListeners.size).toBe(0)
-      expect(focusListeners.size).toBe(0)
+      expect(networkListeners.focus.size).toBe(0)
+      expect(networkListeners.online.size).toBe(0)
       if (descriptor) Object.defineProperty(globalThis, 'window', descriptor)
       else Reflect.deleteProperty(globalThis, 'window')
     }

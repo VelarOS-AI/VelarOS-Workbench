@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.34",
+      "version": "0.4.35",
       "releasedAt": "2026-11-22",
       "title": {
         "zh": "会话模型继承与网络修复",
