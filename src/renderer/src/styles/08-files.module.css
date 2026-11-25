@@ -50,38 +50,55 @@
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: 2px;
   -webkit-app-region: no-drag;
 }
 
-.filePanelHeaderControls .projectControlAnchor {
+.filePanelPickerAnchor {
+  display: inline-flex;
   min-width: 0;
-  max-width: 100%;
-  flex: 1 1 auto;
-}
-
-.filePanelHeaderControls .projectControlButton {
-  width: 100%;
-  justify-content: flex-start;
-  gap: 4px;
-  padding-inline: 4px;
-}
-
-.filePanelHeaderControls .projectControlName {
-  flex: 1 1 auto;
-  text-align: left;
-}
-
-.filePanelHeaderControls .topGitControl {
-  min-width: 0;
-  max-width: 44%;
   flex: 0 1 auto;
 }
 
-.filePanelHeaderControls .gitBranchControl {
+.projectControlAnchor {
+  max-width: min(176px, 60%);
+}
+
+.gitBranchControlAnchor {
+  max-width: min(148px, 52%);
+}
+
+.filePanelPickerAnchor > .filePanelPickerButton {
+  width: 100%;
+  min-width: 0;
   height: 32px;
-  max-width: 100%;
-  flex-shrink: 1;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0 6px;
+  border: 0;
+  color: var(--workbench-text);
+  font-size: 12px;
+}
+
+.filePanelPickerAnchor > .filePanelPickerButton:is(:hover, :focus-visible, [data-state='open']) {
+  background: var(--control-gray-hover-bg);
+}
+
+.filePanelPickerAnchor > .filePanelPickerButton:focus-visible {
+  outline: 1px solid var(--workbench-seam-strong);
+  outline-offset: -1px;
+  box-shadow: none;
+}
+
+.filePanelPickerButton > svg {
+  color: var(--workbench-text-muted);
+}
+
+.projectControlName,
+.gitBranchControlName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /*

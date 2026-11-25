@@ -15,6 +15,7 @@ interface ActiveTabRevealInput {
   clientWidth: number
   tabStart: number
   tabWidth: number
+  previousClientWidth?: number | undefined
 }
 
 /**
@@ -48,11 +49,17 @@ export function resolveActiveEditorTabScroll({
   clientWidth,
   tabStart,
   tabWidth,
+  previousClientWidth,
 }: ActiveTabRevealInput): Nullable<number> {
   const maxScrollLeft = Math.max(0, scrollWidth - clientWidth)
   if (maxScrollLeft === 0) return null
 
   const tabEnd = tabStart + tabWidth
+  if (
+    previousClientWidth !== undefined &&
+    (tabStart < scrollLeft - 1 || tabEnd > scrollLeft + previousClientWidth + 1)
+  )
+    return null
   const viewportEnd = scrollLeft + clientWidth
   const nextScrollLeft = tabStart < scrollLeft
     ? tabStart
@@ -63,6 +70,24 @@ export function resolveActiveEditorTabScroll({
   return clampedScrollLeft === scrollLeft ? null : clampedScrollLeft
 }
 
+function readActiveEditorTabScroll(
+  scroller: HTMLDivElement,
+  previousClientWidth?: number
+): Nullable<number> {
+  const activeTab = scroller.querySelector<HTMLElement>(':scope > [data-active="true"]')
+  if (!activeTab) return null
+  const scrollerRect = scroller.getBoundingClientRect()
+  const activeTabRect = activeTab.getBoundingClientRect()
+  return resolveActiveEditorTabScroll({
+    scrollLeft: scroller.scrollLeft,
+    scrollWidth: scroller.scrollWidth,
+    clientWidth: scroller.clientWidth,
+    tabStart: scroller.scrollLeft + activeTabRect.left - scrollerRect.left,
+    tabWidth: activeTabRect.width,
+    previousClientWidth,
+  })
+}
+
 /** 编辑器标签溢出状态由 Workbench 产品控制，宿主只提供真实 DOM 容器。 */
 export interface WorkbenchEditorTabOverflowController {
   tabScrollerOverflow: boolean
@@ -71,7 +96,8 @@ export interface WorkbenchEditorTabOverflowController {
 
 export function useWorkbenchEditorTabOverflow(
   overflowKey: string,
-  activeTabKey: Nullable<string>
+  activeTabKey: Nullable<string>,
+  overflowButtonRef: RefObject<HTMLButtonElement | null>
 ): WorkbenchEditorTabOverflowController {
   const [tabScrollerOverflow, setTabScrollerOverflow] = useState(false)
   const tabScrollerRef = useRef<HTMLDivElement>(null)
@@ -79,9 +105,25 @@ export function useWorkbenchEditorTabOverflow(
   useEffect(() => {
     const scroller = tabScrollerRef.current
     if (!scroller) return
+    let previousClientWidth = scroller.clientWidth
 
     const syncOverflow = (): void => {
-      setTabScrollerOverflow(scroller.scrollWidth > scroller.clientWidth + 1)
+      const { clientWidth, scrollWidth } = scroller
+      const overflowButton = overflowButtonRef.current
+      const actions = overflowButton?.parentElement
+      const buttonGap =
+        actions && actions.childElementCount > 1
+          ? Number.parseFloat(getComputedStyle(actions).columnGap) || 0
+          : 0
+      // 先算出隐藏溢出菜单后能用的宽度，避免菜单自己占位导致它一直显示。
+      const availableWidth = clientWidth + (overflowButton?.offsetWidth ?? 0) + buttonGap
+      setTabScrollerOverflow(scrollWidth > availableWidth + 1)
+
+      if (clientWidth < previousClientWidth) {
+        const nextScrollLeft = readActiveEditorTabScroll(scroller, previousClientWidth)
+        if (nextScrollLeft !== null) scroller.scrollLeft = nextScrollLeft
+      }
+      previousClientWidth = clientWidth
     }
 
     syncOverflow()
@@ -111,25 +153,13 @@ export function useWorkbenchEditorTabOverflow(
       observer.disconnect()
       scroller.removeEventListener('wheel', handleWheel)
     }
-  }, [overflowKey])
+  }, [overflowButtonRef, overflowKey])
 
   useLayoutEffect(() => {
     if (!activeTabKey) return
     const scroller = tabScrollerRef.current
-    const activeTab = scroller?.querySelector<HTMLElement>(
-      ':scope > [data-active="true"]'
-    )
-    if (!scroller || !activeTab) return
-
-    const scrollerRect = scroller.getBoundingClientRect()
-    const activeTabRect = activeTab.getBoundingClientRect()
-    const nextScrollLeft = resolveActiveEditorTabScroll({
-      scrollLeft: scroller.scrollLeft,
-      scrollWidth: scroller.scrollWidth,
-      clientWidth: scroller.clientWidth,
-      tabStart: scroller.scrollLeft + activeTabRect.left - scrollerRect.left,
-      tabWidth: activeTabRect.width,
-    })
+    if (!scroller) return
+    const nextScrollLeft = readActiveEditorTabScroll(scroller)
     if (nextScrollLeft === null) return
 
     scroller.scrollTo({ left: nextScrollLeft, behavior: 'smooth' })

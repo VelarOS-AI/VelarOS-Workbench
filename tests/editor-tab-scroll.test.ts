@@ -97,4 +97,32 @@ void describe('editor tab horizontal scrolling', () => {
       tabWidth: 120,
     }), 600)
   })
+
+  void test('keeps the previously visible active tab in view as the sidebar grows', () => {
+    assert.equal(
+      resolveActiveEditorTabScroll({
+        scrollLeft: 240,
+        scrollWidth: 1200,
+        previousClientWidth: 500,
+        clientWidth: 400,
+        tabStart: 600,
+        tabWidth: 120,
+      }),
+      320
+    )
+  })
+
+  void test('leaves manually scrolled tabs in place on resize when the active tab was hidden', () => {
+    assert.equal(
+      resolveActiveEditorTabScroll({
+        scrollLeft: 240,
+        scrollWidth: 1200,
+        previousClientWidth: 500,
+        clientWidth: 400,
+        tabStart: 850,
+        tabWidth: 120,
+      }),
+      null
+    )
+  })
 })

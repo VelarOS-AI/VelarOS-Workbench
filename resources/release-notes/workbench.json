@@ -3,6 +3,30 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.40",
+      "releasedAt": "2026-11-25",
+      "title": {
+        "zh": "编辑器标签与文件栏改进",
+        "en": "Editor tab and file panel improvements"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "修正 Vue 绿色文件图标的比例与浅色、深色主题配色。",
+          "统一工作区和分支按钮的内边距与灰色悬停状态，两者靠左相邻并独立限制宽度。",
+          "调整文件树宽度时，编辑器标签栏按剩余空间重新布局，左右端的标签均可滚动到。"
+        ],
+        "en": [
+          "Refine the green Vue file icon proportions and light and dark colors.",
+          "Match the workspace and branch buttons' padding and gray hover states, and keep them flush left with independent width limits.",
+          "Fit the editor tab strip to the space remaining after resizing the file tree, with tabs reachable at both scroll edges."
+        ]
+      }
+    },
+    {
       "version": "0.4.39",
       "releasedAt": "2026-11-25",
       "title": {

@@ -74,18 +74,15 @@ export function WorkbenchTopLeading({
   if (!gitControlReady) return null
 
   return (
-    <div className={styles.topGitControl}>
-      {/* 分支、拉取、推送、同步都在这一个控件里：按钮上是分支和落后 / 领先的提交数，点开是面板。 */}
-      <WorkbenchGitBranchControl
-        workspaceRoot={gitWorkspaceRoot}
-        summary={gitSummary}
-        gitSshKeyPath={gitSshKeyPath}
-        hasUnsavedOpenTabs={hasUnsavedOpenTabs}
-        onRefresh={onGitRefresh}
-        onRepositoryChanged={onRepositoryChanged}
-        onOpenCommitTool={onOpenGitCommitTool}
-      />
-    </div>
+    <WorkbenchGitBranchControl
+      workspaceRoot={gitWorkspaceRoot}
+      summary={gitSummary}
+      gitSshKeyPath={gitSshKeyPath}
+      hasUnsavedOpenTabs={hasUnsavedOpenTabs}
+      onRefresh={onGitRefresh}
+      onRepositoryChanged={onRepositoryChanged}
+      onOpenCommitTool={onOpenGitCommitTool}
+    />
   )
 }
 

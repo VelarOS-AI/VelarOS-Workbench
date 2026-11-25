@@ -29,12 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
-import {
-  getTopBarControlMainButtonClassName,
-  getTopBarControlMainClassName,
-  getTopBarControlPanelClassName,
-  TopBarControlFrame,
-} from '@velaros-ai/ui/product/layout/TopBarControlFrame'
+import { getTopBarControlPanelClassName } from '@velaros-ai/ui/product/layout/TopBarControlFrame'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { Result } from '@velaros-ai/velaros/core/result'
 
@@ -282,18 +277,12 @@ export function WorkbenchGitBranchControl({
   }
 
   return (
-    <TopBarControlFrame
-      plain
-      busy={locked}
-      tone={status.isClean ? 'muted' : 'default'}
-      title={tooltip}
-      className={styles.gitBranchControl}
-    >
+    <>
       <AnchoredPopover
         open={menuOpen}
         onOpenChange={handleMenuOpenChange}
         onOpenAutoFocus={() => searchRef.current?.focus({ preventScroll: true })}
-        anchorClassName={getTopBarControlMainClassName()}
+        anchorClassName={`${styles.filePanelPickerAnchor} ${styles.gitBranchControlAnchor}`}
         className={getTopBarControlPanelClassName(styles.gitBranchMenuPanel)}
         data-topbar-panel="picker"
         side="bottom"
@@ -305,8 +294,9 @@ export function WorkbenchGitBranchControl({
             {...getAnchorProps<HTMLButtonElement>()}
             variant="ghost"
             size="sm"
-            className={getTopBarControlMainButtonClassName(styles.gitBranchControlButton)}
+            className={styles.filePanelPickerButton}
             aria-label={`${headLabel} · ${tooltip}`}
+            title={tooltip}
           >
             {locked ? (
               <SpinnerGapIcon size={13} className={styles.spinIcon} />
@@ -320,7 +310,7 @@ export function WorkbenchGitBranchControl({
                 {ahead > 0 && <span>↑{ahead}</span>}
               </span>
             )}
-            <CaretDownIcon size={11} className={styles.gitBranchControlCaret} />
+            <CaretDownIcon size={11} />
           </Button>
         )}
       >
@@ -406,6 +396,6 @@ export function WorkbenchGitBranchControl({
           </form>
         </DialogContent>
       </Dialog>
-    </TopBarControlFrame>
+    </>
   )
 }

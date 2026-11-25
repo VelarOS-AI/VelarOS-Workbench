@@ -15,42 +15,8 @@
   -webkit-app-region: no-drag;
 }
 
-.topGitControl {
-  @apply flex min-w-0 items-center gap-1.5;
-}
-
-.topGitControl {
-  @apply text-muted-foreground;
-}
-
-/*
- * 项目标题行的 Git 控件：按钮上是当前分支和落后（↓）、领先（↑）上游的提交数，点开是一块面板——当前分支
- * 的远端操作、分支列表、新建分支。外框、面板的尺寸与圆角归共享的顶栏控件（velar-topbar-control-*）；
- * 面板里行高、间距、字号用它给的 --topbar-panel-* 变量，和旁边的项目菜单是同一套。
- */
-.gitBranchControl {
-  min-width: 0;
-  -webkit-app-region: no-drag;
-}
-
-.gitBranchControlButton {
-  max-width: 100%;
-}
-
-.gitBranchControlButton > svg {
-  flex: 0 0 auto;
-  color: var(--workbench-text-muted);
-}
-
 .gitBranchControlName {
-  min-width: 0;
-  max-width: 160px;
-  overflow: hidden;
-  color: var(--workbench-text);
-  font-size: 13px;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .gitBranchControlCounts {
@@ -61,10 +27,6 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-}
-
-.gitBranchControlCaret {
-  opacity: 0.72;
 }
 
 .gitBranchMenuPanel {
@@ -571,28 +533,6 @@
   white-space: nowrap;
 }
 
-.projectControlAnchor {
-  min-width: 0;
-  max-width: min(220px, 25vw);
-  -webkit-app-region: no-drag;
-}
-
-/*
- * 高度、左右内边距、间距、圆角都归 Button 的 sm 档预设；悬停底色随 ghost 变体。展开时染主题色，指针还停在
- * 按钮上时仍让位给悬停底色。
- */
-.projectControlButton {
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  padding-block: 0;
-  color: var(--workbench-text);
-}
-
-.projectControlButton[data-state='open']:where(:not(:hover)) {
-  background: color-mix(in srgb, var(--workbench-theme-color) 11%, transparent);
-}
-
 .projectControlBadge {
   display: grid;
   width: 22px;
@@ -612,17 +552,7 @@
 }
 
 .projectControlName {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 12px;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.projectControlButton > svg {
-  flex: 0 0 auto;
-  color: var(--workbench-text-muted);
 }
 
 .projectControlMenu {

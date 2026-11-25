@@ -186,7 +186,7 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
         aria-hidden={iconProps['aria-label'] || alt ? undefined : true}
         style={transform ? { ...style, transform, transformOrigin: 'center' } : style}
       >
-        <path d="M1 3.25h4.7L12 14.2l6.3-10.95H23L12 22Z" />
+        <path d="M2 4.5h5l5 8.66 5-8.66h5L12 21.82Z" />
       </svg>
     )
 

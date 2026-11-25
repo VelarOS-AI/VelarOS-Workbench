@@ -267,6 +267,11 @@
   background: var(--workbench-surface);
 }
 
+.embeddedKernelRoot[data-file-panel-inline='true'] > .ideMainPane {
+  flex: 1 1 0;
+  width: auto;
+}
+
 .bottomToolWindowSlot {
   @apply flex min-h-0 flex-col overflow-hidden;
   box-sizing: border-box;

@@ -175,7 +175,7 @@ export function WorkbenchProjectControl({
       <AnchoredPopover
       open={open}
       onOpenChange={handleOpenChange}
-      anchorClassName={styles.projectControlAnchor}
+      anchorClassName={`${styles.filePanelPickerAnchor} ${styles.projectControlAnchor}`}
       className={getTopBarControlPanelClassName(styles.projectControlMenu)}
       data-topbar-panel="picker"
       side="bottom"
@@ -188,7 +188,7 @@ export function WorkbenchProjectControl({
           {...getAnchorProps<HTMLButtonElement>({ ref: anchorRef })}
           variant="ghost"
           size="sm"
-          className={styles.projectControlButton}
+          className={styles.filePanelPickerButton}
           title={currentProject?.path}
         >
           <span className={styles.projectControlBadge}>{initials}</span>

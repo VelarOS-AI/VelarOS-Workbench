@@ -254,7 +254,8 @@ export function EditorTabBar({
         : selectedFilePath
   const { tabScrollerOverflow, tabScrollerRef } = useWorkbenchEditorTabOverflow(
     tabOverflowKey,
-    activeTabKey
+    activeTabKey,
+    tabListButtonRef
   )
 
   function getMenuStyle(kind: 'tabs' | 'actions'): { right: number; top: number } {

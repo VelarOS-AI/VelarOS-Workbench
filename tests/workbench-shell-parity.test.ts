@@ -106,8 +106,12 @@ void describe('pre-split Workbench shell parity', () => {
       control,
       /onPushBranch=\{\(branch\) => void runRemoteAction\('upload', branch\.name\)\}/
     )
-    // 外框与面板用共享的顶栏控件，和旁边的项目菜单同一套尺寸；按钮上写分支和落后、领先的提交数。
-    assert.match(control, /<TopBarControlFrame[\s\S]*<AnchoredPopover/)
+    // 项目和分支共用文件栏触发按钮样式与顶栏面板尺寸。
+    const projectControl = readSource('src/renderer/src/components/chrome/WorkbenchProjectControl.tsx')
+    for (const picker of [control, projectControl]) {
+      assert.match(picker, /styles\.filePanelPickerAnchor/)
+      assert.match(picker, /className=\{styles\.filePanelPickerButton\}/)
+    }
     assert.match(control, /getTopBarControlPanelClassName\(styles\.gitBranchMenuPanel\)/)
     assert.match(control, /data-topbar-panel="picker"/)
     assert.match(
