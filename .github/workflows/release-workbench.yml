@@ -189,8 +189,10 @@ jobs:
           import { loadWorkbenchReleaseNote } from './scripts/release/releaseNotes.mjs';
           const version = process.env.RELEASE_VERSION, channel = process.env.VELAROS_UPDATE_CHANNEL;
           const tag = `workbench-v${version}`, repository = process.env.RELEASE_REPOSITORY;
+          const token = process.env.GH_TOKEN?.trim();
+          assert.ok(token, 'VELAROS_RELEASE_REPO_TOKEN is required');
           async function request(route, accept = 'application/vnd.github+json') {
-            const response = await fetch(`https://api.github.com/repos/${repository}/${route}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: accept }, signal: AbortSignal.timeout(30000) });
+            const response = await fetch(`https://api.github.com/repos/${repository}/${route}`, { headers: { Authorization: `Bearer ${token}`, Accept: accept }, signal: AbortSignal.timeout(30000) });
             if (response.status === 404 && route.startsWith('releases/tags/')) return null;
             if (!response.ok) throw new Error(`Release API failed: HTTP ${response.status}`);
             return response.json();
@@ -228,7 +230,7 @@ jobs:
                   mkdirSync('artifacts/release-existing', { recursive: true });
                   for (const artifact of catalog.artifacts.filter(item => `${item.platform}-${item.arch}` === process.env.RELEASE_PLATFORM_KEY)) {
                     assert.match(artifact.fileName, /^[A-Za-z0-9][A-Za-z0-9._-]*$/);
-                    const response = await fetch(`https://api.github.com/repos/${repository}/releases/assets/${artifact.assetId}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/octet-stream' }, signal: AbortSignal.timeout(300000) });
+                    const response = await fetch(`https://api.github.com/repos/${repository}/releases/assets/${artifact.assetId}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/octet-stream' }, signal: AbortSignal.timeout(300000) });
                     if (!response.ok) throw new Error(`Artifact download failed: HTTP ${response.status}`);
                     const bytes = Buffer.from(await response.arrayBuffer());
                     assert.equal(bytes.length, artifact.sizeBytes);
@@ -594,7 +596,10 @@ jobs:
           import { loadWorkbenchReleaseNote } from './scripts/release/releaseNotes.mjs';
           const version = process.env.RELEASE_VERSION, channel = process.env.VELAROS_UPDATE_CHANNEL;
           const tag = `workbench-v${version}`, repository = process.env.RELEASE_REPOSITORY;
-          const api = route => JSON.parse(execFileSync('gh', ['api', route], { encoding: 'utf8' }));
+          const token = process.env.GH_TOKEN?.trim();
+          assert.ok(token, 'VELAROS_RELEASE_REPO_TOKEN is required');
+          const ghOptions = { encoding: 'utf8', env: { ...process.env, GH_TOKEN: token } };
+          const api = route => JSON.parse(execFileSync('gh', ['api', route], ghOptions));
           const release = api(`repos/${repository}/releases/tags/${tag}`);
           assert.equal(release.draft, false); assert.equal(release.prerelease, true);
           const assets = [];
@@ -602,7 +607,7 @@ jobs:
           const read = name => {
             const asset = assets.find(item => item.name === name);
             assert.ok(asset, `Missing ${name}`);
-            return JSON.parse(execFileSync('gh', ['api', `repos/${repository}/releases/assets/${asset.id}`, '-H', 'Accept: application/octet-stream'], { encoding: 'utf8' }));
+            return JSON.parse(execFileSync('gh', ['api', `repos/${repository}/releases/assets/${asset.id}`, '-H', 'Accept: application/octet-stream'], ghOptions));
           };
           const catalog = read(`catalog-${tag}-${channel}.json`), completion = read(`candidate-${tag}-${channel}.json`);
           const trustedKeys = new Map(process.env.VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS.split(',').filter(Boolean).map(entry => { const separator = entry.indexOf(':'); return [entry.slice(0, separator), createPublicKey({ key: Buffer.from(entry.slice(separator + 1), 'base64'), format: 'der', type: 'spki' })]; }));

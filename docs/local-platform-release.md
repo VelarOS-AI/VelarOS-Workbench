@@ -37,6 +37,15 @@ immutable source using Desktop's `release-candidates` environment. Dispatch only
 workflow for a version at a time; concurrency groups do not serialize runs across repositories.
 This reuses Desktop's Apple signing credentials without exporting or copying their values.
 Source checkout and public Platform/UI archive verification use the job's read-only GitHub token.
+
+Share Mac signing through GitHub organization Actions secrets with **Selected repositories** access.
+Grant these secrets to Desktop, Workbench, and other repositories that release with the same Apple
+Developer ID: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and
+`APPLE_TEAM_ID`. Populate the organization secrets from the signing team's credential store. The
+native workflows read the same names through the Actions `secrets` context. Check for environment or
+repository secrets with the same names when migrating, since those take precedence over organization
+secrets.
+
 The workflow restores
 the pinned Platform archives, installs the frozen lock, checks each native environment, verifies the
 packaged application and Windows update path, and runs the same stage/verify/finalize commands below.
