@@ -46,7 +46,6 @@ import RustOriginal from 'devicons-react/icons/RustOriginal'
 import SassOriginal from 'devicons-react/icons/SassOriginal'
 import SwiftPlain from 'devicons-react/icons/SwiftPlain'
 import TypescriptPlain from 'devicons-react/icons/TypescriptPlain'
-import VuejsPlain from 'devicons-react/icons/VuejsPlain'
 import WasmOriginal from 'devicons-react/icons/WasmOriginal'
 import type { ReactElement } from 'react'
 
@@ -86,7 +85,7 @@ const BuiltinFileIcons: Partial<Record<WorkbenchBuiltinFilePresentationVariant, 
 
 /** Devicon language marks, imported individually so unused logos never enter the bundle. */
 const BuiltinLanguageIcons: Partial<
-  Record<WorkbenchBuiltinFilePresentationVariant, typeof VuejsPlain>
+  Record<WorkbenchBuiltinFilePresentationVariant, typeof TypescriptPlain>
 > = {
   c: COriginal,
   cpp: CplusplusPlain,
@@ -109,7 +108,6 @@ const BuiltinLanguageIcons: Partial<
   swift: SwiftPlain,
   tsx: ReactOriginal,
   typescript: TypescriptPlain,
-  vue: VuejsPlain,
   webassembly: WasmOriginal,
 }
 
@@ -172,6 +170,25 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
     ? [style?.transform, 'scaleX(-1)'].filter(Boolean).join(' ')
     : style?.transform
   const LanguageIcon = BuiltinLanguageIcons[builtinVariant]
+
+  if (builtinVariant === 'vue' && !presentation.icon)
+    return (
+      <svg
+        {...iconProps}
+        xmlns="http://www.w3.org/2000/svg"
+        data-file-icon-kind="vue"
+        data-language-logo="workbench"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill={iconColor ?? 'currentColor'}
+        aria-label={iconProps['aria-label'] ?? alt}
+        aria-hidden={iconProps['aria-label'] || alt ? undefined : true}
+        style={transform ? { ...style, transform, transformOrigin: 'center' } : style}
+      >
+        <path d="M1 3.25h4.7L12 14.2l6.3-10.95H23L12 22Z" />
+      </svg>
+    )
 
   // Add space inside the square marks, preserving the shared icon slot and tab gap.
   if (LanguageIcon && !presentation.icon && (builtinVariant === 'javascript' || builtinVariant === 'typescript'))

@@ -130,7 +130,14 @@ void describe('Workbench file icon surface', () => {
       assert.match(presentation.color ?? '', /^#[\da-f]{6}$/iu)
       assert.match(markup, /var\(--workbench-file-[a-z]+\)/u, fileName)
       assert.match(markup, new RegExp(`data-file-icon-kind="${presentation.variant}"`, 'u'))
-      if (presentation.variant !== 'sql') assert.match(markup, /data-language-logo="devicon"/u)
+      if (presentation.variant === 'vue') {
+        assert.match(markup, /data-language-logo="workbench"/u)
+        assert.match(markup, /fill="var\(--workbench-file-vue\)"/u)
+        assert.equal(markup.match(/<path\b/gu)?.length, 1)
+        assert.equal(markup.match(/\sfill=/gu)?.length, 1)
+      } else if (presentation.variant !== 'sql') {
+        assert.match(markup, /data-language-logo="devicon"/u)
+      }
     }
     assert.equal(variants.size, paths.length)
   })

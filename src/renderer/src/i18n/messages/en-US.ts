@@ -1196,7 +1196,6 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsEditorMore: 'More editor preferences',
     settingsConnection: 'Connection settings',
     settingsConnectionDescription: 'Service address and API key',
-    settingsUpdatePreferences: 'Update preferences',
     settingsPermissionsSummary: 'Approvals and sandbox',
     settingsWebSearchSummary: 'Tavily API and browser search',
     settingsMemorySummary: 'Preferences and saved memories',
@@ -1212,7 +1211,6 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsEditorMoreDescription: 'Preview tabs and local history',
     settingsThemeChoiceDescription: 'Choose the light and color palette',
     settingsAccentDescription: 'Accent color for selections and actions',
-    settingsUpdatePreferencesDescription: 'Channel and automatic downloads',
     settingsTitle: 'Settings',
     settingsModel: 'Model',
     settingsModelDescription:
@@ -1341,9 +1339,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsWebSearchEngine: 'Search engine',
     settingsTavilyApiKey: 'Tavily API key',
     settingsTavilyApiKeyDescription:
-      'Save a key to use only Tavily for web searches. Remove it to restore browser search.',
+      'Verify and save a key to use only Tavily for web searches. Remove it to restore browser search.',
     settingsTavilyConfigured: 'Configured',
-    settingsTavilySave: 'Save',
+    settingsTavilyVerify: 'Verify',
     settingsTavilyClear: 'Remove',
     settingsTavilyError: 'Could not load or save Tavily settings.',
     settingsWebSearchEngineDescription:

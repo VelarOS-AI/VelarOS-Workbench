@@ -166,7 +166,7 @@ try {
   ]) {
     const icon = page.locator(`[data-file-icon-kind="${kind}"]`).first()
     await expect(icon).toBeVisible()
-    await expect(icon).toHaveAttribute('data-language-logo', 'devicon')
+    await expect(icon).toHaveAttribute('data-language-logo', kind === 'vue' ? 'workbench' : 'devicon')
     const hex = await page
       .locator('html')
       .evaluate((element, token) => getComputedStyle(element).getPropertyValue(token).trim(), token)

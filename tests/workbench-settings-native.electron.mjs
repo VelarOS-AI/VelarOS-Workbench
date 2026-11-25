@@ -111,6 +111,9 @@ try {
   await settings.getByRole('button', { name: '系统', exact: true }).click()
   await expect(settings.locator('summary').filter({ hasText: '管理更新' })).toContainText(version)
   await expect(settings.getByText('当前版本', { exact: true })).toHaveCount(0)
+  await expect(settings.getByText('更新偏好', { exact: true })).toHaveCount(0)
+  await expect(settings.getByRole('combobox', { name: '更新通道' })).toBeVisible()
+  await expect(settings.getByRole('switch', { name: '自动下载更新' })).toBeVisible()
   await expect(settings.getByRole('button', { name: '检查更新', exact: true })).toHaveCount(1)
   for (const [name, p] of [
     ['settings', settings],

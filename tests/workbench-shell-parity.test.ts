@@ -412,6 +412,8 @@ void describe('pre-split Workbench shell parity', () => {
 
     assert.doesNotMatch(languageSection, /settingsUpdateChannel/)
     assert.match(updatesSection, /settingsUpdateChannel/)
+    assert.match(updatesSection, /settingsAutomaticUpdates/)
+    assert.doesNotMatch(updatesSection, /<SettingsDisclosure\b/)
     assert.match(updatesSection, /value: 'stable'/)
     assert.match(updatesSection, /value: 'beta'/)
     assert.match(updatesSection, /value: 'canary'/)

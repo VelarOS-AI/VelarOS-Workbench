@@ -118,6 +118,7 @@ import {
   buildTypeScriptSemanticTokens,
   buildTypeScriptSignatureHelp,
   isTypeScriptDeprecatedDiagnostic,
+  isTypeScriptVueImportFalsePositive,
   rangeFromTextSpanInContent,
 } from './TypeScriptLanguageFeatures'
 import {
@@ -455,6 +456,7 @@ interface TypeScriptProjectSnapshot {
   requestPath: string
   requestAbsolutePath: string
   files: Map<string, string>
+  compilerOptions: ts.CompilerOptions
   service: ts.LanguageService
 }
 
@@ -2355,7 +2357,7 @@ class WorkbenchLanguageServices {
     // 当前请求正文是实时缓冲区的权威值，最后写入可避免同路径的旧标签快照覆盖它。
     overlayFiles.set(requestAbsolutePath, requestContent)
 
-    const { service, files } = acquireTypeScriptLanguageService(
+    const { service, files, compilerOptions } = acquireTypeScriptLanguageService(
       projectRoot,
       requestAbsolutePath,
       priorityPaths,
@@ -2368,6 +2370,7 @@ class WorkbenchLanguageServices {
       requestPath: this.pathResolver.toProjectRelativePath(projectRoot, requestAbsolutePath),
       requestAbsolutePath,
       files,
+      compilerOptions,
       service,
     }
   }
@@ -2441,6 +2444,7 @@ class WorkbenchLanguageServices {
     diagnostic: ts.Diagnostic
   ): Nullable<WorkbenchLanguageServiceDiagnostic> {
     if (!diagnostic.file || !isNumber(diagnostic.start)) return null
+    if (isTypeScriptVueImportFalsePositive(diagnostic, snapshot.compilerOptions)) return null
 
     // Read line/column straight off the diagnostic's already-parsed SourceFile instead of
     // re-parsing the whole file once per diagnostic.

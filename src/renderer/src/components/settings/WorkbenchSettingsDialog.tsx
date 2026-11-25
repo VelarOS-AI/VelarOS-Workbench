@@ -983,47 +983,42 @@ export function WorkbenchSettingsDialog({
     const updateState = updateResult.data
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
-        <SettingsDisclosure
-          title={t('workbench.settingsUpdatePreferences')}
-          description={t('workbench.settingsUpdatePreferencesDescription')}
+        <SettingRow
+          title={t('workbench.settingsUpdateChannel')}
+          description={t('workbench.settingsUpdateChannelDescription')}
         >
-          <SettingRow
-            title={t('workbench.settingsUpdateChannel')}
-            description={t('workbench.settingsUpdateChannelDescription')}
-          >
-            <Select<WorkbenchUpdateChannel>
-              size="sm"
-              className={styles.workbenchSettingsSelectTrigger}
-              value={updateState.channel}
-              options={[
-                { value: 'stable', label: t('workbench.settingsUpdateChannelStable') },
-                { value: 'beta', label: t('workbench.settingsUpdateChannelBeta') },
-                { value: 'canary', label: t('workbench.settingsUpdateChannelPreview') },
-              ]}
-              onChange={(channel) => {
-                void window.velarosWorkbenchUpdate.setChannel(channel).catch((error: unknown) => {
-                  reportSettingSaveFailure('workbench.settingsUpdateChannel', error)
+          <Select<WorkbenchUpdateChannel>
+            size="sm"
+            className={styles.workbenchSettingsSelectTrigger}
+            value={updateState.channel}
+            options={[
+              { value: 'stable', label: t('workbench.settingsUpdateChannelStable') },
+              { value: 'beta', label: t('workbench.settingsUpdateChannelBeta') },
+              { value: 'canary', label: t('workbench.settingsUpdateChannelPreview') },
+            ]}
+            onChange={(channel) => {
+              void window.velarosWorkbenchUpdate.setChannel(channel).catch((error: unknown) => {
+                reportSettingSaveFailure('workbench.settingsUpdateChannel', error)
+              })
+            }}
+          />
+        </SettingRow>
+        <SettingRow
+          title={t('workbench.settingsAutomaticUpdates')}
+          description={t('workbench.settingsAutomaticUpdatesDescription')}
+        >
+          <Switch
+            size="sm"
+            checked={updateState.automaticDownloads}
+            onCheckedChange={(enabled) => {
+              void window.velarosWorkbenchUpdate
+                .setAutomaticDownloads(enabled)
+                .catch((error: unknown) => {
+                  reportSettingSaveFailure('workbench.settingsAutomaticUpdates', error)
                 })
-              }}
-            />
-          </SettingRow>
-          <SettingRow
-            title={t('workbench.settingsAutomaticUpdates')}
-            description={t('workbench.settingsAutomaticUpdatesDescription')}
-          >
-            <Switch
-              size="sm"
-              checked={updateState.automaticDownloads}
-              onCheckedChange={(enabled) => {
-                void window.velarosWorkbenchUpdate
-                  .setAutomaticDownloads(enabled)
-                  .catch((error: unknown) => {
-                    reportSettingSaveFailure('workbench.settingsAutomaticUpdates', error)
-                  })
-              }}
-            />
-          </SettingRow>
-        </SettingsDisclosure>
+            }}
+          />
+        </SettingRow>
       </div>
     )
   }

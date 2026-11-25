@@ -259,6 +259,16 @@
 .workbenchSettingsRowControl > :global([data-slot='segmented-control']) {
   width: min(100%, 300px);
 }
+.workbenchSettingsTavilyControls {
+  width: min(100%, 300px);
+}
+.workbenchSettingsTavilyControls :global([data-slot='input']) {
+  min-width: 0;
+  flex: 1;
+}
+.workbenchSettingsTavilyControls :global(button) {
+  flex: none;
+}
 
 /* Shared primitives keep their behavior; this form surface has visible, consistent fields. */
 .workbenchSettingsDialog :global([data-slot='select-trigger']),

@@ -62,6 +62,41 @@ for (const [path, label, service, content] of samples) {
   })
 }
 
+test('Vue template attribute names are highlighted whole and their values retain syntax', () => {
+  const attributes = [
+    'v-else-if="route.meta.public"',
+    ':data-test-id="itemId"',
+    '@after-enter="finishEnter"',
+    'v-on:before-enter.once="startEnter"',
+    '#slot-name="{ slotValue }"',
+    ':[itemKey]="itemValue"',
+    'data-static-name="literal"',
+    'v-else',
+  ]
+  const content = `<template><RouterView ${attributes.join(' ')} />{{ message }}</template>`
+  const support = resolveWorkbenchCodeMirrorLanguage('App.vue', '')
+  const state = EditorState.create({ doc: content, extensions: support.extension })
+  const tree = ensureSyntaxTree(state, content.length, 1_000)
+  assert.ok(tree)
+  const style = tagHighlighter([
+    { tag: tags.attributeName, class: 'attribute' },
+    { tag: tags.variableName, class: 'variable' },
+    { tag: tags.attributeValue, class: 'value' },
+    { tag: tags.propertyName, class: 'property' },
+  ])
+  const highlighted = new Map<string, string>()
+  highlightTree(tree, style, (from, to, classes) => highlighted.set(content.slice(from, to), classes))
+  for (const attribute of attributes) {
+    const name = attribute.split('=')[0]!
+    assert.equal(highlighted.get(name), 'attribute', name)
+  }
+  assert.equal(highlighted.get('route'), 'variable')
+  assert.equal(highlighted.get('meta'), 'property')
+  assert.equal(highlighted.get('finishEnter'), 'variable')
+  assert.equal(highlighted.get('"literal"'), 'value')
+  assert.equal(highlighted.get('message'), 'variable')
+})
+
 test('language modifiers use the keyword color in every editor theme', () => {
   for (const theme of ['light-modern', 'warm-paper', 'dark-modern', 'midnight-blue'] as const) {
     const style = HighlightStyle.define([...getWorkbenchCodeHighlightSpecs(theme)])

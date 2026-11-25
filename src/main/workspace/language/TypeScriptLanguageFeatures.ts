@@ -19,6 +19,56 @@ import {
   type WorkbenchLanguageServiceTextEdit,
 } from '@shared/contracts/workbench'
 
+function vueSourcePathForDeclaration(fileName: string): string | undefined {
+  const suffix = '.d.vue.ts'
+  return fileName.endsWith(suffix) ? `${fileName.slice(0, -suffix.length)}.vue` : undefined
+}
+
+const VueModuleResolutionHost: ts.ModuleResolutionHost = {
+  ...ts.sys,
+  fileExists(fileName) {
+    const componentPath = vueSourcePathForDeclaration(fileName)
+    return ts.sys.fileExists(fileName) || (componentPath !== undefined && ts.sys.fileExists(componentPath))
+  },
+}
+
+function stringLiteralAt(node: ts.Node, position: number): ts.StringLiteralLike | undefined {
+  return ts.forEachChild(node, (child) => {
+    if (position < child.pos || position >= child.end) return undefined
+    return ts.isStringLiteralLike(child) ? child : stringLiteralAt(child, position)
+  })
+}
+
+/** The bundled Vue server handles SFCs. Check whether a TS2307 points to a real SFC
+ * using TypeScript's resolver so paths, package exports, and missing files keep their usual meaning. */
+export function isTypeScriptVueImportFalsePositive(
+  diagnostic: ts.Diagnostic,
+  options: ts.CompilerOptions
+): boolean {
+  const { file, start, length } = diagnostic
+  if (diagnostic.code !== 2307 || file === undefined || start === undefined || length === undefined)
+    return false
+  if (!/\.vue["'`]$/u.test(file.text.slice(start, start + length))) return false
+
+  const specifier = stringLiteralAt(file, start)
+  if (!specifier?.text.endsWith('.vue')) return false
+
+  // TypeScript probes `Component.d.vue.ts` for arbitrary extensions. For this diagnostic
+  // check, allow the corresponding on-disk SFC to satisfy that probe without adding a declaration.
+  const { resolvedModule } = ts.resolveModuleName(
+    specifier.text,
+    file.fileName,
+    options,
+    VueModuleResolutionHost,
+    undefined,
+    undefined,
+    ts.getModeForUsageLocation(file, specifier, options)
+  )
+  if (!resolvedModule) return false
+  const componentPath = vueSourcePathForDeclaration(resolvedModule.resolvedFileName)
+  return componentPath !== undefined && ts.sys.fileExists(componentPath)
+}
+
 const DISPLAY_PART_KINDS: readonly WorkbenchLanguageServiceDisplayPartKind[] = [
   'aliasName',
   'className',

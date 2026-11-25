@@ -1,0 +1,74 @@
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -46,11 +46,7 @@
+ const textParser = /*@__PURE__*/baseParser.configure({
+     wrap: /*@__PURE__*/parseMixed((node, input) => node.name == "InterpolationContent" ? exprMixed : null),
+ });
+-const attrParser = /*@__PURE__*/baseParser.configure({
+-    wrap: /*@__PURE__*/parseMixed((node, input) => node.name == "AttributeScript" ? exprMixed : null),
+-    top: "Attribute"
+-});
+-const textMixed = { parser: textParser }, attrMixed = { parser: attrParser };
++const textMixed = { parser: textParser };
+ const baseHTML = /*@__PURE__*/html();
+ function makeVue(base) {
+     return base.configure({
+@@ -65,7 +61,18 @@
+ function mixVue(node, input) {
+     switch (node.name) {
+-        case "Attribute":
+-            return /^(@|:|v-)/.test(input.read(node.from, node.from + 2)) ? attrMixed : null;
++        case "Attribute": {
++            // Keep the HTML attribute name intact and only parse the directive value as JavaScript.
++            const name = node.node.getChild("AttributeName");
++            const value = node.node.getChild("AttributeValue");
++            if (!name || !value || !/^([@:#.]|v-)/.test(input.read(name.from, Math.min(name.from + 2, name.to))))
++                return null;
++            const quote = input.read(value.from, value.from + 1);
++            const quoted = quote === '"' || quote === "'";
++            const from = value.from + (quoted ? 1 : 0);
++            const closed = quoted && value.to > from && input.read(value.to - 1, value.to) === quote;
++            const to = value.to - (closed ? 1 : 0);
++            return from < to ? { parser: exprParser, overlay: [{ from, to }] } : null;
++        }
+         case "Text":
+             return textMixed;
+     }
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -48,11 +48,7 @@
+ const textParser = baseParser.configure({
+     wrap: common.parseMixed((node, input) => node.name == "InterpolationContent" ? exprMixed : null),
+ });
+-const attrParser = baseParser.configure({
+-    wrap: common.parseMixed((node, input) => node.name == "AttributeScript" ? exprMixed : null),
+-    top: "Attribute"
+-});
+-const textMixed = { parser: textParser }, attrMixed = { parser: attrParser };
++const textMixed = { parser: textParser };
+ const baseHTML = langHtml.html();
+ function makeVue(base) {
+     return base.configure({
+@@ -67,7 +63,18 @@
+ function mixVue(node, input) {
+     switch (node.name) {
+-        case "Attribute":
+-            return /^(@|:|v-)/.test(input.read(node.from, node.from + 2)) ? attrMixed : null;
++        case "Attribute": {
++            // Keep the HTML attribute name intact and only parse the directive value as JavaScript.
++            const name = node.node.getChild("AttributeName");
++            const value = node.node.getChild("AttributeValue");
++            if (!name || !value || !/^([@:#.]|v-)/.test(input.read(name.from, Math.min(name.from + 2, name.to))))
++                return null;
++            const quote = input.read(value.from, value.from + 1);
++            const quoted = quote === '"' || quote === "'";
++            const from = value.from + (quoted ? 1 : 0);
++            const closed = quoted && value.to > from && input.read(value.to - 1, value.to) === quote;
++            const to = value.to - (closed ? 1 : 0);
++            return from < to ? { parser: exprParser, overlay: [{ from, to }] } : null;
++        }
+         case "Text":
+             return textMixed;
+     }

@@ -23,6 +23,10 @@ import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 import { isEmpty, Log } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts/workbench'
+import {
+  getWorkbenchPathExtension,
+  resolveBuiltinWorkbenchLanguageService,
+} from '@shared/workbenchLanguageServices'
 
 import { useLatest } from '../support/genericHooks'
 
@@ -64,7 +68,7 @@ export function useWorkbenchLanguageServiceInsights({
   const [projectDiagnosticsByPath, setProjectDiagnosticsByPath] = useState<
     ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>
   >(() => new Map())
-  const announcedErrorRef = useRef<Nullable<string>>(null)
+  const announcedServicesRef = useRef(new Set<string>())
   const contextRef = useLatest({ projectRoot, openTabs, selectedFilePath, editorContent })
 
   // 内容键按值比较：标签对象因保存、外部刷新换了身份但文本没变时，不重新排诊断。
@@ -97,8 +101,9 @@ export function useWorkbenchLanguageServiceInsights({
       editorContent: activeContent,
     } = contextRef.current
     const targets = currentTabs.filter((tab) => usesWorkbenchBuiltinLanguageService(tab.path))
+    const rootChanged = scheduledDiagnosticsRef.current.root !== root
+    if (rootChanged) announcedServicesRef.current.clear()
     if (!root || isEmpty(targets)) {
-      announcedErrorRef.current = null
       scheduledDiagnosticsRef.current = { root, contentByPath: new Map() }
       pendingPathsRef.current = new Set()
       setDiagnosticsByPath(new Map())
@@ -112,7 +117,6 @@ export function useWorkbenchLanguageServiceInsights({
         (tab) => [tab.path, tab.path === activePath ? activeContent : tab.content] as const
       )
     )
-    const rootChanged = scheduledDiagnosticsRef.current.root !== root
     const previousContentByPath = rootChanged
       ? new Map<string, string>()
       : scheduledDiagnosticsRef.current.contentByPath
@@ -147,17 +151,17 @@ export function useWorkbenchLanguageServiceInsights({
     )
     const request = async (paths: readonly string[]): Promise<void> => {
       if (disposed || contextRef.current.projectRoot !== root || isEmpty(paths)) return
-      let failureMessage: Nullable<string> = null
       // Submit one file at a time. A large set of restored tabs must not spend
       // every request's timeout budget waiting for earlier ESLint workers.
       for (const path of paths) {
         if (disposed || contextRef.current.projectRoot !== root) return
+        const language = fileLanguage(path)
         const result = await getWorkbenchLanguageServiceDiagnostics(
           {
             ...buildWorkbenchLanguageServiceRequestBase({
               projectRoot: root,
               path,
-              language: fileLanguage(path),
+              language,
               content: contentByPath.get(path) ?? '',
               openTabs: openTabsWithLiveContent,
             }),
@@ -166,9 +170,6 @@ export function useWorkbenchLanguageServiceInsights({
         )
 
         if (disposed || contextRef.current.projectRoot !== root) return
-        if (!result.ok && result.error.code !== 'CANCELLED') {
-          failureMessage ??= result.error.message
-        }
         if (result.ok) {
           const diagnostics = result.data.diagnostics.filter(
             (diagnostic) => diagnostic.path === path
@@ -178,22 +179,24 @@ export function useWorkbenchLanguageServiceInsights({
             next.set(path, diagnostics)
             return next
           })
+        } else if (result.error.code !== 'CANCELLED') {
+          // A healthy file can coexist with a missing server elsewhere in the workspace.
+          const serviceId =
+            resolveBuiltinWorkbenchLanguageService(getWorkbenchPathExtension(path))?.id ?? language
+          if (!announcedServicesRef.current.has(serviceId)) {
+            announcedServicesRef.current.add(serviceId)
+            messageLatest.current.error({
+              title: tLatest.current('workbench.languageServiceDiagnosticsFailed'),
+              description: result.error.message,
+            })
+          }
         }
-        const errorKey = failureMessage ? `${root}\0${failureMessage}` : null
-        if (failureMessage && announcedErrorRef.current !== errorKey) {
-          messageLatest.current.error({
-            title: tLatest.current('workbench.languageServiceDiagnosticsFailed'),
-            description: failureMessage,
-          })
-        }
-        if (errorKey) announcedErrorRef.current = errorKey
         const remaining = new Set(
           [...pendingPathsRef.current].filter((pending) => pending !== path)
         )
         pendingPathsRef.current = remaining
         setDiagnosticsPendingPaths(remaining)
       }
-      if (!failureMessage) announcedErrorRef.current = null
     }
 
     const promptTimer = setTimeout(
