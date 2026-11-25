@@ -1,5 +1,5 @@
 import { type Extension, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
-import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
+import { closeHoverTooltips, Decoration, type DecorationSet, EditorView } from '@codemirror/view'
 
 export interface WorkbenchDefinitionHoverRange {
   from: number
@@ -12,6 +12,22 @@ const workbenchDefinitionHoverMark = Decoration.mark({
 
 export const setWorkbenchDefinitionHoverRange =
   StateEffect.define<Nullable<WorkbenchDefinitionHoverRange>>()
+
+const editorsAwaitingPointerMovement = new WeakSet<EditorView>()
+
+export function clearWorkbenchEditorHover(view: EditorView): void {
+  // A pending CodeMirror hover can restart after a transaction using its previous pointer position.
+  editorsAwaitingPointerMovement.add(view)
+  view.dispatch({ effects: [setWorkbenchDefinitionHoverRange.of(null), closeHoverTooltips] })
+}
+
+export function resumeWorkbenchEditorHover(view: EditorView): void {
+  editorsAwaitingPointerMovement.delete(view)
+}
+
+export function isWorkbenchEditorHoverSuppressed(view: EditorView): boolean {
+  return editorsAwaitingPointerMovement.has(view)
+}
 
 export function buildWorkbenchDefinitionHoverDecorations(
   range: Nullable<WorkbenchDefinitionHoverRange>

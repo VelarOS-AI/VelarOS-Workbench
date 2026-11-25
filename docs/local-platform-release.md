@@ -46,6 +46,11 @@ native workflows read the same names through the Actions `secrets` context. Chec
 repository secrets with the same names when migrating, since those take precedence over organization
 secrets.
 
+On GitHub Free, organization secrets are available to eligible public repositories. Keep credentials
+in the release environment of private repositories, and update those environment values alongside the
+shared secrets during a rotation. Provisioning profiles for specific bundle identifiers belong in
+the corresponding product repository's release environment.
+
 The workflow restores
 the pinned Platform archives, installs the frozen lock, checks each native environment, verifies the
 packaged application and Windows update path, and runs the same stage/verify/finalize commands below.

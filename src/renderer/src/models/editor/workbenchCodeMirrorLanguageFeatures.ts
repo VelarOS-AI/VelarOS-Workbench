@@ -24,6 +24,7 @@ import { type WorkbenchHostRuntime } from '../../host/WorkbenchHost'
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
 import { getWorkbenchJavaScriptKeywordRangeAtPosition } from './workbenchCodeMirrorBasicSyntax'
+import { isWorkbenchEditorHoverSuppressed } from './workbenchCodeMirrorDefinitionHover'
 import {
   buildWorkbenchLanguageServiceRequestBase,
   usesWorkbenchSemanticLanguageService,
@@ -593,6 +594,7 @@ export function createWorkbenchLanguageServiceHoverTooltip(
 
   return hoverTooltip(
     async (view, position): Promise<Tooltip | null> => {
+      if (isWorkbenchEditorHoverSuppressed(view)) return null
       const generation = ++requestGeneration
       const diagnosticRange = collectDiagnosticsAtPosition(view, position)
       const keywordRange = getWorkbenchJavaScriptKeywordRangeAtPosition(
@@ -659,7 +661,12 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           }),
         ])
         if (timer) clearTimeout(timer)
-        if (generation !== requestGeneration || view.state.doc !== sourceDocument) return null
+        if (
+          generation !== requestGeneration ||
+          view.state.doc !== sourceDocument ||
+          isWorkbenchEditorHoverSuppressed(view)
+        )
+          return null
         if (reply.ready) {
           resolvedHover = reply.hover
           if (!resolvedHover) return null

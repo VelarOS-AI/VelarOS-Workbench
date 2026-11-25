@@ -3,6 +3,34 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.39",
+      "releasedAt": "2026-11-25",
+      "title": {
+        "zh": "编辑器跳转、Vue 与设置改进",
+        "en": "Editor navigation, Vue and settings improvements"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "Ctrl+点击跳转后，返回原文件会清除旧的下划线和悬浮提示。",
+          "接入 Platform v0.7.19，兼容带或不带 /v1 的模型网关地址。",
+          "语言服务不可用时，同一工作区内对该服务只提示一次。",
+          "修复 TypeScript 引用现有 Vue 组件时的模块误报，并统一 Vue 模板属性名的着色。",
+          "将 Vue 文件图标改为纯绿色，简化更新设置，并把 Tavily 密钥输入框和验证按钮放在同一行。"
+        ],
+        "en": [
+          "Clear the previous underline and hover tooltip when returning after a Ctrl-click definition jump.",
+          "Update to Platform v0.7.19 for model gateway URLs with or without /v1.",
+          "Show one notification per unavailable language service in each workspace.",
+          "Correct missing-module diagnostics for existing Vue components imported from TypeScript and highlight Vue attribute names as a whole.",
+          "Use a green-only Vue file icon, simplify update settings, and place the Tavily key field and Verify button side by side."
+        ]
+      }
+    },
+    {
       "version": "0.4.38",
       "releasedAt": "2026-11-25",
       "title": {

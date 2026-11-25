@@ -9,6 +9,8 @@ import type { EditorState, Extension } from '@codemirror/state'
 import { hoverTooltip } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 
+import { isWorkbenchEditorHoverSuppressed } from './workbenchCodeMirrorDefinitionHover'
+
 export interface WorkbenchDebugHoverOptions {
   /** 程序停着，而且选中的那一帧就在这个文件里：这时才去求值。 */
   isActive: () => boolean
@@ -66,14 +68,20 @@ export function findWorkbenchDebugHoverExpression(
 export function createWorkbenchDebugHoverExtension(options: WorkbenchDebugHoverOptions): Extension {
   return hoverTooltip(
     async (view, position) => {
-      if (!options.isActive()) return null
+      if (!options.isActive() || isWorkbenchEditorHoverSuppressed(view)) return null
       const found = findWorkbenchDebugHoverExpression(view.state, position)
       if (!found) return null
 
       const document = view.state.doc
       const value = await options.evaluate(found.expression)
       // 等结果的工夫文档变了、程序又跑起来了：这个值已经不算数。
-      if (value === null || view.state.doc !== document || !options.isActive()) return null
+      if (
+        value === null ||
+        view.state.doc !== document ||
+        !options.isActive() ||
+        isWorkbenchEditorHoverSuppressed(view)
+      )
+        return null
 
       return {
         pos: found.from,

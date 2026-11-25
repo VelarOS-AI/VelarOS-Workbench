@@ -109,6 +109,8 @@ import {
 } from '@renderer/models/editor/workbenchCodeMirrorCompletionPresentation'
 import { buildWorkbenchCodeMirrorCompletionResult } from '@renderer/models/editor/workbenchCodeMirrorCompletions'
 import {
+  clearWorkbenchEditorHover,
+  resumeWorkbenchEditorHover,
   setWorkbenchDefinitionHoverRange,
   workbenchDefinitionHoverExtension,
   type WorkbenchDefinitionHoverRange,
@@ -410,6 +412,7 @@ interface WorkbenchEditorInstanceExtensions {
   tooltips: Extension
   comments: Extension
   mouseHandlers: Extension
+  resetHover: (view: EditorView) => void
   updateListener: Extension
   inlineCompletion: Extension
   findStatus: Extension
@@ -2669,6 +2672,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       let activeDefinitionHoverRange: Nullable<WorkbenchDefinitionHoverRange> = null
       let lastDefinitionHoverCoords: Nullable<{ x: number; y: number }> = null
+      const resetHover = (view: EditorView): void => {
+        activeDefinitionHoverRange = null
+        lastDefinitionHoverCoords = null
+        clearWorkbenchEditorHover(view)
+      }
       const setDefinitionHoverRange = (
         view: EditorView,
         range: Nullable<WorkbenchDefinitionHoverRange>
@@ -2699,6 +2707,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       const mouseHandlers = EditorView.domEventHandlers({
         mousemove: (event, view) => {
+          resumeWorkbenchEditorHover(view)
           lastDefinitionHoverCoords = { x: event.clientX, y: event.clientY }
           updateDefinitionHoverFromCoords(
             view,
@@ -2727,6 +2736,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           return false
         },
         blur: (_event, view) => {
+          lastDefinitionHoverCoords = null
           setDefinitionHoverRange(view, null)
           return false
         },
@@ -2738,6 +2748,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           if (!word) return false
 
           event.preventDefault()
+          resetHover(view)
           void editorActionsRef.current.goToDefinitionForWord(word)
           return true
         },
@@ -2809,6 +2820,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }),
         comments: workbenchCommentExtension,
         mouseHandlers,
+        resetHover,
         updateListener,
         inlineCompletion: workbenchInlineCompletionExtension(inlineCompletionRuntime),
       }
@@ -2896,7 +2908,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       closeCompletion(view)
       closeWorkbenchEditorFind(view)
-      view.dispatch({ effects: closeHoverTooltips })
+      instance.resetHover(view)
       fileStatesRef.current.save(key, snapshotFileState(view, instance))
     }
 
