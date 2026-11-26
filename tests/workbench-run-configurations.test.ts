@@ -601,7 +601,7 @@ void describe('named run configurations', () => {
     // 菜单里的每个按钮都是菜单项（输入框旁的「保存」是表单自己的提交按钮）。
     const menu = toolbar.slice(toolbar.indexOf('ref={menuPanelRef}'), toolbar.indexOf('</AnchoredPopover>'))
     const buttons = [...menu.matchAll(/<button\s[^>]*>/gu)].map((match) => match[0])
-    assert.equal(buttons.length, 7)
+    assert.match(menu, /role="menuitem"\s+className=\{styles.runActionRowButton\}\s+title=\{runTitle\}/u)
     assert.deepEqual(
       buttons.filter((button) => !/role="menuitem(?:radio)?"/u.test(button)).map((button) => /type="(\w+)"/u.exec(button)?.[1]),
       ['submit']

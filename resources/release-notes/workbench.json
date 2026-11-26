@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.41",
+      "version": "0.4.42",
       "releasedAt": "2026-11-26",
       "title": {
         "zh": "C# 与 Java 启动构建及 Git 重新检测",
