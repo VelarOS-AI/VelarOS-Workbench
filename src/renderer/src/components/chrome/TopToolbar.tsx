@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { BugIcon, CheckIcon, GearSixIcon, PlayIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import { BugIcon, CaretDownIcon, CheckIcon, GearSixIcon, PlayIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { describeWorkbenchRunConfiguration } from '@renderer/models/commands/workbenchNamedRunConfigurations'
 import { hasWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
@@ -163,6 +163,7 @@ function WorkbenchRunAction({
   const [menuOpen, setMenuOpen] = useState(false)
   const [duplicateRunDialogOpen, setDuplicateRunDialogOpen] = useState(false)
   const [draftCommand, setDraftCommand] = useState('')
+  const hasProjectTasks = topRun.options.some((option) => option.runNow)
   const activeOption = useMemo(
     () => toNullable(topRun.options.find((option) => option.value === topRun.activeCommandKey)),
     [topRun.activeCommandKey, topRun.options]
@@ -301,6 +302,7 @@ function WorkbenchRunAction({
   return (
     <>
       <AnchoredPopover
+        anchorClassName={hasProjectTasks ? styles.topRunTaskAnchor : ''}
         open={menuOpen}
         onOpenChange={setMenuOpen}
         // 焦点给命令输入框：浮层先挂出来、摆好位置才看得见，输入框上的 autoFocus 赶在那之前，落不上。
@@ -311,39 +313,56 @@ function WorkbenchRunAction({
         sideOffset={8}
         widthStrategy="content"
         anchor={({ getAnchorProps }) => (
-          <BubbleTooltip
-            // 菜单开着时不出悬停说明：指针还停在 ▶ 上，说明会盖住菜单最上面的几行。
-            disabled={menuOpen}
-            content={
-              <span className={styles.runActionTooltip}>
-                <span className={styles.runActionTooltipTitle}>{tooltipTitle}</span>
-                {!!activeDescription && (
-                  <span className={styles.runActionTooltipDescription}>{activeDescription}</span>
-                )}
-                <span className={styles.runActionTooltipDescription}>{configureHint}</span>
-              </span>
-            }
-            ariaLabel={actionLabel}
-            side={tooltipSide}
-            sideOffset={6}
-            delayDuration={80}
-          >
-            <IconButton
-              {...getAnchorProps<HTMLButtonElement>({ disabled: true, onClick: handleRunClick })}
-              variant="ghost"
-              size="icon-sm"
-              className={className}
-              label={actionLabel}
-              disabled={false}
-              onContextMenu={handleRunContextMenu}
+          <>
+            <BubbleTooltip
+              // 指针还停在 ▶ 上时，隐藏会盖住任务列表的悬停说明。
+              disabled={menuOpen}
+              content={
+                <span className={styles.runActionTooltip}>
+                  <span className={styles.runActionTooltipTitle}>{tooltipTitle}</span>
+                  {!!activeDescription && (
+                    <span className={styles.runActionTooltipDescription}>{activeDescription}</span>
+                  )}
+                  <span className={styles.runActionTooltipDescription}>{configureHint}</span>
+                </span>
+              }
+              ariaLabel={actionLabel}
+              side={tooltipSide}
+              sideOffset={6}
+              delayDuration={80}
             >
-              {oneShotBusy ? (
-                <SpinnerGapIcon size={17} className={styles.spinIcon} />
-              ) : (
-                <PlayIcon size={17} weight="regular" />
-              )}
-            </IconButton>
-          </BubbleTooltip>
+              <IconButton
+                {...getAnchorProps<HTMLButtonElement>({ disabled: true, onClick: handleRunClick })}
+                variant="ghost"
+                size="icon-sm"
+                className={className}
+                label={actionLabel}
+                disabled={false}
+                onContextMenu={handleRunContextMenu}
+              >
+                {oneShotBusy ? (
+                  <SpinnerGapIcon size={17} className={styles.spinIcon} />
+                ) : (
+                  <PlayIcon size={17} weight="regular" />
+                )}
+              </IconButton>
+            </BubbleTooltip>
+            {hasProjectTasks && (
+              <IconButton
+                {...getAnchorProps<HTMLButtonElement>({ disabled: true })}
+                className={styles.topRunTaskMenuButton}
+                label={t('workbench.projectToolMenu')}
+                size={18}
+                aria-haspopup="menu"
+                onClick={() => {
+                  if (menuOpen) setMenuOpen(false)
+                  else openConfig()
+                }}
+              >
+                <CaretDownIcon size={12} />
+              </IconButton>
+            )}
+          </>
         )}
       >
         <div
@@ -441,7 +460,7 @@ function WorkbenchRunAction({
           {topRun.options.map((option) => {
             // ▶ 指着一份运行配置时，命令文本碰巧一样的这一行不算选中。
             const active = !activeConfiguration && option.value === topRun.activeCommandKey
-            return (
+            const choice = (
               <button
                 key={option.value}
                 type="button"
@@ -462,6 +481,26 @@ function WorkbenchRunAction({
                   <CheckIcon size={13} weight="bold" className={styles.runActionOptionCheck} />
                 )}
               </button>
+            )
+            if (!option.runNow) return choice
+            const runTitle = t('workbench.runConfigurationRunNow')
+            return (
+              <div key={option.value} className={styles.runActionNamedRow}>
+                {choice}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.runActionRowButton}
+                  title={runTitle}
+                  aria-label={`${runTitle} · ${option.label}`}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    option.runNow?.()
+                  }}
+                >
+                  <PlayIcon size={12} weight="fill" />
+                </button>
+              </div>
             )
           })}
           {(topRun.isConfigured || !!activeConfiguration) && (

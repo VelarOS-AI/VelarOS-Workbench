@@ -856,6 +856,7 @@ export function StandaloneWorkbenchPagePresentation({
                     summary={model.gitState.summary}
                     isLoading={model.gitState.isLoading}
                     error={model.gitState.error}
+                    isGitMissing={model.gitState.isGitMissing}
                     hasUnsavedOpenTabs={workbench.hasUnsavedOpenTabs}
                     onInitialize={model.actions.initializeRepository}
                     onRefresh={model.actions.refreshProjectAndGit}

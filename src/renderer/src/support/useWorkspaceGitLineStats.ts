@@ -16,6 +16,7 @@ interface UseWorkspaceGitLineStatsResult {
   snapshot: Nullable<SystemWorkspaceGitLineStatsSnapshot>
   isLoading: boolean
   error: Nullable<string>
+  isGitMissing: boolean
   refresh: () => Promise<void>
 }
 
@@ -26,7 +27,7 @@ export function useWorkspaceGitLineStats(
   const { enabled = true, refreshOnMount = true } = options
   const [snapshot, setSnapshot] = useState<Nullable<SystemWorkspaceGitLineStatsSnapshot>>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<Nullable<string>>(null)
+  const [error, setError] = useState<Nullable<AppError>>(null)
   const generationRef = useRef(0)
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -42,7 +43,7 @@ export function useWorkspaceGitLineStats(
     } catch (loadError) {
       if (generation !== generationRef.current) return
       setSnapshot(null)
-      setError(AppError.getMessage(loadError))
+      setError(AppError.from(loadError))
     } finally {
       if (generation === generationRef.current) setIsLoading(false)
     }
@@ -59,5 +60,11 @@ export function useWorkspaceGitLineStats(
     if (refreshOnMount) void refresh()
   }, [enabled, refresh, refreshOnMount, workspaceRoot])
 
-  return { snapshot, isLoading, error, refresh }
+  return {
+    snapshot,
+    isLoading,
+    error: error?.message ?? null,
+    isGitMissing: error?.code === 'NOT_FOUND',
+    refresh,
+  }
 }

@@ -71,7 +71,7 @@ export function buildWorkbenchRunConfigurations({
       command,
       launch: suggestion.launch,
       source: suggestion.source,
-      kind: inferRunConfigurationKind(suggestion.label, command),
+      kind: suggestion.kind ?? inferRunConfigurationKind(suggestion.label, command),
     })
   }
 

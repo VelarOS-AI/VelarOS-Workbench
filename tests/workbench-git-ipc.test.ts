@@ -5,8 +5,15 @@ import { describe, mock, test } from 'bun:test'
 import { WorkbenchGitChannels } from '../src/shared/workbenchGit'
 
 const ipcHandlers = new Map<string, (...args: unknown[]) => unknown>()
+const rendererEvents: string[] = []
 
 mock.module('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: () => [{
+      isDestroyed: () => false,
+      webContents: { send: (channel: string) => rendererEvents.push(channel) },
+    }],
+  },
   ipcMain: {
     handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
       ipcHandlers.set(channel, handler)
@@ -21,6 +28,24 @@ async function invoke(channel: string, request: unknown): Promise<{ ok: boolean 
 }
 
 void describe('Workbench Git IPC requests', () => {
+  void test('Git reload shares the environment refresh and updates open views after it completes', async () => {
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    const refreshed = Promise.withResolvers<void>()
+    let calls = 0
+    registerWorkbenchGitIpc({} as never, {} as never, {} as never, () => {
+      calls += 1
+      return refreshed.promise
+    })
+
+    const first = invoke(WorkbenchGitChannels.reloadEnvironment, undefined)
+    const second = invoke(WorkbenchGitChannels.reloadEnvironment, undefined)
+    assert.equal(calls, 1)
+    assert.deepEqual(rendererEvents, [])
+    refreshed.resolve()
+    assert.ok((await first).ok && (await second).ok)
+    assert.deepEqual(rendererEvents, [WorkbenchGitChannels.environmentReloaded])
+  })
+
   void test('pushing a branch from the branch menu reaches the service with that branch', async () => {
     const remoteActions: unknown[] = []
     const fileActions: unknown[] = []
@@ -37,7 +62,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
 
     assert.equal(
@@ -122,7 +148,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
 
     const fetch = { workspaceRoot: '/project', action: 'fetch' }
@@ -162,7 +189,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
 
     assert.equal((await invoke(WorkbenchGitChannels.log, { workspaceRoot: '/p' })).ok, true)
@@ -213,7 +241,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
     const sha = 'a'.repeat(40)
 
@@ -288,7 +317,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
     const sha = 'b'.repeat(40)
 
@@ -339,7 +369,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
 
     assert.equal(
@@ -390,7 +421,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
 
     const hunk = { header: '@@ -1 +1 @@', lines: ['-a', '+b'] }
@@ -439,7 +471,8 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never
+      {} as never,
+      async () => undefined
     )
 
     assert.equal(

@@ -296,7 +296,7 @@ export function getWorkbenchColorTokens(
   // Technology identity keeps its hue while icon ink follows readable light/dark scales.
   const fileFamilies = {
     java: 'orange',
-    csharp: 'violet',
+    csharp: 'green',
     go: 'teal',
     rust: 'orange',
     dart: 'blue',

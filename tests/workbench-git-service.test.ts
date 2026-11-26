@@ -5,6 +5,7 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { workbenchMainText } from '../src/main/i18n/workbenchMainMessages'
 import { WorkbenchGitService } from '../src/main/workspace/git/WorkbenchGitService'
 import { parseWorkbenchGitCommitDiff } from '../src/renderer/src/models/git/changesPanel.model'
 
@@ -22,6 +23,22 @@ import {
 } from './helpers/gitRepository'
 
 void describe('Workbench Git service', () => {
+  void test('missing Git is reported consistently in changes and history', async () => {
+    await withRepository(async (root) => {
+      const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ?? 'PATH'
+      const service = createService({ [pathKey]: root })
+      const requests = [
+        service.getSummary(root),
+        service.getLineStats(root),
+        service.getLog(root),
+        service.getLog(root, { path: 'file.txt' }),
+        service.getFileAtCommit(root, 'HEAD', 'file.txt'),
+      ]
+      const expected = { code: 'NOT_FOUND', message: workbenchMainText('git.executableMissing') }
+      await Promise.all(requests.map((request) => assert.rejects(request, expected)))
+    })
+  })
+
   void test('a project nested in a repository only sees, rolls back and commits its own files', async () => {
     await withRepository(async (repository) => {
       const project = join(repository, 'packages', 'app')

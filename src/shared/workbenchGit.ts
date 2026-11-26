@@ -7,6 +7,8 @@ import type { WorkbenchFsCallResult } from './workbenchFs'
 import type { WorkbenchTextEncoding, WorkbenchTextEol } from './workbenchTextFormat'
 
 export const WorkbenchGitChannels = {
+  reloadEnvironment: 'workbench-app:git:reload-environment',
+  environmentReloaded: 'workbench-app:git:environment-reloaded',
   summary: 'workbench-app:git:summary',
   lineStats: 'workbench-app:git:line-stats',
   diff: 'workbench-app:git:diff',
@@ -267,6 +269,8 @@ export interface WorkbenchChatRunChangesDeleteRequest extends WorkbenchGitRootRe
 }
 
 export interface WorkbenchGitBridge {
+  reloadEnvironment(): Promise<WorkbenchFsCallResult<void>>
+  onEnvironmentReloaded(listener: () => void): () => void
   getSummary(
     request: WorkbenchGitRootRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitSummary>>

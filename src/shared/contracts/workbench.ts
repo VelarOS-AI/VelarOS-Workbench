@@ -1095,10 +1095,17 @@ export interface WorkbenchPackageManagerTarget {
   argv: string[]
 }
 
+export interface WorkbenchProjectToolTarget {
+  kind: 'project-tool'
+  program: 'dotnet' | 'mvn' | 'gradle'
+  argv: string[]
+}
+
 export type WorkbenchProcessTarget =
   | WorkbenchNodeScriptTarget
   | WorkbenchNodePackageBinTarget
   | WorkbenchPackageManagerTarget
+  | WorkbenchProjectToolTarget
   | { kind: 'python-script'; script: string; argv: string[] }
 
 export interface WorkbenchTerminalStartRequest {

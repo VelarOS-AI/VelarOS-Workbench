@@ -206,6 +206,8 @@ const debuggerBridge: WorkbenchDebuggerBridge = {
 }
 
 const gitBridge: WorkbenchGitBridge = {
+  reloadEnvironment: () => ipcRenderer.invoke(WorkbenchGitChannels.reloadEnvironment),
+  onEnvironmentReloaded: (listener) => subscribe(WorkbenchGitChannels.environmentReloaded, listener),
   getSummary: (request) => ipcRenderer.invoke(WorkbenchGitChannels.summary, request),
   getLineStats: (request) => ipcRenderer.invoke(WorkbenchGitChannels.lineStats, request),
   getDiff: (request) => ipcRenderer.invoke(WorkbenchGitChannels.diff, request),

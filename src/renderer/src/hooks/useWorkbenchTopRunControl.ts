@@ -10,6 +10,7 @@ import {
   buildWorkbenchRunConfigurationLaunch,
   type WorkbenchNamedRunConfiguration,
 } from '@renderer/models/commands/workbenchNamedRunConfigurations'
+import type { WorkbenchRunConfiguration } from '@renderer/models/commands/workbenchRunConfigurations'
 
 import { type SelectOption } from '@velaros-ai/ui/primitives/forms/Select'
 import { toNullable } from '@velaros-ai/velaros/core'
@@ -18,6 +19,11 @@ import { useLatest } from '../support/genericHooks'
 
 interface WorkbenchRunConfigurationLike extends WorkbenchRunCommand {
   label: string
+  kind?: WorkbenchRunConfiguration['kind']
+}
+
+interface WorkbenchRunOption extends SelectOption<string> {
+  runNow?: LooseOptional<() => void>
 }
 
 interface WorkbenchCommandHistoryLike {
@@ -64,7 +70,7 @@ interface UseWorkbenchTopRunControlOptions {
 export interface WorkbenchTopRunControl {
   activeCommand: string
   activeCommandKey: string
-  options: Array<SelectOption<string>>
+  options: WorkbenchRunOption[]
   /** 当前生效的命令是否来自用户手动配置（而非自动探测）。 */
   isConfigured: boolean
   configuredCommand: string
@@ -166,12 +172,22 @@ export function useWorkbenchTopRunControl({
       : null,
     [configuredLaunch, normalizedConfiguredCommand]
   )
-  const options = useMemo<Array<SelectOption<string> & { run: WorkbenchRunCommand }>>(() => {
-    const nextOptions = new Map<string, SelectOption<string> & { run: WorkbenchRunCommand }>()
-    const add = (run: WorkbenchRunCommand, description: string): void => {
+  const options = useMemo(() => {
+    const nextOptions = new Map<string, WorkbenchRunOption & { run: WorkbenchRunCommand; isLaunch: boolean }>()
+    const add = (run: WorkbenchRunCommand, description: string, isLaunch = false): void => {
       const key = workbenchRunCommandKey(run.command, run.launch)
       if (nextOptions.has(key)) return
-      nextOptions.set(key, { value: key, label: run.label || run.command, description, run })
+      const label = run.label || run.command
+      nextOptions.set(key, {
+        value: key,
+        label,
+        description,
+        run,
+        isLaunch,
+        runNow: run.launch?.process?.kind === 'project-tool'
+          ? () => onLaunchCommandLatest.current(run.command, label, run.launch)
+          : undefined,
+      })
     }
     if (normalizedConfiguredCommand) {
       add(
@@ -182,18 +198,18 @@ export function useWorkbenchTopRunControl({
     // 最近运行过的命令进入列表（gutter ▶ 触发的也算），便于右键切换。
     if (lastLaunchedRun) add(lastLaunchedRun, t('workbench.recentCommands'))
     runConfigurations.forEach((configuration) => {
-      add(configuration, configuration.command)
+      add(configuration, configuration.command, configuration.kind === 'dev')
     })
     commandHistory.slice(0, 4).forEach((item) => {
       add({ command: item.command }, t('workbench.recentCommands'))
     })
     return [...nextOptions.values()]
-  }, [commandHistory, configuredLaunch, lastLaunchedRun, normalizedConfiguredCommand, runConfigurations, t])
+  }, [commandHistory, configuredLaunch, lastLaunchedRun, normalizedConfiguredCommand, onLaunchCommandLatest, runConfigurations, t])
 
   // 生效命令：优先用户手动配置，否则自动挑一个“启动”类命令，再退回第一项。
   const autoRun = useMemo(() => {
     const launchOption = options.find((option) =>
-      isLaunchCommand(`${option.label} ${option.run.command}`)
+      option.isLaunch || isLaunchCommand(`${option.label} ${option.run.command}`)
     )
     return launchOption?.run ?? options[0]?.run ?? null
   }, [options])

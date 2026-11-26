@@ -762,6 +762,16 @@
   color: var(--workbench-text-muted);
 }
 
+.topRunTaskAnchor {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.topRunTaskMenuButton {
+  color: var(--workbench-text-muted);
+}
+
 .runActionPopover {
   width: min(280px, calc(100vw - 24px));
   border: 1px solid var(--workbench-border);

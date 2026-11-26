@@ -7,7 +7,8 @@ import { basename, delimiter, dirname, extname, isAbsolute, join, resolve } from
 import { AppError, createAbortError } from '@velaros-ai/velaros/core/error'
 import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 
-import type { WorkbenchNodeArguments, WorkbenchNodePackageBinTarget, WorkbenchProcessTarget } from '../../shared/contracts/workbench'
+import type { WorkbenchNodeArguments, WorkbenchNodePackageBinTarget, WorkbenchProcessTarget, WorkbenchProjectToolTarget } from '../../shared/contracts/workbench'
+import { readWorkbenchProjectToolTarget } from '../../shared/workbenchProjectTool'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import { getRelativePathInsideRoot } from './PathContainmentHelper'
@@ -79,6 +80,9 @@ export function readWorkbenchProcessTarget(value: unknown): Nullable<WorkbenchPr
     }
   }
 
+  if (target.kind === 'project-tool')
+    return hasOnlyKeys(target, ['kind', 'program', 'argv']) ? readWorkbenchProjectToolTarget(target) : null
+
   if (target.kind === 'python-script') {
     if (
       !hasOnlyKeys(target, ['kind', 'script', 'argv']) ||
@@ -144,6 +148,7 @@ export async function resolveWorkbenchProcessLaunch(
     context.signal.throwIfAborted()
     return { ...launcher, argv: [...launcher.argv, ...checked.argv] }
   }
+  if (checked.kind === 'project-tool') return resolveProjectTool(checked, context)
 
   const script = checked.kind === 'node-package-bin'
     ? await resolveWorkbenchPackageBin(
@@ -170,6 +175,40 @@ export async function resolveWorkbenchProcessLaunch(
   const prefix = [...nodeArgvPrefix, script]
   if ('argv' in checked && checked.argv !== undefined) return { file: node, argv: [...prefix, ...checked.argv] }
   return resolveRawNodeLaunch(node, prefix, checked.args!, context.env)
+}
+
+async function resolveProjectTool(
+  { program, argv }: WorkbenchProjectToolTarget,
+  context: WorkbenchProcessContext
+): Promise<WorkbenchResolvedProcess> {
+  if (program === 'dotnet') {
+    const file = await findProgram(program, context)
+    await requireNativeExecutable(file, program)
+    context.signal.throwIfAborted()
+    return { file, argv }
+  }
+
+  const windows = process.platform === 'win32'
+  const wrapperName = program === 'mvn' ? (windows ? 'mvnw.cmd' : 'mvnw') : (windows ? 'gradlew.bat' : 'gradlew')
+  const candidate = await optionalRealpath(join(context.cwd, wrapperName))
+  const wrapper = candidate && getRelativePathInsideRoot(context.projectRoot, candidate) !== null &&
+    (await optionalStat(candidate))?.isFile() ? candidate : null
+  const file = wrapper ?? await findProgram(program, context)
+  context.signal.throwIfAborted()
+  if (!windows) return wrapper ? { file: '/bin/sh', argv: [file, ...argv] } : { file, argv }
+
+  if (!/\.(?:bat|cmd)$/iu.test(file)) {
+    await requireNativeExecutable(file, program)
+    return { file, argv }
+  }
+  const systemRoot = environmentValue(context.env, 'SYSTEMROOT') || 'C:\\Windows'
+  // 文件路径通过环境变量传递，避免把目录里的百分号和其他符号拼进 cmd 源码。
+  return {
+    file: join(systemRoot, 'System32', 'cmd.exe'),
+    argv: ['/d', '/s', '/v:off', '/c', `"chcp 65001 >nul & "%VELAROS_PROJECT_TOOL_FILE%" ${argv.join(' ')}"`],
+    env: { ...context.env, VELAROS_PROJECT_TOOL_FILE: file },
+    windowsVerbatimArguments: true,
+  }
 }
 
 async function resolveProjectScript(script: string, context: WorkbenchProcessContext): Promise<string> {

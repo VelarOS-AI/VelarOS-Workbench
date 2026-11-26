@@ -125,7 +125,7 @@ function resolveBuiltinFilePresentation(
       return { variant: 'java', color: '#c74634' }
     case 'cs':
     case 'csx':
-      return { variant: 'csharp', color: '#8b5cf6' }
+      return { variant: 'csharp', color: '#178600' }
     case 'go':
       return { variant: 'go', color: '#0891b2' }
     case 'rs':

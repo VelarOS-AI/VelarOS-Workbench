@@ -4,12 +4,21 @@ import { readFile } from 'node:fs/promises'
 import { describe, test } from 'bun:test'
 
 import { findLastRunningWorkbenchRunSession } from '../src/renderer/src/hooks/useWorkbenchTopRunControl'
-import { workbenchRunCommandKey } from '../src/renderer/src/models/commands/workbenchCommandLines'
+import { readWorkbenchGeneratedRunLaunch, workbenchRunCommandKey } from '../src/renderer/src/models/commands/workbenchCommandLines'
 import { buildPackageScriptCommandSuggestions } from '../src/renderer/src/models/commands/workbenchCommandSuggestions'
 import { buildWorkbenchPackageScriptRunCommand } from '../src/renderer/src/models/commands/workbenchPackageScriptCommand'
 import { buildWorkbenchRunConfigurations } from '../src/renderer/src/models/commands/workbenchRunConfigurations'
 
 void describe('Workbench run button menu', () => {
+  void test('restores generated project tool arguments without evaluating display text', () => {
+    const dotnet = { kind: 'project-tool', program: 'dotnet', argv: ['run', '--project', './App & Tools/App.csproj'] }
+    const maven = { kind: 'project-tool', program: 'mvn', argv: ['compile', 'exec:java', '-Dexec.mainClass=example.Main'] }
+    for (const process of [dotnet, maven]) {
+      assert.deepEqual(readWorkbenchGeneratedRunLaunch({ process }), { process })
+    }
+    assert.equal(readWorkbenchGeneratedRunLaunch({ process: { ...maven, argv: ['compile & echo unexpected'] } }), null)
+  })
+
   void test('keeps every runnable root package.json script', () => {
     const scripts = Object.fromEntries(
       Array.from({ length: 14 }, (_, index) => [`task:${index + 1}`, `echo ${index + 1}`])

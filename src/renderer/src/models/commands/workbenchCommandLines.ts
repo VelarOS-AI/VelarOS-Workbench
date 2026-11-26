@@ -7,6 +7,7 @@ import {
   type WorkbenchRunCommandOutputEvent,
 } from '@shared/contracts/workbench'
 import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
+import { readWorkbenchProjectToolTarget } from '@shared/workbenchProjectTool'
 import { readWorkbenchRunEnvironment } from '@shared/workbenchRunEnvironment'
 
 /** 显示文本和真实启动条件一起传递；生成的显示文本不能再当 shell 源码执行。 */
@@ -52,7 +53,7 @@ function displayArgument(value: string): string {
 
 /** 仅供卡片与菜单显示，不是交给 shell 的转义器。 */
 export function describeWorkbenchProcessTarget(process: WorkbenchProcessTarget): string {
-  if (process.kind === 'package-manager')
+  if (process.kind === 'package-manager' || process.kind === 'project-tool')
     return [process.program, ...process.argv.map(displayArgument)].join(' ')
 
   if (process.kind === 'python-script')
@@ -77,7 +78,8 @@ export function buildWorkbenchProcessRunCommand(
 }
 
 function processIdentity(process: WorkbenchProcessTarget): unknown[] {
-  if (process.kind === 'package-manager') return [process.kind, process.program, process.argv]
+  if (process.kind === 'package-manager' || process.kind === 'project-tool')
+    return [process.kind, process.program, process.argv]
   if (process.kind === 'python-script') return [process.kind, process.script, process.argv]
   const entry =
     process.kind === 'node-script'
@@ -129,6 +131,10 @@ export function readWorkbenchGeneratedRunLaunch(
       program: input.program as WorkbenchPackageManagerTarget['program'],
       argv,
     }
+  } else if (input.kind === 'project-tool') {
+    const tool = readWorkbenchProjectToolTarget(input)
+    if (!tool) return null
+    process = tool
   } else if (input.kind === 'python-script') {
     if (typeof input.script !== 'string' || !input.script || !argv) return null
     process = { kind: input.kind, script: input.script, argv }

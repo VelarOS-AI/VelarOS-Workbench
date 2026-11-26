@@ -65,6 +65,7 @@ import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 import { WorkbenchGitOperationBanner } from './WorkbenchGitOperationBanner'
 import type { WorkbenchGitPanelSessionProps } from './workbenchGitPanelProps'
+import { WorkbenchGitReloadLink } from './WorkbenchGitReloadLink'
 import { WorkbenchGitStashDialog } from './WorkbenchGitStashDialog'
 
 export interface WorkbenchCommitPanelProps {
@@ -95,6 +96,7 @@ export function WorkbenchCommitPanel({
     hasUnsavedOpenTabs,
     isLoading,
     error,
+    isGitMissing,
     selectedFilePath,
     onRefresh,
   },
@@ -610,6 +612,7 @@ export function WorkbenchCommitPanel({
         {!summary?.repository ? (
           <p className={styles.panelEmpty}>
             {isLoading ? t('workbench.gitLoading') : error || t('workbench.gitNoRepository')}
+            {!isLoading && isGitMissing && <WorkbenchGitReloadLink />}
           </p>
         ) : (
           <>

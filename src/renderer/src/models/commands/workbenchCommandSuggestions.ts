@@ -14,6 +14,7 @@ const log = Log.tag('workbench-command-suggestions')
 export interface WorkbenchCommandSuggestion extends WorkbenchRunCommand {
   label: string
   source: string
+  kind?: 'build' | 'dev'
 }
 
 export function inferPackageManagerCommand(

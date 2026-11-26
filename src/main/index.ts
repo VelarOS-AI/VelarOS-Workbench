@@ -461,7 +461,9 @@ if (hasSingleInstanceLock)
       engineConversationRuntime,
       conversationRecovery
     )
-    registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
+    registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges, () =>
+      shellEnvironment.refresh()
+    )
     windowManager = new WorkbenchWindowManager(dataRootDir, {
       createBrowserWindow: createWorkbenchWindow,
       onLastProjectClosed: () => app.quit(),

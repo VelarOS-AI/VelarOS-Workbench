@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { readFile, realpath, rm, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { basename, isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 import { execa } from 'execa'
@@ -145,6 +145,10 @@ class WorkbenchGitNotRepositoryError extends AppError {
   constructor() {
     super('VALIDATION', workbenchMainText('git.notRepository'))
   }
+}
+
+function gitExecutableMissingError(): AppError {
+  return new AppError('NOT_FOUND', workbenchMainText('git.executableMissing'))
 }
 
 /** 被中途结束的原因：`inactive` 太久没动静，`cancelled` 用户取消。 */
@@ -1919,9 +1923,35 @@ export class WorkbenchGitService {
         })
       )
     }
-    if (result.failed && !options.allowFailure)
-      this.throwGitFailure(args, output, options.githubToken)
+    if (result.failed) {
+      if (result.code === 'ENOENT') throw gitExecutableMissingError()
+      // Windows 上命令找不到时 execa 会回退到 cmd.exe，返回本地代码页的报错而不是 ENOENT。
+      if (
+        process.platform === 'win32' &&
+        result.exitCode === 1 &&
+        basename(subprocess.spawnfile).toLowerCase() === 'cmd.exe'
+      )
+        await this.checkWindowsGitExecutable(rootPath, env)
+      if (!options.allowFailure) this.throwGitFailure(args, output, options.githubToken)
+    }
     return output
+  }
+
+  private async checkWindowsGitExecutable(rootPath: string, env: NodeJS.ProcessEnv): Promise<void> {
+    const systemRoot = process.env.SystemRoot
+    if (!systemRoot) return
+
+    try {
+      await execFileAsync(join(systemRoot, 'System32', 'where.exe'), ['git'], {
+        cwd: rootPath,
+        env,
+        windowsHide: true,
+      })
+    } catch (error) {
+      const { code } = error as { code?: unknown }
+      if (code === 1) throw gitExecutableMissingError()
+      // 查找命令自身执行失败时，保留原来的 Git 错误。
+    }
   }
 
   /**
@@ -2041,6 +2071,7 @@ export class WorkbenchGitService {
       return stdout
     } catch (error) {
       const { stderr, code } = error as { stderr?: unknown; code?: unknown }
+      if (code === 'ENOENT') throw gitExecutableMissingError()
       return this.throwGitFailure(args, {
         stdout: '',
         stderr: Buffer.isBuffer(stderr) ? stderr.toString('utf8') : AppError.getMessage(error),

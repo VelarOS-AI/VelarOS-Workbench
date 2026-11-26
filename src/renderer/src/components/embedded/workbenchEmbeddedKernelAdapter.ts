@@ -249,6 +249,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         hasUnsavedOpenTabs: workbench.hasUnsavedOpenTabs,
         isLoading: gitState.isLoading,
         error: gitState.error,
+        isGitMissing: gitState.isGitMissing,
         selectedFilePath: workbench.selectedFilePath,
         onRefresh: model.actions.refreshGitPanel,
       },

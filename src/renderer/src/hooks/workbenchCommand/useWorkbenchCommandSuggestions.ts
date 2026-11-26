@@ -2,21 +2,22 @@ import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import { Log } from '@velaros-ai/velaros/core'
-import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import { useWorkbenchHostRuntime } from '../../host/WorkbenchHostProvider'
+import { useWorkbenchI18n } from '../../i18n/WorkbenchLocalizationProvider'
 import {
   buildPackageScriptCommandSuggestions,
   inferPackageManagerCommand,
   type WorkbenchCommandSuggestion,
 } from '../../models/commands/workbenchCommandSuggestions'
+import { buildWorkbenchProjectToolSuggestions } from '../../models/commands/workbenchProjectToolSuggestions'
 import type { WorkbenchProject } from '../../models/project/workbenchProjects'
 
-const log = Log.tag('workbench-command-package-suggestions')
+const log = Log.tag('workbench-command-suggestions')
 
-interface UseWorkbenchCommandPackageSuggestionsOptions {
+interface UseWorkbenchCommandSuggestionsOptions {
   activeProject: Nullable<WorkbenchProject>
   rootEntries: WorkbenchDirectoryEntry[]
   rootEntrySignature: string
@@ -25,50 +26,63 @@ interface UseWorkbenchCommandPackageSuggestionsOptions {
   setCommandInput: Dispatch<SetStateAction<string>>
 }
 
-export function useWorkbenchCommandPackageSuggestions({
+export function useWorkbenchCommandSuggestions({
   activeProject,
   rootEntries,
   rootEntrySignature,
   activeProjectRef,
   setCommandSuggestions,
   setCommandInput,
-}: UseWorkbenchCommandPackageSuggestionsOptions): void {
+}: UseWorkbenchCommandSuggestionsOptions): void {
   const hostRuntime = useWorkbenchHostRuntime()
+  const { t } = useWorkbenchI18n()
   useEffect(() => {
     let permitted = true
     async function loadCommandSuggestions(): Promise<void> {
-      if (
-        !activeProject ||
-        !rootEntries.some((entry) => entry.type === 'file' && entry.name === 'package.json')
-      ) {
+      if (!activeProject) {
         setCommandSuggestions((current) => (current.length === 0 ? current : []))
         return
       }
 
-      const owningProjectId = activeProject.id
+      const { id: owningProjectId, rootPath } = activeProject
+      async function readManifest(path: string): Promise<string | null> {
+        if (!permitted) return null
+        const result = await hostRuntime.kernel.project.readWorkbenchFile({
+          projectRoot: rootPath,
+          path,
+          maxChars: 100_000,
+        })
+        return result.ok ? result.data.content : null
+      }
 
       try {
-        const packageJson = Result.unwrap(
-          await hostRuntime.kernel.project.readWorkbenchFile({
-            projectRoot: activeProject.rootPath,
-            path: 'package.json',
-            maxChars: 80_000,
-          })
-        )
+        const [packageJson, toolSuggestions] = await Promise.all([
+          rootEntries.some((entry) => entry.type === 'file' && entry.name === 'package.json')
+            ? readManifest('package.json')
+            : null,
+          buildWorkbenchProjectToolSuggestions(rootEntries, readManifest, (kind, name) =>
+            t(kind === 'dev' ? 'workbench.projectToolStart' : 'workbench.projectToolBuild', {
+              name,
+            })
+          ),
+        ])
 
         if (!permitted || activeProjectRef.current?.id !== owningProjectId) return
 
-        const suggestions = buildPackageScriptCommandSuggestions(
-          packageJson.content,
-          inferPackageManagerCommand(rootEntries)
-        )
+        const packageSuggestions =
+          packageJson === null
+            ? []
+            : buildPackageScriptCommandSuggestions(
+                packageJson,
+                inferPackageManagerCommand(rootEntries)
+              )
 
-        setCommandSuggestions(suggestions)
-        setCommandInput((current) => current || suggestions[0]?.command || '')
+        setCommandSuggestions([...packageSuggestions, ...toolSuggestions])
+        setCommandInput((current) => current || packageSuggestions[0]?.command || '')
       } catch (error) {
         if (!permitted || activeProjectRef.current?.id !== owningProjectId) return
 
-        log.debug('读取 package.json 命令建议失败，清空建议列表', {
+        log.debug('读取项目命令建议失败，清空建议列表', {
           projectId: owningProjectId,
           rootPath: activeProject.rootPath,
           error: String(error),
@@ -89,5 +103,6 @@ export function useWorkbenchCommandPackageSuggestions({
     rootEntrySignature,
     setCommandInput,
     setCommandSuggestions,
+    t,
   ])
 }

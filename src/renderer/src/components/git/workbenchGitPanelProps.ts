@@ -11,6 +11,7 @@ export interface WorkbenchGitPanelSessionProps {
   hasUnsavedOpenTabs: boolean
   isLoading: boolean
   error: Nullable<string>
+  isGitMissing: boolean
   selectedFilePath: Nullable<string>
   onRefresh: () => Promise<void> | void
 }

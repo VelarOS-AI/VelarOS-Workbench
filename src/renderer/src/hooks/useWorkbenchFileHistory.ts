@@ -33,6 +33,7 @@ export interface WorkbenchFileHistorySource {
   records: WorkbenchFileHistoryRecord[]
   isLoadingList: boolean
   listError: Nullable<string>
+  isGitMissing: boolean
   /** 按 id 读取该版本文件的完整内容（本地=快照，git=`git show sha:path`，path 是文件在那个提交里的路径）。 */
   loadContent: (id: string) => Promise<string>
 }
@@ -57,19 +58,28 @@ export function useWorkbenchFileHistory({
   const hostRuntime = useWorkbenchHostRuntime()
   const [records, setRecords] = useState<WorkbenchFileHistoryRecord[]>([])
   const [isLoadingList, setIsLoadingList] = useState(false)
-  const [listError, setListError] = useState<Nullable<string>>(null)
+  const [listError, setListError] = useState<Nullable<AppError>>(null)
+  const [reloadRevision, setReloadRevision] = useState(0)
   const generationRef = useRef(0)
   /** Git 历史里每个提交时文件的路径：改名之前的提交要按旧路径读。 */
   const gitPathsRef = useRef<ReadonlyMap<string, string>>(new Map())
 
   useEffect(() => {
+    if (!enabled || mode !== 'git') return
+    return window.velarosWorkbenchGit.onEnvironmentReloaded(() => {
+      setReloadRevision((revision) => revision + 1)
+    })
+  }, [enabled, mode])
+
+  useEffect(() => {
+    const generation = ++generationRef.current
     if (!enabled || !path) {
       setRecords([])
       setListError(null)
+      setIsLoadingList(false)
       return
     }
 
-    const generation = ++generationRef.current
     gitPathsRef.current = new Map()
     setIsLoadingList(true)
     setListError(null)
@@ -89,12 +99,12 @@ export function useWorkbenchFileHistory({
       } catch (error) {
         if (generation !== generationRef.current) return
         setRecords([])
-        setListError(AppError.getMessage(error))
+        setListError(AppError.from(error))
       } finally {
         if (generation === generationRef.current) setIsLoadingList(false)
       }
     })()
-  }, [enabled, hostRuntime, locale, mode, path, projectRoot])
+  }, [enabled, hostRuntime, locale, mode, path, projectRoot, reloadRevision])
 
   const loadContent = useCallback(
     async (id: string): Promise<string> => {
@@ -120,7 +130,13 @@ export function useWorkbenchFileHistory({
     [hostRuntime, mode, path, projectRoot]
   )
 
-  return { records, isLoadingList, listError, loadContent }
+  return {
+    records,
+    isLoadingList,
+    listError: listError?.message ?? null,
+    isGitMissing: mode === 'git' && listError?.code === 'NOT_FOUND',
+    loadContent,
+  }
 }
 
 async function loadLocalRecords(

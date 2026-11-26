@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 
 import { isBoolean, isNumber, isString, isTrue, optionalWhen } from '@velaros-ai/velaros/core'
 
@@ -40,8 +40,25 @@ import type { WorkbenchGitService } from './WorkbenchGitService'
 export function registerWorkbenchGitIpc(
   service: WorkbenchGitService,
   checkpoints: WorkbenchChatCheckpointService,
-  runChanges: WorkbenchChatRunChangeStore
+  runChanges: WorkbenchChatRunChangeStore,
+  refreshEnvironment: () => Promise<unknown>
 ): void {
+  let environmentReload: Promise<void> | undefined
+  ipcMain.handle(WorkbenchGitChannels.reloadEnvironment, () =>
+    callWithEnvelope(() => {
+      environmentReload ??= refreshEnvironment()
+        .then(() => {
+          for (const window of BrowserWindow.getAllWindows()) {
+            if (!window.isDestroyed()) window.webContents.send(WorkbenchGitChannels.environmentReloaded)
+          }
+        })
+        .finally(() => {
+          environmentReload = undefined
+        })
+      return environmentReload
+    })
+  )
+
   ipcMain.handle(WorkbenchGitChannels.summary, (_event, input: unknown) =>
     callWithEnvelope(() => service.getSummary(parseRoot(input).workspaceRoot))
   )

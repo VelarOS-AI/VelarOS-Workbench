@@ -17,6 +17,7 @@ interface UseWorkspaceGitSummariesResult {
   activeSummary: Nullable<SystemWorkspaceGitSummary>
   isLoading: boolean
   error: Nullable<string>
+  isGitMissing: boolean
   refresh: () => Promise<void>
 }
 
@@ -27,7 +28,7 @@ export function useWorkspaceGitSummaries(
   const { enabled = true, refreshOnMount = true } = options
   const [activeSummary, setActiveSummary] = useState<Nullable<SystemWorkspaceGitSummary>>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<Nullable<string>>(null)
+  const [error, setError] = useState<Nullable<AppError>>(null)
   const generationRef = useRef(0)
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -43,7 +44,7 @@ export function useWorkspaceGitSummaries(
     } catch (loadError) {
       if (generation !== generationRef.current) return
       setActiveSummary(null)
-      setError(AppError.getMessage(loadError))
+      setError(AppError.from(loadError))
     } finally {
       if (generation === generationRef.current) setIsLoading(false)
     }
@@ -64,7 +65,8 @@ export function useWorkspaceGitSummaries(
     summaries: activeSummary ? [activeSummary] : [],
     activeSummary,
     isLoading,
-    error,
+    error: error?.message ?? null,
+    isGitMissing: error?.code === 'NOT_FOUND',
     refresh,
   }
 }

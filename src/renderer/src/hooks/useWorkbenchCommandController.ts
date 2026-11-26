@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useWorkbenchCommandIpcSubscriptions } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandIpcSubscriptions'
-import { useWorkbenchCommandPackageSuggestions } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandPackageSuggestions'
 import { useWorkbenchCommandProjectBootstrap } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandProjectBootstrap'
+import { useWorkbenchCommandSuggestions } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandSuggestions'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   upsertWorkbenchCommandHistory,
@@ -113,7 +113,10 @@ export function useWorkbenchCommandController({
     [commandHistory, commandSuggestions]
   )
   const rootEntrySignature = rootEntries
-    .map((entry) => `${entry.type}:${entry.name}`)
+    .filter((entry) => entry.type === 'file' &&
+      /^(?:package\.json|bun\.lockb?|pnpm-lock\.yaml|yarn\.lock|pom\.xml|(?:build|settings)\.gradle(?:\.kts)?)$|\.(?:csproj|slnx?)$/iu.test(entry.name)
+    )
+    .map((entry) => `${entry.name}:${entry.modifiedAt ?? ''}`)
     .sort()
     .join('\n')
 
@@ -244,7 +247,7 @@ export function useWorkbenchCommandController({
     createTerminalSession: createTerminalSessionForProject,
   })
 
-  useWorkbenchCommandPackageSuggestions({
+  useWorkbenchCommandSuggestions({
     activeProject,
     rootEntries,
     rootEntrySignature,

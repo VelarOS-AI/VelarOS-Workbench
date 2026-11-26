@@ -3,6 +3,34 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.41",
+      "releasedAt": "2026-11-26",
+      "title": {
+        "zh": "C# 与 Java 启动构建及 Git 重新检测",
+        "en": "C# and Java run and build tasks, and Git reload"
+      },
+      "added": {
+        "zh": [
+          "在运行菜单中自动识别常见 .NET、Maven 和 Gradle 项目的启动与构建任务。",
+          "在提交面板和 Git 历史中提供重新加载链接，安装 Git 后可重新检测并刷新界面。"
+        ],
+        "en": [
+          "Detect run and build tasks for common .NET, Maven, and Gradle projects in the Run menu.",
+          "Reload Git detection from the Commit panel or Git history after installing Git."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "缺少 Git 时隐藏分支按钮，并在提交面板和 Git 历史中显示安装提示。",
+          "C# 文件图标使用随主题调整的绿色。"
+        ],
+        "en": [
+          "Hide the branch button when Git is unavailable and show an installation hint in the Commit panel and Git history.",
+          "Use theme-aware green icons for C# files."
+        ]
+      }
+    },
+    {
       "version": "0.4.40",
       "releasedAt": "2026-11-25",
       "title": {

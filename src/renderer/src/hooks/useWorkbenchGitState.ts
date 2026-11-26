@@ -113,6 +113,7 @@ export function useWorkbenchGitState({
     activeSummary: summary,
     isLoading: isSummaryLoading,
     error: summaryError,
+    isGitMissing: isSummaryGitMissing,
     refresh: refreshSummary,
   } = useWorkspaceGitSummaries(workspaceRoot, {
     enabled: projectEnabled,
@@ -123,6 +124,7 @@ export function useWorkbenchGitState({
     snapshot: lineStatsSnapshot,
     isLoading: isLineStatsLoading,
     error: lineStatsError,
+    isGitMissing: isLineStatsGitMissing,
     refresh: refreshLineStats,
   } = useWorkspaceGitLineStats(workspaceRoot, {
     enabled: projectEnabled,
@@ -200,12 +202,17 @@ export function useWorkbenchGitState({
     },
     [refreshLineStats, refreshSummary]
   )
+  useEffect(() => {
+    if (!projectEnabled) return
+    return window.velarosWorkbenchGit.onEnvironmentReloaded(() => void refresh())
+  }, [projectEnabled, refresh])
 
   return {
     changeItems,
     canShowGitBranchControl,
     decorations,
     error: summaryError ?? lineStatsError,
+    isGitMissing: summaryError ? isSummaryGitMissing : isLineStatsGitMissing,
     hasGitRepository,
     isLineStatsLoading,
     isLoading: isSummaryLoading,

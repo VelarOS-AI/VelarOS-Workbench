@@ -47,12 +47,14 @@ import { WorkbenchGitDetailsPane, type WorkbenchGitDetailsTarget } from './Workb
 import { WorkbenchGitLogList } from './WorkbenchGitLogList'
 import { WorkbenchGitOperationBanner } from './WorkbenchGitOperationBanner'
 import { WorkbenchGitRefsPane } from './WorkbenchGitRefsPane'
+import { WorkbenchGitReloadLink } from './WorkbenchGitReloadLink'
 
 interface WorkbenchGitToolPanelProps {
   workspaceRoot: string
   summary: Nullable<SystemWorkspaceGitSummary>
   isLoading: boolean
   error: Nullable<string>
+  isGitMissing: boolean
   /** 编辑器里有没保存的内容：取回贮藏、合并、变基会改写磁盘上的文件，先提醒保存。 */
   hasUnsavedOpenTabs: boolean
   onInitialize: () => Promise<void>
@@ -105,6 +107,7 @@ export function WorkbenchGitToolPanel({
   summary,
   isLoading,
   error,
+  isGitMissing,
   hasUnsavedOpenTabs,
   onInitialize,
   onRefresh,
@@ -308,10 +311,13 @@ export function WorkbenchGitToolPanel({
       <section className={styles.gitToolEmpty}>
         <span>
           {isLoading ? t('workbench.gitLoading') : error || t('workbench.gitNoRepository')}
+          {!isLoading && isGitMissing && <WorkbenchGitReloadLink />}
         </span>
-        <Button size="sm" onClick={() => void onInitialize()}>
-          {t('workbench.gitInitializeRepository')}
-        </Button>
+        {!isLoading && !error && summary?.repository === false && (
+          <Button size="sm" onClick={() => void onInitialize()}>
+            {t('workbench.gitInitializeRepository')}
+          </Button>
+        )}
       </section>
     )
 

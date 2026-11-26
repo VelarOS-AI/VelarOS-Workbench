@@ -23,6 +23,7 @@ import { AppError } from '@velaros-ai/velaros/core/error'
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 import { WorkbenchDiffLayoutToggle } from '../git/WorkbenchDiffLayoutToggle'
+import { WorkbenchGitReloadLink } from '../git/WorkbenchGitReloadLink'
 import type { WorkbenchUnifiedDiffRowsHandle } from '../git/WorkbenchUnifiedDiffRows'
 import { WorkbenchUnifiedDiffRows } from '../git/WorkbenchUnifiedDiffRows'
 
@@ -190,6 +191,7 @@ export function FileHistoryView({
             ) : source.listError ? (
               <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
                 {source.listError}
+                {source.isGitMissing && <WorkbenchGitReloadLink />}
               </Paragraph>
             ) : isEmpty(filteredRecords) ? (
               <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
