@@ -18,6 +18,7 @@ type StandaloneUsageTelemetry = ConversationView['runtime']['usageTelemetry'][nu
   agentSessionId?: string
   agentRole?: 'parent' | 'child'
   coverage?: 'known' | 'unknown' | 'inflight'
+  scope?: 'auxiliary'
 }
 
 /**
@@ -74,6 +75,7 @@ function readStandaloneUsageTelemetry(value: unknown): StandaloneUsageTelemetry 
   const costUsd = readTokenCount(payload.costUsd)
   return {
     kind: 'usage-telemetry',
+    scope: optionalWhen(payload.scope === 'auxiliary', 'auxiliary'),
     requestId: typeof payload.requestId === 'string' ? payload.requestId : undefined,
     agentSessionId: typeof payload.agentSessionId === 'string' ? payload.agentSessionId : undefined,
     agentRole:

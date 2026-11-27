@@ -28,7 +28,7 @@ export function toConversationInput(
   }))
   if (!request.text.trim() && !images?.length)
     throw new AppError('VALIDATION', workbenchMainText('conversation.emptyMessage'))
-  return { text: request.text, images, inputId: request.inputId }
+  return { text: request.text.trim() ? request.text : undefined, images, inputId: request.inputId }
 }
 
 /**

@@ -162,7 +162,8 @@
 .commitFileRow {
   @apply grid min-w-0 items-center;
   grid-template-columns: 18px minmax(0, 1fr) 24px 22px 22px 22px;
-  min-height: 24px;
+  height: var(--commit-file-row-height);
+  flex-shrink: 0;
   padding-inline: 4px;
   border-radius: var(--workbench-radius-xs);
   color: var(--status-blue-strong);

@@ -411,7 +411,7 @@ export function FilePanel({
     </>
   )
   const treeBody = (
-    <div className={styles.filePanelBody}>
+    <div className={styles.filePanelBody} hidden={projectSearch.isOpen && searchActive}>
       <ScrollArea
         ref={treeScrollRef}
         className={styles.treeScroll}
@@ -445,9 +445,8 @@ export function FilePanel({
           <MagnifyingGlassIcon size={14} />
         </IconButton>
       </div>
-      {projectSearch.isOpen ? (
-        // 面板还没加载好（刚开窗口就按了 ⇧⌘F）：先照常显示文件树。
-        <Suspense fallback={treeBody}>
+      {projectSearch.isOpen && (
+        <Suspense fallback={null}>
           <LazyProjectSearchView
             panel={projectSearch}
             query={searchQuery}
@@ -461,15 +460,12 @@ export function FilePanel({
             gitDecorations={gitDecorations}
             selectedEntryPath={selectedEntryPath}
             onOpenEntry={onOpenSearchEntry}
-            tree={treeContent}
-            scrollRef={treeScrollRef}
             onRootContextMenu={openRootContextMenu}
             onEntryContextMenu={openContextMenu}
           />
         </Suspense>
-      ) : (
-        treeBody
       )}
+      {treeBody}
       {!!contextMenu && (
         <WorkbenchContextMenu
           x={contextMenu.x}

@@ -142,7 +142,10 @@ export interface WorkbenchConversationRuntimeApi {
   /** 停下这个会话的运行并等资源释放；返回还没被读走的引导。 */
   cancel(ref: WorkbenchConversationRef): Promise<WorkbenchConversationCancelResult>
   /** 运行中追加一条引导。 */
-  guidance(ref: WorkbenchConversationRef, input: { inputId: string; text: string }): Promise<void>
+  guidance(
+    ref: WorkbenchConversationRef,
+    input: Pick<WorkbenchConversationSendRequest, 'inputId' | 'text' | 'images'>
+  ): Promise<void>
   /** 输入框里回答一句话的提问。 */
   input(ref: WorkbenchConversationRef, answer: string): Promise<void>
   /** 交互卡上的回答。 */
@@ -272,9 +275,14 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
 
   public async guidance(
     ref: WorkbenchConversationRef,
-    input: { inputId: string; text: string }
+    input: Pick<WorkbenchConversationSendRequest, 'inputId' | 'text' | 'images'>
   ): Promise<void> {
-    await this.requireSession(ref).steer(toConversationInput(input))
+    const session = this.requireSession(ref)
+    const run = this.active.get(runKey(ref))
+    const guidance = toConversationInput(input)
+    await session.steer(
+      run?.imageInput === false && run.locale ? withoutImages(guidance, run.locale) : guidance
+    )
   }
 
   public async input(ref: WorkbenchConversationRef, answer: string): Promise<void> {
@@ -505,6 +513,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       run.provider = provider
       run.modelId = model.id
       run.modelLimits = model.limits
+      run.imageInput = imageInput
       signal.throwIfAborted()
       const workspace = await this.storage.workspace(request.projectRoot)
       const activity = this.options.activity?.(request)

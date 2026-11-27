@@ -176,6 +176,7 @@ export const FileTreeRow = memo(function FileTreeRow({
             <button
               type="button"
               className={styles.treeDisclosureButton}
+              aria-expanded={expanded}
               aria-label={expanded ? collapseDirectoryLabel : expandDirectoryLabel}
               title={expanded ? collapseDirectoryLabel : expandDirectoryLabel}
               disabled={isMutatingTree}

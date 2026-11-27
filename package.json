@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.4.49",
+  "version": "0.4.50",
   "private": true,
   "license": "Apache-2.0",
   "description": "VelarOS Workbench standalone Electron IDE.",
@@ -132,7 +132,7 @@
     "vite": "^7.3.2",
     "zod": "^4.3.6",
     "npm": "12.2.0",
-    "@velaros-ai/ui": "https://github.com/VelarOS-AI/VelarOS-UI/releases/download/v1.1.10/velaros-ai-ui-1.1.10.tgz",
+    "@velaros-ai/ui": "https://github.com/VelarOS-AI/VelarOS-UI/releases/download/v1.1.11/velaros-ai-ui-1.1.11.tgz",
     "@typescript/native": "npm:typescript@7.0.2",
     "react-dom": "^19.2.5",
     "@codemirror/lang-go": "^6.0.1",

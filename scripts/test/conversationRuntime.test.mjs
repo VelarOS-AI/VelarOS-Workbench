@@ -431,6 +431,51 @@ test(
 )
 
 test(
+  'delivers an image-only guidance message to the active model run',
+  { timeout: 30_000 },
+  async (t) => {
+    const image = {
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a+9sAAAAASUVORK5CYII=',
+      mediaType: 'image/png',
+      label: 'guidance.png',
+    }
+    const entered = Promise.withResolvers()
+    const resume = Promise.withResolvers()
+    const f = await fixture(t, async function* (frame, _signal, call) {
+      if (call === 1) {
+        entered.resolve()
+        await resume.promise
+        yield execute(frame, '// 观察当前状态\nconsole.log("ready")')
+      } else {
+        if (call === 2)
+          assert.ok(
+            frame.images.some(
+              (entry) => entry.data === image.data && entry.mediaType === image.mediaType
+            )
+          )
+        yield done(frame)
+      }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    const request = f.request('开始检查')
+    const run = f.runtime.submit(f.sink, request)
+    await entered.promise
+    try {
+      await f.runtime.guidance(request, { inputId: 'guide-image', text: '', images: [image] })
+    } finally {
+      resume.resolve()
+    }
+    await run.completed
+    assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-3)))
+    assert.ok(
+      f.events.some(
+        (event) => event.payload.kind === 'input-applied' && event.payload.inputId === 'guide-image'
+      )
+    )
+  }
+)
+
+test(
   'queries project diagnostics and imports code tools directly in a regular run',
   { timeout: 30_000 },
   async (t) => {

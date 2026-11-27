@@ -1208,8 +1208,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     chatGuidanceRejectedDescription:
       '这条引导没能加入正在运行的这一轮（可能刚好结束），内容已放回输入框，可以重新发送。',
     chatInteractionAnswerFailedTitle: '回答没有送达',
-    chatGuidanceFilesTitle: '引导只能带文字',
-    chatGuidanceFilesDescription: '这条排队消息带有附件，会在本轮结束后作为新消息发送。',
+    chatGuidanceFilesTitle: '部分附件无法作为引导发送',
+    chatGuidanceFilesDescription:
+      '引导可附带最多 8 张图片，每张最多 8 MB。其他附件可在本轮结束后发送。',
     chatMessageRenderFailed: '这条消息暂时无法显示，下面是它的原文。',
     chatMessageRenderRetry: '重试',
     chatSignInFailedTitle: '无法登录 VelarOS',

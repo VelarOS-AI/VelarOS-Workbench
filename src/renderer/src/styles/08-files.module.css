@@ -19,6 +19,10 @@
   @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
 }
 
+.filePanelBody[hidden] {
+  display: none;
+}
+
 .filePanelProjectHeader {
   display: flex;
   flex: 0 0 35px;
@@ -284,7 +288,6 @@
 
 .treeDisclosureButton:hover {
   color: var(--workbench-text);
-  background: var(--workbench-hover);
 }
 
 .treeFolderIcon,

@@ -7,10 +7,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactElement,
-  type ReactNode,
-  type RefObject,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
@@ -32,7 +31,10 @@ import { getWorkbenchFileTreeRowHeight } from '@renderer/models/workbenchPrefere
 
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchSearchEntriesResult,
+} from '@shared/contracts/workbench'
 import {
   compileWorkbenchSearchPathFilter,
   isWorkbenchSearchPathIncluded,
@@ -43,8 +45,10 @@ import styles from '../../styles/workbenchPageStyles'
 import { FileSearchResults } from './FileSearchResults'
 import { ProjectSearchForm, ProjectSearchSummary } from './ProjectSearchForm'
 
-export interface ProjectSearchViewProps
-  extends Omit<WorkbenchProjectSearchEngineOptions, 'panel' | 'query'> {
+export interface ProjectSearchViewProps extends Omit<
+  WorkbenchProjectSearchEngineOptions,
+  'panel' | 'query'
+> {
   panel: WorkbenchProjectSearchPanelModel
   /** 输入框里的查找词（原样）。 */
   query: string
@@ -56,10 +60,6 @@ export interface ProjectSearchViewProps
   gitDecorations: WorkbenchGitDecorationMap
   selectedEntryPath: Nullable<string>
   onOpenEntry: (entry: WorkbenchDirectoryEntry, intent?: WorkbenchEditorOpenTabIntent) => void
-  /** 查找词是空白时显示的文件树。 */
-  tree: ReactNode
-  /** 结果与文件树共用的滚动容器（FilePanel 靠它认焦点在不在树里）。 */
-  scrollRef: RefObject<Nullable<HTMLDivElement>>
   onRootContextMenu: (event: MouseEvent) => void
   onEntryContextMenu: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
 }
@@ -73,8 +73,6 @@ export function ProjectSearchView({
   gitDecorations,
   selectedEntryPath,
   onOpenEntry,
-  tree,
-  scrollRef,
   onRootContextMenu,
   onEntryContextMenu,
   ...engineOptions
@@ -82,6 +80,7 @@ export function ProjectSearchView({
   const { t } = useWorkbenchI18n()
   const engine = useWorkbenchProjectSearchEngine({ ...engineOptions, panel, query })
   const rowHeight = getWorkbenchFileTreeRowHeight(useWorkbenchDensity())
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [activeRowKey, setActiveRowKey] = useState<Nullable<string>>(null)
   // 按文件名找到的条目也按「包含 / 排除的文件」筛。
   const pathFilter = useMemo(
@@ -164,38 +163,38 @@ export function ProjectSearchView({
         }}
         onQueryNavigationKey={handleNavigationKey}
       />
-      {searchActive && <ProjectSearchSummary engine={engine} />}
-      <div className={styles.filePanelBody}>
-        <ScrollArea
-          ref={scrollRef}
-          className={styles.treeScroll}
-          aria-label={t('workbench.files')}
-          onContextMenu={onRootContextMenu}
-        >
-          {searchActive ? (
-            <FileSearchResults
-              rows={rows}
-              rowHeight={rowHeight}
-              scrollRef={scrollRef}
-              activeRowKey={activeRow?.key ?? null}
-              gitDecorations={gitDecorations}
-              selectedEntryPath={selectedEntryPath}
-              previewReplacement={panel.replaceOpen ? engine.previewReplacement : null}
-              replaceDisabled={!engine.canReplace}
-              onActivateRow={setActiveRowKey}
-              onToggleEntries={engine.toggleEntriesCollapsed}
-              onToggleFile={engine.toggleFileCollapsed}
-              onOpenEntry={onOpenEntry}
-              onOpenMatch={engine.openMatch}
-              onReplaceFile={engine.replaceFile}
-              onReplaceMatch={engine.replaceMatch}
-              onContextMenuEntry={onEntryContextMenu}
-            />
-          ) : (
-            tree
-          )}
-        </ScrollArea>
-      </div>
+      {searchActive && (
+        <>
+          <ProjectSearchSummary engine={engine} />
+          <div className={styles.filePanelBody}>
+            <ScrollArea
+              ref={scrollRef}
+              className={styles.treeScroll}
+              aria-label={t('workbench.files')}
+              onContextMenu={onRootContextMenu}
+            >
+              <FileSearchResults
+                rows={rows}
+                rowHeight={rowHeight}
+                scrollRef={scrollRef}
+                activeRowKey={activeRow?.key ?? null}
+                gitDecorations={gitDecorations}
+                selectedEntryPath={selectedEntryPath}
+                previewReplacement={panel.replaceOpen ? engine.previewReplacement : null}
+                replaceDisabled={!engine.canReplace}
+                onActivateRow={setActiveRowKey}
+                onToggleEntries={engine.toggleEntriesCollapsed}
+                onToggleFile={engine.toggleFileCollapsed}
+                onOpenEntry={onOpenEntry}
+                onOpenMatch={engine.openMatch}
+                onReplaceFile={engine.replaceFile}
+                onReplaceMatch={engine.replaceMatch}
+                onContextMenuEntry={onEntryContextMenu}
+              />
+            </ScrollArea>
+          </div>
+        </>
+      )}
     </>
   )
 }

@@ -124,6 +124,7 @@ export interface ActiveConversationRun {
   provider?: string
   /** 模型驱动的输入、输出与总窗口上限；上下文用量按它换算。 */
   modelLimits?: ConversationModelLimits
+  imageInput?: boolean
   /** 这一轮的界面语言。 */
   locale?: WorkbenchConversationSendRequest['locale']
 }

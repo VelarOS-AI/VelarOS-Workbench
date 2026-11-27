@@ -34,8 +34,12 @@ import {
   ChatSurfaceComposer,
 } from '@velaros-ai/ui/conversation/composer'
 import type { InteractionAnswer, ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
-import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 import {
+  type ChatMessage,
+  isConversationTurnInputMessage,
+} from '@velaros-ai/ui/conversation/contracts'
+import {
+  isEmpty,
   isPlainObject,
   isString,
   Log,
@@ -143,6 +147,7 @@ import {
   pauseUnappliedRunGuidance,
   readStandaloneContextUsageEstimate,
   readStandaloneTerminalKind,
+  resolveStandalonePresentationPhase,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   restoreStandaloneRunStatus,
@@ -1241,11 +1246,12 @@ function StandaloneWorkbenchChatSessionSurface({
     setPlanMode,
     reasoningLevel,
     setReasoningLevel,
+    showThinkingProcess,
+    setShowThinkingProcess,
   } = useStandaloneChatDraft(`${projectRoot}\0${chat.sessionId}`, {
     currentFilePath,
     reasoningLevel: chat.reasoningLevel ?? readStoredReasoningLevel(),
   })
-  const [showThinkingProcess, setShowThinkingProcess] = useState(true)
   const [accountSignInSessions, setAccountSignInSessions] = useState<ReadonlySet<string>>(
     () => new Set()
   )
@@ -1558,14 +1564,26 @@ function StandaloneWorkbenchChatSessionSurface({
     text: string,
     selections: readonly BrowserElementSelection[] = [],
     referencedFilePaths: readonly string[] = [],
-    options?: { queued: boolean }
+    options?: { queued?: boolean; files?: readonly File[] }
   ): Promise<boolean> {
     const sessionId = chat.sessionId
     const run = findActiveRun(projectRoot, sessionId)
+    if (!run) return false
+    const draftFiles = options?.files ?? []
+    const { images, describedFiles } = await readImageAttachments(draftFiles)
+    if (!isEmpty(describedFiles)) {
+      workbenchMessage.warning({
+        title: t('workbench.chatGuidanceFilesTitle'),
+        description: t('workbench.chatGuidanceFilesDescription'),
+      })
+      return false
+    }
+    if (findActiveRun(projectRoot, sessionId) !== run) return false
     const guidance: ChatMessage = {
       ...createTextMessage(
         'user',
         text ||
+          images.map((image) => image.label).join(', ') ||
           describeBrowserElements(selections) ||
           buildFileReferenceDisplayFallback(referencedFilePaths)
       ),
@@ -1574,7 +1592,9 @@ function StandaloneWorkbenchChatSessionSurface({
       ...(run ? { runId: run.scope.runId, turnId: run.scope.turnId } : {}),
       browserElementSelections: optionalWhen(selections.length > 0, [...selections]),
     }
-    // 引导通道只带文字：拾取的元素、引用的文件路径折成上下文段跟在正文后面。
+    if (!isEmpty(draftFiles))
+      guidance.attachments = describeWorkbenchAttachments(guidance.id, draftFiles)
+    // 文件路径与浏览器元素保持文字上下文，图片按多模态输入发送。
     const guidanceText = [
       text,
       formatBrowserElementSelectionsForPrompt(selections),
@@ -1585,7 +1605,7 @@ function StandaloneWorkbenchChatSessionSurface({
     if (!options?.queued) {
       consumeStandaloneChatDraft(runKey(projectRoot, sessionId), {
         value: text,
-        files: [],
+        files: [...draftFiles],
         context: {
           ...composerContext,
           browserSelections: [...selections],
@@ -1599,7 +1619,7 @@ function StandaloneWorkbenchChatSessionSurface({
       revision: state.revision + 1,
     }))
     const delivered = await window.velarosWorkbenchConversation
-      .guidance({ sessionId, projectRoot, inputId: guidance.id, text: guidanceText })
+      .guidance({ sessionId, projectRoot, inputId: guidance.id, text: guidanceText, images })
       .catch(() => ({ ok: false as const, message: '' }))
     if (delivered.ok) {
       // 只推进「引导中」：回执之前 input-applied 可能已经先到（已纳入），不能被拉回。
@@ -1623,6 +1643,7 @@ function StandaloneWorkbenchChatSessionSurface({
     }))
     if (!options?.queued) {
       setPrompt((current) => current || text)
+      setFiles((current) => [...current, ...draftFiles.filter((file) => !current.includes(file))])
       setBrowserSelections((current) => [
         ...current,
         ...selections.filter((selection) => !current.some((item) => item.id === selection.id)),
@@ -1684,14 +1705,12 @@ function StandaloneWorkbenchChatSessionSurface({
       const selections = systemNotice ? [] : context.browserSelections
       const referencedFilePaths = systemNotice ? [] : context.selectedFileReferencePaths
       // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
-      // 引导通道不带附件（附件由输入框入口改为结束后发送）。
       if (
         currentSession.status === 'running' &&
         !!currentRun &&
         !currentSession.engine &&
         !options?.queued &&
-        (text || selections.length > 0 || referencedFilePaths.length > 0) &&
-        draftFiles.length === 0
+        (text || draftFiles.length > 0 || selections.length > 0 || referencedFilePaths.length > 0)
       )
         return await sendRunGuidance(
           text,
@@ -1699,7 +1718,8 @@ function StandaloneWorkbenchChatSessionSurface({
           appendWorkbenchChatFileReferences(
             context.includedCurrentFilePath ? [context.includedCurrentFilePath] : [],
             referencedFilePaths
-          )
+          ),
+          { files: draftFiles }
         )
       if (
         (!text &&
@@ -1835,14 +1855,7 @@ function StandaloneWorkbenchChatSessionSurface({
               : { conversationKind: 'turn-input' as const }),
             browserElementSelections: optionalWhen(selections.length > 0, [...selections]),
           }
-      const attachmentMetadata = draftFiles.map((file, index) => ({
-        id: `${userMessage.id}-attachment-${index}`,
-        kind: file.type.startsWith('image/') ? ('image' as const) : ('file' as const),
-        name: file.name,
-        mediaType: file.type || 'application/octet-stream',
-        size: file.size,
-        lastModified: file.lastModified,
-      }))
+      const attachmentMetadata = describeWorkbenchAttachments(userMessage.id, draftFiles)
       const submittedMessage =
         attachmentMetadata.length > 0
           ? { ...userMessage, attachments: attachmentMetadata }
@@ -1953,9 +1966,16 @@ function StandaloneWorkbenchChatSessionSurface({
     }
   }
 
-  const lastMessage = chat.messages.at(-1)
-  const activeAssistantMessage =
-    isActiveChatRun(chat.status) && lastMessage?.role === 'assistant' ? lastMessage : null
+  const isStreaming = chat.status === 'running' || chat.status === 'stopping'
+  const activeAssistantMessage = optionalWhenLazy(isStreaming, () => {
+    const inputIndex = chat.messages.findLastIndex(isConversationTurnInputMessage)
+    return chat.messages
+      .slice(inputIndex + 1)
+      .findLast(
+        (message) =>
+          message.role === 'assistant' && message.timestamp >= (chat.lastRunStartedAt ?? 0)
+      )
+  })
   const starterSuggestions = useMemo(
     () => [
       {
@@ -1992,11 +2012,16 @@ function StandaloneWorkbenchChatSessionSurface({
     [billingModelId, billingProvider, engine]
   )
   const conversation = useMemo<ConversationView>(() => {
+    const teamPhase = resolveStandalonePresentationPhase(chat)
     const liveActivity = readConversationLiveActivity(
       {
-        runtime: chat,
+        runtime: { ...chat, teamPhase },
         message: activeAssistantMessage,
-        waitMessage: chat.connectionRetryMessage,
+        waitMessage:
+          chat.connectionRetryMessage ??
+          optionalWhenLazy(teamPhase === 'collecting-context', () =>
+            conversationTranslator.translate(locale, 'status.phaseCollectingContext')
+          ),
         locale,
       },
       conversationTranslator
@@ -2010,7 +2035,7 @@ function StandaloneWorkbenchChatSessionSurface({
       workerThreads: [...chat.workerThreads],
       runtime: {
         status: chat.status,
-        teamPhase: chat.teamPhase,
+        teamPhase,
         activeTurn: chat.activeTurn,
         completedTurns: chat.completedTurns,
         lastError: chat.lastError,
@@ -2028,7 +2053,7 @@ function StandaloneWorkbenchChatSessionSurface({
         usageTelemetry: [...chat.usageTelemetry],
       },
       // 等交互时不算在流式输出（与 Desktop 相同）：输入框要能答一句话的提问。
-      isStreaming: chat.status === 'running' || chat.status === 'stopping',
+      isStreaming,
       streamingAssistantMessageId: activeAssistantMessage?.id,
       hasStreamingThinkingBlock: liveActivity.hasStreamingThinkingBlock,
       liveTraceSummary: liveActivity.liveTraceSummary,
@@ -2063,6 +2088,7 @@ function StandaloneWorkbenchChatSessionSurface({
     chat.usageTelemetry,
     chat.workerThreads,
     conversationTranslator,
+    isStreaming,
     projectRoot,
     locale,
     t,
@@ -2215,14 +2241,6 @@ function StandaloneWorkbenchChatSessionSurface({
           onQueuedDraftUpdate: queuedDrafts.update,
           onQueuedDraftGuide: canSteerRun
             ? async (id: string) => {
-                // 引导通道只带文字：带附件的排队项留在队里，本轮结束后照常发送。
-                if (queuedDrafts.drafts.find((entry) => entry.id === id)?.files.length) {
-                  workbenchMessage.warning({
-                    title: t('workbench.chatGuidanceFilesTitle'),
-                    description: t('workbench.chatGuidanceFilesDescription'),
-                  })
-                  return
-                }
                 const draft = queuedDrafts.drafts.find((entry) => entry.id === id)
                 if (
                   draft &&
@@ -2235,7 +2253,7 @@ function StandaloneWorkbenchChatSessionSurface({
                         : [],
                       draft.context?.selectedFileReferencePaths ?? []
                     ),
-                    { queued: true }
+                    { queued: true, files: draft.files }
                   ))
                 )
                   queuedDrafts.remove(id)
@@ -2309,10 +2327,9 @@ function StandaloneWorkbenchChatSessionSurface({
       },
       modelSelector,
       slots: {
-        // 外部引擎不报上下文用量。
-        contextUsageIndicator: engine ? undefined : (
+        contextUsageIndicator: (
           <>
-            <WorkbenchContextUsageIndicator usage={chat.contextUsage} />
+            {!engine && <WorkbenchContextUsageIndicator usage={chat.contextUsage} />}
             <WorkbenchUsageSummary
               entries={chat.usageTelemetry}
               startedAt={chat.lastRunStartedAt}
@@ -2352,6 +2369,7 @@ function StandaloneWorkbenchChatSessionSurface({
       planMode,
       prompt,
       showThinkingProcess,
+      setShowThinkingProcess,
       t,
     ]
   )
@@ -2507,6 +2525,17 @@ function isInterruptedRunStatus(
  * 随消息发出的图片按真实多模态数据交给模型（与 Desktop 相同）；太大或太多的图、别的文件留给附件说明，
  * 由 Agent 按路径自己看。
  */
+function describeWorkbenchAttachments(messageId: string, files: readonly File[]) {
+  return files.map((file, index) => ({
+    id: `${messageId}-attachment-${index}`,
+    kind: file.type.startsWith('image/') ? ('image' as const) : ('file' as const),
+    name: file.name,
+    mediaType: file.type || 'application/octet-stream',
+    size: file.size,
+    lastModified: file.lastModified,
+  }))
+}
+
 async function readImageAttachments(files: readonly File[]): Promise<{
   images: WorkbenchConversationImage[]
   describedFiles: File[]
@@ -2516,6 +2545,7 @@ async function readImageAttachments(files: readonly File[]): Promise<{
   for (const file of files) {
     if (
       !file.type.startsWith('image/') ||
+      file.size === 0 ||
       file.size > MaxImageAttachmentBytes ||
       images.length >= MaxImageAttachments
     ) {

@@ -113,7 +113,6 @@
 
 .workbenchShell .panelHeader > [data-slot='button']:hover,
 .workbenchShell .panelActions button:hover:not([data-active='true']),
-.workbenchShell .treeDisclosureButton:hover,
 .workbenchShell .editorTabActionButton:hover,
 .workbenchShell .editorTabActionButton[aria-expanded='true'],
 .workbenchShell .editorTabClose:hover,

@@ -3,6 +3,32 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.50",
+      "releasedAt": "2026-11-27",
+      "title": {
+        "zh": "会话状态与提交面板",
+        "en": "Conversation activity and commit panel"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "将思考开关放进输入框的「+」菜单，默认关闭。运行与完成状态沿用 Desktop 的呈现方式。",
+          "保持运行中引导与后续回复的顺序，支持在引导里附带图片，并对齐缓存命中统计。",
+          "大量改动时只渲染视口附近的提交行，修复目录箭头和打开搜索时文件栏闪烁。",
+          "加载项目工具后，提示模型优先用项目事务应用可审核的修改。"
+        ],
+        "en": [
+          "Move the reasoning switch into the composer add menu and keep it off by default. Match Desktop’s live and completed activity presentation.",
+          "Keep guidance and assistant output in order, support guidance images, and align cache-hit reporting.",
+          "Render only nearby commit rows in large workspaces and fix folder arrows and the flicker when opening search.",
+          "When project tools load, prefer project transactions for reviewable file changes."
+        ]
+      }
+    },
+    {
       "version": "0.4.49",
       "releasedAt": "2026-11-27",
       "title": {

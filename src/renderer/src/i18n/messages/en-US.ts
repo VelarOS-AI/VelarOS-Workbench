@@ -1267,9 +1267,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     chatGuidanceRejectedDescription:
       'It could not join the running turn (it may have just finished). The text is back in the input box so you can send it again.',
     chatInteractionAnswerFailedTitle: 'The answer did not go through',
-    chatGuidanceFilesTitle: 'Guidance is text only',
+    chatGuidanceFilesTitle: 'Some attachments cannot be sent as guidance',
     chatGuidanceFilesDescription:
-      'This queued message has attachments, so it will be sent as a new message after this turn.',
+      'Guidance supports up to 8 images, up to 8 MB each. Send other attachments after the run.',
     chatMessageRenderFailed:
       'This message can’t be displayed right now. Its original text is below.',
     chatMessageRenderRetry: 'Retry',

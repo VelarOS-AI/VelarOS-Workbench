@@ -50,7 +50,11 @@ void describe('pre-split Workbench shell parity', () => {
     assert.equal(shellStyles.match(/--workbench-tab-height:/g)?.length, 1)
     // 搜索表单就在项目面板里、标题栏下面，不挪进标题栏；表单随搜索面板按需加载。
     const searchView = readSource('src/renderer/src/components/files/ProjectSearchView.tsx')
-    assert.match(panel, /<\/div>\n\s*\{projectSearch\.isOpen \? \([\s\S]*<LazyProjectSearchView/)
+    assert.match(
+      panel,
+      /\{projectSearch\.isOpen && \(\s*<Suspense fallback=\{null\}>[\s\S]*?<\/Suspense>\s*\)\}\s*\{treeBody\}/
+    )
+    assert.doesNotMatch(searchView, /tree: ReactNode|tree=\{treeContent\}/)
     assert.match(searchView, /<>\n\s*<ProjectSearchForm/)
     // 查找框是表单自己的一框（开关收在框里），里面一格不画边框的搜索输入；没有另做的清除按钮。
     assert.match(

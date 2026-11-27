@@ -252,6 +252,30 @@ function patchRuntime<TState extends StandaloneConversationRuntime>(
   return next
 }
 
+function resolveStandalonePresentationPhase({
+  status,
+  teamPhase,
+  messages,
+}: Pick<StandaloneConversationRuntime, 'status' | 'teamPhase'> & {
+  messages: readonly ChatMessage[]
+}): StandaloneConversationRuntime['teamPhase'] {
+  if (status !== 'running' || teamPhase === 'collecting-context') return teamPhase
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!
+    if (isConversationTurnInputMessage(message)) break
+    if (
+      message.role === 'assistant' &&
+      message.blocks.some(
+        (block) =>
+          (block.type === 'script-execution' && block.status === 'running') ||
+          (block.type === 'tool-call' && block.isRunning)
+      )
+    )
+      return 'executing'
+  }
+  return teamPhase
+}
+
 function readStandaloneTerminalKind(
   runtime: WorkbenchConversationState
 ): Nullable<StandaloneAgentTerminalKind> {
@@ -604,6 +628,7 @@ export {
   readStandaloneContextUsageEstimate,
   readStandaloneModelVisibleText,
   readStandaloneTerminalKind,
+  resolveStandalonePresentationPhase,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   restoreStandaloneRunStatus,

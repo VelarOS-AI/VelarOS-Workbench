@@ -35,12 +35,12 @@
     },
     {
       "name": "@velaros-ai/ui",
-      "version": "1.1.10",
+      "version": "1.1.11",
       "source": "ui",
-      "fileName": "velaros-ai-ui-1.1.10.tgz",
-      "sizeBytes": 951019,
-      "sha256": "5fbfb5c56579cef06e4663f770d7489ed8c659ab333ee3c2ba696e86e3bac4a6",
-      "integrity": "sha512-IxYMfmepTvb8veGcV0GLSkao1wfAMW95unwZBPt9k8LVtmIA14Y/5UjMJNQR3Lxe2VayQ7wQOz38nRJY8j6kzw=="
+      "fileName": "velaros-ai-ui-1.1.11.tgz",
+      "sizeBytes": 951382,
+      "sha256": "17bd87fe47e10b4ac8717fa07a8a64c9ba52c60110f99225054d13640f96f4bf",
+      "integrity": "sha512-4xWpiQiZYaD3ARi9j2WUm23JMLq6p+dSU6viNKqx39qUspDdB+33yd7mt15VmQn4s2Ud7HNzepg9az4fdqvnQw=="
     }
   ]
 }

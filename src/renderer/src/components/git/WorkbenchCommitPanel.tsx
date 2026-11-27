@@ -63,6 +63,7 @@ import { type WorkspaceGitStashOptions } from '@shared/contracts/workspaceGit'
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
+import { WorkbenchCommitFileList } from './WorkbenchCommitFileList'
 import { WorkbenchGitOperationBanner } from './WorkbenchGitOperationBanner'
 import type { WorkbenchGitPanelSessionProps } from './workbenchGitPanelProps'
 import { WorkbenchGitReloadLink } from './WorkbenchGitReloadLink'
@@ -682,8 +683,8 @@ export function WorkbenchCommitPanel({
                               {renderGroupAction(group.id, group.items)}
                             </div>
                             {isExpanded && (
-                              <div className={styles.commitFileList}>
-                                {group.items.map((item) => {
+                              <WorkbenchCommitFileList items={group.items}>
+                                {(item) => {
                                   const itemKey = getCommitPanelItemKey(item)
                                   const checked = selectable && selectedCommitPaths.has(item.path)
                                   const displayPath = getWorkbenchGitChangeDisplayPath(item)
@@ -780,8 +781,8 @@ export function WorkbenchCommitPanel({
                                       </button>
                                     </div>
                                   )
-                                })}
-                              </div>
+                                }}
+                              </WorkbenchCommitFileList>
                             )}
                             {groupIndex < groups.length - 1 && (
                               <span className={styles.commitGroupSpacer} aria-hidden="true" />

@@ -3,6 +3,7 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -111,7 +112,6 @@ export function FileTree({
   const rowHeight = getWorkbenchFileTreeRowHeight(density)
   const treeRef = useRef<FileTreeApi>(null)
   const syncingOpenStateRef = useRef(false)
-  const openStateChangedInTreeRef = useRef(false)
 
   const {
     setTreeShell,
@@ -188,21 +188,9 @@ export function FileTree({
     }): boolean => isMutatingTree || !canDropTreeEntries(parentNode, dragNodes),
     [isMutatingTree]
   )
-  const handleTreeToggleFromTree = useCallback(
-    (id: string): void => {
-      if (!syncingOpenStateRef.current) openStateChangedInTreeRef.current = true
-      handleTreeToggle(id)
-    },
-    [handleTreeToggle]
-  )
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const tree = treeRef.current
     if (!tree) return
-    if (openStateChangedInTreeRef.current) {
-      openStateChangedInTreeRef.current = false
-      return
-    }
 
     syncingOpenStateRef.current = true
     try {
@@ -257,6 +245,7 @@ export function FileTree({
             indent={TREE_INDENT}
             width={treeSize.width}
             height={treeSize.height}
+            openByDefault={false}
             initialOpenState={initialOpenState}
             disableEdit={disableTreeEntryMutation}
             disableDrag={disableTreeEntryMutation}
@@ -265,7 +254,7 @@ export function FileTree({
             searchMatch={matchFileTreeSearch}
             onActivate={handleTreeActivate}
             onSelect={handleTreeSelect}
-            onToggle={handleTreeToggleFromTree}
+            onToggle={handleTreeToggle}
             onRename={handleTreeRename}
             onDelete={handleTreeDelete}
             onMove={handleTreeMove}

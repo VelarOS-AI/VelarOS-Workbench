@@ -33,7 +33,12 @@ export function WorkbenchUsageSummary({
   const { locale } = useWorkbenchI18n()
   const zh = locale === 'zh-CN'
   const summary = useMemo(() => {
-    const current = entries.filter((entry) => !startedAt || entry.timestamp >= startedAt)
+    const current = entries.filter(
+      (entry) =>
+        (startedAt === null || entry.timestamp >= startedAt) &&
+        entry.scope !== 'auxiliary' &&
+        !entry.requestId?.startsWith('context:')
+    )
     return totals(current)
   }, [entries, startedAt])
   return (

@@ -41,7 +41,7 @@ void describe('Workbench chat composer parity', () => {
     // 引导走会话通道；运行时读进上下文后回执 input-applied，那条引导记为已纳入。
     assert.match(
       adapter,
-      /\.guidance\(\{ sessionId, projectRoot, inputId: guidance\.id, text: guidanceText \}\)/
+      /\.guidance\(\{ sessionId, projectRoot, inputId: guidance\.id, text: guidanceText, images \}\)/
     )
     assert.match(adapter, /markStandaloneGuidanceApplied\(state\.messages, runtime\.inputId\)/)
     // 等一句话回答时输入框就是回答：直接交给主进程，不另起一轮。
@@ -176,7 +176,7 @@ void describe('Workbench chat composer parity', () => {
     // 两端从共享 UI 选择当前活动，宿主只提供运行态和等待说明。
     assert.match(
       adapter,
-      /readConversationLiveActivity\(\s*\{\s*runtime: chat,\s*message: activeAssistantMessage,\s*waitMessage: chat\.connectionRetryMessage,\s*locale,/
+      /readConversationLiveActivity\(\s*\{\s*runtime: \{ \.\.\.chat, teamPhase \},\s*message: activeAssistantMessage,\s*waitMessage:\s*chat\.connectionRetryMessage \?\?/
     )
     assert.match(adapter, /hasStreamingThinkingBlock: liveActivity\.hasStreamingThinkingBlock/)
     assert.match(adapter, /liveTraceSummary: liveActivity\.liveTraceSummary/)

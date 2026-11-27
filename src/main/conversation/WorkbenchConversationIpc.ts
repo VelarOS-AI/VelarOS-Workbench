@@ -525,8 +525,16 @@ function parseImages(raw: unknown): WorkbenchConversationImage[] {
 function parseGuidanceRequest(raw: unknown): WorkbenchConversationGuidanceRequest {
   const session = parseSessionRequest(raw)
   const input = raw as Record<string, unknown>
-  if (!isString(input.inputId) || !isNonBlankString(input.text)) return invalid()
-  return { ...session, inputId: input.inputId, text: input.text }
+  if (!isNonBlankString(input.inputId) || !isString(input.text)) return invalid()
+  const images = input.images === undefined ? undefined : parseImages(input.images)
+  if (!input.text.trim() && !images?.length) return invalid()
+  const request: WorkbenchConversationGuidanceRequest = {
+    ...session,
+    inputId: input.inputId,
+    text: input.text,
+  }
+  if (images) request.images = images
+  return request
 }
 
 function parseInputRequest(raw: unknown): WorkbenchConversationInputRequest {

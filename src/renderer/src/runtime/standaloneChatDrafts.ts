@@ -18,6 +18,7 @@ export interface WorkbenchComposerContext {
 interface StandaloneChatDraft {
   value: string
   files: File[]
+  showThinkingProcess?: boolean
   context?: WorkbenchComposerContext
   fileReferencePaths?: string[]
   observedCurrentFilePath?: Nullable<string>
@@ -59,7 +60,13 @@ export function updateStandaloneChatDraft(
   update: (current: StandaloneChatDraft) => StandaloneChatDraft
 ): void {
   const next = update(readStandaloneChatDraft(scope))
-  if (!next.value && next.files.length === 0 && !next.context && !next.fileReferencePaths?.length)
+  if (
+    !next.value &&
+    next.files.length === 0 &&
+    !next.context &&
+    !next.fileReferencePaths?.length &&
+    !next.showThinkingProcess
+  )
     drafts.delete(scope)
   else drafts.set(scope, next)
   for (const listener of listeners.get(scope) ?? []) listener()
@@ -229,9 +236,17 @@ export function useStandaloneChatDraft(
     },
     [scope]
   )
+  const setShowThinkingProcess = useCallback(
+    (enabled: boolean) => {
+      updateStandaloneChatDraft(scope, (current) => ({ ...current, showThinkingProcess: enabled }))
+    },
+    [scope]
+  )
   return {
     ...draft,
     ...context,
+    showThinkingProcess: draft.showThinkingProcess ?? false,
+    setShowThinkingProcess,
     context,
     fileReferencePaths:
       draft.fileReferencePaths ?? EmptyWorkbenchComposerContext.selectedFileReferencePaths,

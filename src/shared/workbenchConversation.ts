@@ -136,6 +136,7 @@ export interface WorkbenchConversationCancelResult {
 export interface WorkbenchConversationGuidanceRequest extends WorkbenchConversationSessionRequest {
   inputId: string
   text: string
+  images?: WorkbenchConversationImage[]
 }
 
 export interface WorkbenchConversationInputRequest extends WorkbenchConversationSessionRequest {

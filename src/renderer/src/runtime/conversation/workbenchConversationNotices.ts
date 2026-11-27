@@ -1,4 +1,5 @@
 import type { ConversationWorkerThread } from '@velaros-ai/ui/conversation'
+import { isRunGuidanceMessage } from '@velaros-ai/ui/conversation/contracts'
 import type {
   ChatMessage,
   ContentBlock,
@@ -95,7 +96,7 @@ const InteractionFieldKinds = ['text', 'number', 'boolean', 'choice']
 const CallInputMaxChars = ConversationScriptPreviewLimits.inputChars
 const CallOutputMaxChars = ConversationScriptPreviewLimits.outputChars
 
-/** 一次运行的全部回合思考、正文、脚本卡与小部件都在这一条助手消息里（与 Desktop 相同）。 */
+/** 一次运行首条助手消息的稳定身份，后续分段沿用此前缀。 */
 export function conversationRunMessageId(runId: string): string {
   return `conversation:run:${runId}`
 }
@@ -143,26 +144,29 @@ function applyText(
   payload: ConversationTextProjection,
   scope: WorkbenchConversationRunScope
 ): WorkbenchConversationTranscript {
-  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
-    const index = blocks.findIndex(
-      (block) =>
-        block.type === 'text' && (block as WorkbenchConversationTextBlock).segmentId === payload.id
-    )
-    const current = index >= 0 ? (blocks[index] as WorkbenchConversationTextBlock) : undefined
-    if (payload.phase === 'preview' && current && !current.preview) return blocks
-    if (payload.phase === 'preview' && current && isStaleSnapshot(current.text, payload.text))
-      return blocks
-    if (payload.phase === 'rejected' || !payload.text)
-      return current?.preview ? blocks.filter((_, position) => position !== index) : blocks
-    const next: WorkbenchConversationTextBlock = {
-      type: 'text',
-      text: payload.text,
-      segmentId: payload.id,
-      turnId: payload.turnId,
+  return updateRunMessage(
+    transcript,
+    payload.runId,
+    scope,
+    (block) =>
+      block.type === 'text' && (block as WorkbenchConversationTextBlock).segmentId === payload.id,
+    (blocks, index) => {
+      const current = index >= 0 ? (blocks[index] as WorkbenchConversationTextBlock) : undefined
+      if (payload.phase === 'preview' && current && !current.preview) return blocks
+      if (payload.phase === 'preview' && current && isStaleSnapshot(current.text, payload.text))
+        return blocks
+      if (payload.phase === 'rejected' || !payload.text)
+        return current?.preview ? blocks.filter((_, position) => position !== index) : blocks
+      const next: WorkbenchConversationTextBlock = {
+        type: 'text',
+        text: payload.text,
+        segmentId: payload.id,
+        turnId: payload.turnId,
+      }
+      if (payload.phase === 'preview') next.preview = true
+      return current ? replaceAt(blocks, index, next) : [...blocks, next]
     }
-    if (payload.phase === 'preview') next.preview = true
-    return current ? replaceAt(blocks, index, next) : [...blocks, next]
-  })
+  )
 }
 
 /** 回合思考：同一回合的思考整段原位替换；这一回合的响应作废时撤掉。 */
@@ -171,18 +175,21 @@ function applyThinking(
   payload: ConversationThinkingProjection,
   scope: WorkbenchConversationRunScope
 ): WorkbenchConversationTranscript {
-  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
-    const index = blocks.findIndex(
-      (block) => block.type === 'thinking' && block.streamId === payload.id
-    )
-    if (payload.phase === 'rejected' || !payload.text)
-      return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
-    const current = index >= 0 ? (blocks[index] as ThinkingBlock).text : undefined
-    if (current === payload.text || (current && isStaleSnapshot(current, payload.text)))
-      return blocks
-    const next: ThinkingBlock = { type: 'thinking', text: payload.text, streamId: payload.id }
-    return index >= 0 ? replaceAt(blocks, index, next) : [...blocks, next]
-  })
+  return updateRunMessage(
+    transcript,
+    payload.runId,
+    scope,
+    (block) => block.type === 'thinking' && block.streamId === payload.id,
+    (blocks, index) => {
+      if (payload.phase === 'rejected' || !payload.text)
+        return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
+      const current = index >= 0 ? (blocks[index] as ThinkingBlock).text : undefined
+      if (current === payload.text || (current && isStaleSnapshot(current, payload.text)))
+        return blocks
+      const next: ThinkingBlock = { type: 'thinking', text: payload.text, streamId: payload.id }
+      return index >= 0 ? replaceAt(blocks, index, next) : [...blocks, next]
+    }
+  )
 }
 
 /** 脚本卡：同一张卡的编写、执行与结果按 id 原位替换；被撤回的卡移除。标题取脚本第一行注释。 */
@@ -195,12 +202,15 @@ function applyScript(
   const processOutputTruncated =
     !!payload.processOutputTruncated || (payload.processOutput?.length ?? 0) > CallOutputMaxChars
   if (payload.status === 'discarded')
-    return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
-      const index = blocks.findIndex(
-        (item) => item.type === 'script-execution' && item.id === payload.id
-      )
-      return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
-    })
+    return updateRunMessage(
+      transcript,
+      payload.runId,
+      scope,
+      (item) => item.type === 'script-execution' && item.id === payload.id,
+      (blocks, index) => {
+        return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
+      }
+    )
   const block: ScriptExecutionBlock &
     Pick<ConversationScriptProjection, 'language' | 'processOutput' | 'processOutputTruncated'> = {
     type: 'script-execution',
@@ -248,12 +258,15 @@ function applyScript(
     durationMs: payload.durationMs ?? null,
   }
   if (payload.error) block.error = payload.error
-  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
-    const index = blocks.findIndex(
-      (item) => item.type === 'script-execution' && item.id === payload.id
-    )
-    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-  })
+  return updateRunMessage(
+    transcript,
+    payload.runId,
+    scope,
+    (item) => item.type === 'script-execution' && item.id === payload.id,
+    (blocks, index) => {
+      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+    }
+  )
 }
 
 /** 小部件：按交来的先后接在运行消息后面，同一个小部件原位替换。 */
@@ -269,10 +282,15 @@ function applyWidget(
     code: payload.code,
     height: payload.height,
   }
-  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
-    const index = blocks.findIndex((item) => item.type === 'widget' && item.id === payload.id)
-    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-  })
+  return updateRunMessage(
+    transcript,
+    payload.runId,
+    scope,
+    (item) => item.type === 'widget' && item.id === payload.id,
+    (blocks, index) => {
+      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+    }
+  )
 }
 
 /** 外部引擎的工具卡：调用开始时接在运行消息后面，进度与结果按调用身份原位替换。 */
@@ -294,12 +312,15 @@ function applyToolCall(
   if (payload.result !== undefined) block.result = payload.result
   if (payload.error) block.error = payload.error
   if (payload.finishedAt !== undefined) block.finishedAt = payload.finishedAt
-  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
-    const index = blocks.findIndex(
-      (item) => item.type === 'tool-call' && item.toolCallId === payload.id
-    )
-    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-  })
+  return updateRunMessage(
+    transcript,
+    payload.runId,
+    scope,
+    (item) => item.type === 'tool-call' && item.toolCallId === payload.id,
+    (blocks, index) => {
+      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+    }
+  )
 }
 
 /** 交互卡：请求到达时接在运行消息后面；回答、跳过或失效时按请求身份原位替换。 */
@@ -310,10 +331,15 @@ function applyInteraction(
 ): WorkbenchConversationTranscript {
   const { runId, ...card } = payload
   const block: InteractionBlock = { type: 'interaction', ...card }
-  return updateRunMessage(transcript, runId, scope, (blocks) => {
-    const index = blocks.findIndex((item) => item.type === 'interaction' && item.id === card.id)
-    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-  })
+  return updateRunMessage(
+    transcript,
+    runId,
+    scope,
+    (item) => item.type === 'interaction' && item.id === card.id,
+    (blocks, index) => {
+      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+    }
+  )
 }
 
 /**
@@ -413,7 +439,10 @@ function applyAgent(
 }
 
 /** 同一子任务续跑复用名字，名称随线程一起持久化。 */
-function workerName(threads: readonly WorkbenchConversationWorkerThread[], identity: string): string {
+function workerName(
+  threads: readonly WorkbenchConversationWorkerThread[],
+  identity: string
+): string {
   const existing = threads.find((thread) => thread.agentId === identity)?.agentName
   if (existing) return existing
   const names = ['Atlas', 'Beacon', 'Cipher', 'Forge', 'Harbor', 'Lumen', 'Nova', 'Orion']
@@ -550,12 +579,25 @@ function updateRunMessage(
   transcript: WorkbenchConversationTranscript,
   runId: string,
   scope: WorkbenchConversationRunScope,
-  update: (blocks: Block[]) => Block[]
+  matchesBlock: (block: Block) => boolean,
+  update: (blocks: Block[], blockIndex: number) => Block[]
 ): WorkbenchConversationTranscript {
-  const id = conversationRunMessageId(runId)
-  const existing = transcript.messages.find((message) => message.id === id)
+  const baseId = conversationRunMessageId(runId)
+  const timestamp = scope.emittedAt ?? Date.now()
+  const isGuidanceForRun = (message: ChatMessage): boolean =>
+    isPresent(scope.runId) && message.runId === scope.runId && isRunGuidanceMessage(message)
+  const precedingGuidance = transcript.messages.findLast(
+    (message) => isGuidanceForRun(message) && message.timestamp <= timestamp
+  )
+  const matched = transcript.messages.find(
+    (message) =>
+      (message.id === baseId || message.id.startsWith(`${baseId}:after:`)) &&
+      message.blocks.some(matchesBlock)
+  )
+  const id = matched?.id ?? (precedingGuidance ? `${baseId}:after:${precedingGuidance.id}` : baseId)
+  const existing = matched ?? transcript.messages.find((message) => message.id === id)
   const current = existing?.blocks ?? []
-  const blocks = update(current)
+  const blocks = update(current, current.findIndex(matchesBlock))
   if (blocks === current) return transcript
   if (existing && blocks.length === 0)
     return {
@@ -575,11 +617,16 @@ function updateRunMessage(
     role: 'assistant',
     conversationKind: 'assistant-output',
     blocks,
-    timestamp: scope.emittedAt ?? Date.now(),
+    timestamp,
   }
   if (scope.runId) message.runId = scope.runId
   if (scope.turnId) message.turnId = scope.turnId
-  return { ...transcript, messages: [...transcript.messages, message] }
+  const nextGuidanceIndex = transcript.messages.findIndex(
+    (entry) => isGuidanceForRun(entry) && entry.timestamp > timestamp
+  )
+  const messages = [...transcript.messages]
+  messages.splice(nextGuidanceIndex < 0 ? messages.length : nextGuidanceIndex, 0, message)
+  return { ...transcript, messages }
 }
 
 function replaceAt(blocks: Block[], index: number, block: Block): Block[] {
