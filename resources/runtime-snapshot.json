@@ -10,8 +10,8 @@
     "ui": {
       "kind": "github-release",
       "repository": "VelarOS-AI/VelarOS-UI",
-      "tag": "v1.1.10",
-      "sourceCommit": "bf0848a85d3a2386c4013fdbc179a17f4219762c"
+      "tag": "v1.1.11",
+      "sourceCommit": "cc85b0f8481175f68efa9ae03f4f5e64f4c017b9"
     }
   },
   "packages": [
