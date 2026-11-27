@@ -107,7 +107,9 @@ void describe('pre-split Workbench shell parity', () => {
       /onPushBranch=\{\(branch\) => void runRemoteAction\('upload', branch\.name\)\}/
     )
     // 项目和分支共用文件栏触发按钮样式与顶栏面板尺寸。
-    const projectControl = readSource('src/renderer/src/components/chrome/WorkbenchProjectControl.tsx')
+    const projectControl = readSource(
+      'src/renderer/src/components/chrome/WorkbenchProjectControl.tsx'
+    )
     for (const picker of [control, projectControl]) {
       assert.match(picker, /styles\.filePanelPickerAnchor/)
       assert.match(picker, /className=\{styles\.filePanelPickerButton\}/)
@@ -321,7 +323,7 @@ void describe('pre-split Workbench shell parity', () => {
     // 运行中的展示由主进程逐条推来的会话通知落到发起那一轮的会话上；停止走会话通道的取消。
     assert.match(
       adapter,
-      /window\.velarosWorkbenchConversation\.onEvent\(\(envelope\) => conversationRecovery\.receive\(envelope\)\)/
+      /window\.velarosWorkbenchConversation\.onEvent\(\(envelope\) =>\s*conversationRecovery\.receive\(envelope\)\s*\)/
     )
     assert.match(adapter, /apply:\s*applyConversationEnvelope/)
     assert.match(adapter, /applyWorkbenchConversationNotice\(/)

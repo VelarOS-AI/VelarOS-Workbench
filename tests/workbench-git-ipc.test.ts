@@ -9,10 +9,12 @@ const rendererEvents: string[] = []
 
 mock.module('electron', () => ({
   BrowserWindow: {
-    getAllWindows: () => [{
-      isDestroyed: () => false,
-      webContents: { send: (channel: string) => rendererEvents.push(channel) },
-    }],
+    getAllWindows: () => [
+      {
+        isDestroyed: () => false,
+        webContents: { send: (channel: string) => rendererEvents.push(channel) },
+      },
+    ],
   },
   ipcMain: {
     handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -32,7 +34,7 @@ void describe('Workbench Git IPC requests', () => {
     const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
     const refreshed = Promise.withResolvers<void>()
     let calls = 0
-    registerWorkbenchGitIpc({} as never, {} as never, {} as never, () => {
+    registerWorkbenchGitIpc({} as never, {} as never, () => {
       calls += 1
       return refreshed.promise
     })
@@ -61,7 +63,6 @@ void describe('Workbench Git IPC requests', () => {
           return {}
         },
       } as never,
-      {} as never,
       {} as never,
       async () => undefined
     )
@@ -148,7 +149,6 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never,
       async () => undefined
     )
 
@@ -164,15 +164,21 @@ void describe('Workbench Git IPC requests', () => {
       )
     assert.deepEqual(started, ['op-1'])
 
-    assert.deepEqual(await invoke(WorkbenchGitChannels.cancelRemoteAction, { operationId: 'op-1' }), {
-      ok: true,
-      value: { cancelled: true },
-    })
+    assert.deepEqual(
+      await invoke(WorkbenchGitChannels.cancelRemoteAction, { operationId: 'op-1' }),
+      {
+        ok: true,
+        value: { cancelled: true },
+      }
+    )
     // 已经结束的操作：没有可取消的，不算出错。
-    assert.deepEqual(await invoke(WorkbenchGitChannels.cancelRemoteAction, { operationId: 'gone' }), {
-      ok: true,
-      value: { cancelled: false },
-    })
+    assert.deepEqual(
+      await invoke(WorkbenchGitChannels.cancelRemoteAction, { operationId: 'gone' }),
+      {
+        ok: true,
+        value: { cancelled: false },
+      }
+    )
     for (const request of [{}, { operationId: 3 }, { operationId: '' }, null])
       assert.equal((await invoke(WorkbenchGitChannels.cancelRemoteAction, request)).ok, false)
     assert.deepEqual(cancelRequests, ['op-1', 'gone'])
@@ -188,7 +194,6 @@ void describe('Workbench Git IPC requests', () => {
           return {}
         },
       } as never,
-      {} as never,
       {} as never,
       async () => undefined
     )
@@ -240,7 +245,6 @@ void describe('Workbench Git IPC requests', () => {
           return {}
         },
       } as never,
-      {} as never,
       {} as never,
       async () => undefined
     )
@@ -300,8 +304,13 @@ void describe('Workbench Git IPC requests', () => {
       assert.equal((await invoke(WorkbenchGitChannels.stashAction, request)).ok, false)
     // 差异看的是一个提交，或者一条贮藏，不能两样都给。
     assert.equal(
-      (await invoke(WorkbenchGitChannels.diff, { workspaceRoot: '/p', stashSha: sha, commitSha: sha }))
-        .ok,
+      (
+        await invoke(WorkbenchGitChannels.diff, {
+          workspaceRoot: '/p',
+          stashSha: sha,
+          commitSha: sha,
+        })
+      ).ok,
       false
     )
   })
@@ -316,7 +325,6 @@ void describe('Workbench Git IPC requests', () => {
           return {}
         },
       } as never,
-      {} as never,
       {} as never,
       async () => undefined
     )
@@ -369,7 +377,6 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never,
       async () => undefined
     )
 
@@ -407,7 +414,10 @@ void describe('Workbench Git IPC requests', () => {
         options: { path: 'src/b.ts', content: undefined, encoding: undefined, eol: undefined },
       },
     ])
-    assert.equal((await invoke(WorkbenchGitChannels.blame, { workspaceRoot: '/project' })).ok, false)
+    assert.equal(
+      (await invoke(WorkbenchGitChannels.blame, { workspaceRoot: '/project' })).ok,
+      false
+    )
   })
 
   void test('passes hunk actions through with the hunks as they were shown', async () => {
@@ -420,7 +430,6 @@ void describe('Workbench Git IPC requests', () => {
           return {}
         },
       } as never,
-      {} as never,
       {} as never,
       async () => undefined
     )
@@ -471,13 +480,17 @@ void describe('Workbench Git IPC requests', () => {
         },
       } as never,
       {} as never,
-      {} as never,
       async () => undefined
     )
 
     assert.equal(
-      (await invoke(WorkbenchGitChannels.commit, { workspaceRoot: '/p', staged: true, message: 'm' }))
-        .ok,
+      (
+        await invoke(WorkbenchGitChannels.commit, {
+          workspaceRoot: '/p',
+          staged: true,
+          message: 'm',
+        })
+      ).ok,
       true
     )
     assert.equal(

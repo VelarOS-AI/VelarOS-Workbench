@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.48",
+      "version": "0.4.49",
       "releasedAt": "2026-11-27",
       "title": {
         "zh": "项目能力与提交审核",
