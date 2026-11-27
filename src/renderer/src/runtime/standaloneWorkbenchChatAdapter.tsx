@@ -170,8 +170,8 @@ import {
   selectStandaloneWorkbenchAgentModel,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
-import { createStandaloneSystemNotice } from './standaloneWorkbenchSystemNotice'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
+import { createStandaloneSystemNotice } from './standaloneWorkbenchSystemNotice'
 import {
   readWorkbenchEngineSelection,
   resolveWorkbenchEngineModel,

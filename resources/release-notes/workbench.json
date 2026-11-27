@@ -3,6 +3,30 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.48",
+      "releasedAt": "2026-11-27",
+      "title": {
+        "zh": "项目能力与提交审核",
+        "en": "Project capability and commit review"
+      },
+      "added": {
+        "zh": ["会话绑定项目后，主任务和子任务会自动加载项目工具能力。"],
+        "en": [
+          "Project conversations preload the project tools capability for main and child tasks."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "改动卡按项目提交回执统计文件，保留逐次补丁。",
+          "项目提交卡默认收起，点击审核即可定位到对应项目的文件列表。"
+        ],
+        "en": [
+          "Change cards count files from project commit receipts and preserve each patch.",
+          "Project commit cards start collapsed. Review opens the corresponding project's file list."
+        ]
+      }
+    },
+    {
       "version": "0.4.47",
       "releasedAt": "2026-11-27",
       "title": {
@@ -11,8 +35,14 @@
       },
       "added": { "zh": [], "en": [] },
       "fixed": {
-        "zh": ["更新共享聊天组件，继续中断的任务时保留原会话回合。", "更新配套的 Platform 运行时和能力包。"],
-        "en": ["Update the shared conversation UI to keep resumed tasks in the same turn.", "Update the Platform runtime and its matching capabilities package."]
+        "zh": [
+          "更新共享聊天组件，继续中断的任务时保留原会话回合。",
+          "更新配套的 Platform 运行时和能力包。"
+        ],
+        "en": [
+          "Update the shared conversation UI to keep resumed tasks in the same turn.",
+          "Update the Platform runtime and its matching capabilities package."
+        ]
       }
     },
     {
