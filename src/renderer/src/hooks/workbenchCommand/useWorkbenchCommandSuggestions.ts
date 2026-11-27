@@ -45,8 +45,16 @@ export function useWorkbenchCommandSuggestions({
       }
 
       const { id: owningProjectId, rootPath } = activeProject
+      const ownsProject = (): boolean =>
+        permitted && activeProjectRef.current?.id === owningProjectId
+      let packageSuggestions: WorkbenchCommandSuggestion[] = []
+      let toolSuggestions: WorkbenchCommandSuggestion[] = []
+      const publishTools = (suggestions: WorkbenchCommandSuggestion[]): void => {
+        toolSuggestions = suggestions
+        if (ownsProject()) setCommandSuggestions([...packageSuggestions, ...toolSuggestions])
+      }
       async function readManifest(path: string): Promise<string | null> {
-        if (!permitted) return null
+        if (!ownsProject()) return null
         const result = await hostRuntime.kernel.project.readWorkbenchFile({
           projectRoot: rootPath,
           path,
@@ -54,40 +62,39 @@ export function useWorkbenchCommandSuggestions({
         })
         return result.ok ? result.data.content : null
       }
+      async function loadPackageSuggestions(): Promise<void> {
+        if (!rootEntries.some((entry) => entry.type === 'file' && entry.name === 'package.json'))
+          return
+        const content = await readManifest('package.json')
+        if (content === null || !ownsProject()) return
+        packageSuggestions = buildPackageScriptCommandSuggestions(
+          content,
+          inferPackageManagerCommand(rootEntries)
+        )
+        publishTools(toolSuggestions)
+        setCommandInput((current) => current || packageSuggestions[0]?.command || '')
+      }
 
       try {
-        const [packageJson, toolSuggestions] = await Promise.all([
-          rootEntries.some((entry) => entry.type === 'file' && entry.name === 'package.json')
-            ? readManifest('package.json')
-            : null,
-          buildWorkbenchProjectToolSuggestions(rootEntries, readManifest, (kind, name) =>
-            t(kind === 'dev' ? 'workbench.projectToolStart' : 'workbench.projectToolBuild', {
-              name,
-            })
-          ),
+        await Promise.all([
+          loadPackageSuggestions(),
+          buildWorkbenchProjectToolSuggestions(
+            rootEntries,
+            readManifest,
+            (kind, name) =>
+              t(kind === 'dev' ? 'workbench.projectToolStart' : 'workbench.projectToolBuild', {
+                name,
+              }),
+            publishTools
+          ).then(publishTools),
         ])
-
-        if (!permitted || activeProjectRef.current?.id !== owningProjectId) return
-
-        const packageSuggestions =
-          packageJson === null
-            ? []
-            : buildPackageScriptCommandSuggestions(
-                packageJson,
-                inferPackageManagerCommand(rootEntries)
-              )
-
-        setCommandSuggestions([...packageSuggestions, ...toolSuggestions])
-        setCommandInput((current) => current || packageSuggestions[0]?.command || '')
       } catch (error) {
-        if (!permitted || activeProjectRef.current?.id !== owningProjectId) return
-
-        log.debug('读取项目命令建议失败，清空建议列表', {
+        if (!ownsProject()) return
+        log.debug('读取项目命令建议失败', {
           projectId: owningProjectId,
           rootPath: activeProject.rootPath,
           error: String(error),
         })
-        setCommandSuggestions((current) => (current.length === 0 ? current : []))
       }
     }
 

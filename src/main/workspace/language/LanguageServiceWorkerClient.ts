@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { MessageChannel, type MessagePort, Worker } from 'node:worker_threads'
 
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
-import { Log } from '@velaros-ai/velaros/core'
+import { isPlainObject, isString, Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
@@ -19,6 +19,11 @@ import {
   type WorkbenchLanguageServiceRenameRequest,
   type WorkbenchLanguageServiceRequest,
 } from '@shared/contracts/workbench'
+import {
+  getWorkbenchPathExtension,
+  resolveBuiltinWorkbenchLanguageService,
+  type WorkbenchLanguageServiceDescriptor,
+} from '@shared/workbenchLanguageServices'
 
 import {
   getWorkbenchMainLocale,
@@ -106,11 +111,12 @@ const DefaultWorkerHealth: WorkbenchLanguageServiceWorkerHealthOptions = {
 
 type WorkbenchLanguageServiceRequestTimeout = (
   operation: WorkbenchLanguageServiceWorkerOperation,
-  initializingProject?: boolean
+  initializingProject?: boolean,
+  externalInitializeTimeoutMs?: number
 ) => number
 
 interface LanguageServiceWorkerInstance {
-  readyProjects: Set<string>
+  readyServices: Map<string, Set<string>>
   processes: ExternalLspWorkerProcessScope
   processPort: MessagePort
   port: WorkbenchLanguageServiceWorkerPort
@@ -122,6 +128,7 @@ interface LanguageServiceWorkerInstance {
 
 interface PendingLanguageServiceRequest {
   projectLease?: ExternalLspProjectLease
+  service?: WorkbenchLanguageServiceDescriptor
   tools?: ProjectToolRequest
   id: number
   operation: WorkbenchLanguageServiceWorkerOperation
@@ -250,7 +257,7 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     const root = resolve(request.projectRoot)
-    this.worker?.readyProjects.delete(root)
+    this.worker?.readyServices.delete(root)
     for (const pending of [...this.pending.values()])
       if (pending.projectLease?.projectRoot === root)
         this.cancel(pending.id, new AppError('CANCELLED', 'Language project was released'))
@@ -526,6 +533,10 @@ export class WorkbenchLanguageServiceWorkerClient {
     resolvePromise: (result: unknown) => void,
     reject: (error: AppError) => void
   ): PendingLanguageServiceRequest {
+    const service =
+      isPlainObject(request) && isString(request.path)
+        ? resolveBuiltinWorkbenchLanguageService(getWorkbenchPathExtension(request.path))
+        : undefined
     const pending: PendingLanguageServiceRequest = {
       projectLease:
         operation === 'shutdown' || operation === 'invalidateProject'
@@ -534,6 +545,7 @@ export class WorkbenchLanguageServiceWorkerClient {
               (request as WorkbenchLanguageServiceProjectRequest).projectRoot
             ),
       id: this.nextRequestId++,
+      service: service ?? undefined,
       operation,
       request,
       worker: null,
@@ -552,8 +564,16 @@ export class WorkbenchLanguageServiceWorkerClient {
   ): void {
     pending.worker = worker
     const initializingProject =
-      !!pending.projectLease && !worker.readyProjects.has(pending.projectLease.projectRoot)
-    const timeoutMs = Math.max(1, this.requestTimeoutMs(pending.operation, initializingProject))
+      !!pending.projectLease &&
+      !worker.readyServices.get(pending.projectLease.projectRoot)?.has(pending.service?.id ?? '')
+    const timeoutMs = Math.max(
+      1,
+      this.requestTimeoutMs(
+        pending.operation,
+        initializingProject,
+        pending.service?.initializeTimeoutMs
+      )
+    )
     pending.deadlineAt = Date.now() + timeoutMs
     pending.timeout = setTimeout(() => this.handleRequestTimeout(pending), timeoutMs)
     try {
@@ -685,7 +705,7 @@ export class WorkbenchLanguageServiceWorkerClient {
       throw error
     }
     const worker: LanguageServiceWorkerInstance = {
-      readyProjects: new Set(),
+      readyServices: new Map(),
       processes,
       processPort: channel.port2,
       port,
@@ -743,8 +763,12 @@ export class WorkbenchLanguageServiceWorkerClient {
         'getInlayHints',
         'getSemanticTokens',
       ].includes(pending.operation)
-    )
-      worker.readyProjects.add(pending.projectLease.projectRoot)
+    ) {
+      const root = pending.projectLease.projectRoot
+      const ready = worker.readyServices.get(root) ?? new Set<string>()
+      ready.add(pending.service?.id ?? '')
+      worker.readyServices.set(root, ready)
+    }
 
     this.pending.delete(message.id)
     if (pending.timeout) clearTimeout(pending.timeout)

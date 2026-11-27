@@ -61,6 +61,37 @@ const languagePathResolver = {
 }
 
 void describe('language worker scheduler', () => {
+  void test('serves cursor hints while external semantic tokens await their response', async () => {
+    const response = deferred()
+    const foreground = deferred()
+    const started: string[] = []
+    const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
+      dispatch: async (request, _signal, yieldToInteractive) => {
+        started.push(request.operation)
+        if (request.operation === 'getSemanticTokens') {
+          yieldToInteractive()
+          await response.promise
+        }
+      },
+      post: (message) => {
+        if (message.id === 2) foreground.resolve()
+      },
+    })
+    scheduler.receive({
+      id: 1,
+      operation: 'getSemanticTokens',
+      request: { projectRoot: '/p', path: 'Main.cs' },
+    })
+    scheduler.receive(positionRequest(2, 'getHover'))
+    try {
+      await foreground.promise
+      assert.deepEqual(started, ['getSemanticTokens', 'getHover'])
+      assert.equal(scheduler.busy, true)
+    } finally {
+      response.resolve()
+    }
+  })
+
   void test('runs hover and navigation while diagnostics await tools without starting another background run', async () => {
     const tools = deferred()
     const started: number[] = []

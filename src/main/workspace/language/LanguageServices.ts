@@ -86,7 +86,10 @@ import {
   hoverBlockPlainText,
   parseLanguageServiceHoverMarkdown,
 } from './LanguageServiceHoverMarkdown'
-import { getWorkbenchLanguageServiceRequestTimeoutMs, type WorkbenchLanguageServiceProjectRequest } from './LanguageServiceWorkerProtocol'
+import {
+  getWorkbenchLanguageServiceRequestTimeoutMs,
+  type WorkbenchLanguageServiceProjectRequest,
+} from './LanguageServiceWorkerProtocol'
 import {
   withWorkbenchMarkdownLanguageService,
   type WorkbenchMarkdownLanguageServiceContext,
@@ -466,9 +469,10 @@ class WorkbenchLanguageServices {
   constructor(
     private readonly pathResolver: WorkbenchLanguagePathResolver,
     launcher: ExternalLspLauncherGroup,
-    private readonly projectTools: ProjectToolRunner
+    private readonly projectTools: ProjectToolRunner,
+    onExternalResponse?: () => void
   ) {
-    this.externalLsp = new ExternalLspManager(launcher)
+    this.externalLsp = new ExternalLspManager(launcher, onExternalResponse)
   }
 
   public async invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
@@ -519,7 +523,9 @@ class WorkbenchLanguageServices {
       this.externalLsp.dispose(),
       this.projectTools.close(Date.now() + getWorkbenchLanguageServiceRequestTimeoutMs('shutdown')),
     ])
-    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : []
+    )
     if (failures.length) throw new AggregateError(failures, 'Language services did not close')
   }
 
@@ -646,28 +652,33 @@ class WorkbenchLanguageServices {
       }
     }
     if (resolved.service?.runtime === 'markdown-language-service')
-      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
-        const items = await markdown.service.getCompletionItems(
-          markdown.document,
-          this.languageServicePosition(request.position),
-          {
-            includeWorkspaceHeaderCompletions:
-              IncludeWorkspaceHeaderCompletions.onSingleOrDoubleHash,
-          },
-          markdown.token
-        )
-        return {
-          projectRoot: resolved.projectRoot,
-          path: request.path,
-          items: items.map((item) =>
-            mapLspCompletionItem(
-              request.path,
-              item,
-              isNumber(item.kind) ? String(item.kind) : undefined
-            )
-          ),
-        }
-      }, signal)
+      return this.withMarkdownLanguageService(
+        request,
+        resolved.projectRoot,
+        async (markdown) => {
+          const items = await markdown.service.getCompletionItems(
+            markdown.document,
+            this.languageServicePosition(request.position),
+            {
+              includeWorkspaceHeaderCompletions:
+                IncludeWorkspaceHeaderCompletions.onSingleOrDoubleHash,
+            },
+            markdown.token
+          )
+          return {
+            projectRoot: resolved.projectRoot,
+            path: request.path,
+            items: items.map((item) =>
+              mapLspCompletionItem(
+                request.path,
+                item,
+                isNumber(item.kind) ? String(item.kind) : undefined
+              )
+            ),
+          }
+        },
+        signal
+      )
     if (resolved.service?.runtime !== 'typescript-language-service')
       return {
         projectRoot: resolved.projectRoot,
@@ -692,13 +703,18 @@ class WorkbenchLanguageServices {
     let { items, isIncomplete } = buildTypeScriptCompletionItems(completionRequest)
     const prefix = content.slice(0, offset)
     const word = /[\w$]*$/u.exec(prefix)?.[0] ?? ''
-    const memberCompletion = prefix.slice(0, prefix.length - word.length).trimEnd().endsWith('.')
-    const hasMatchingCandidate = word && items.some((item) =>
-      item.label.toLowerCase().startsWith(word.toLowerCase())
-    )
-    if (!memberCompletion && !hasMatchingCandidate &&
-      includeTypeScriptPackageAutoImports(snapshot.projectRoot, snapshot.requestAbsolutePath)) {
-      ({ items, isIncomplete } = buildTypeScriptCompletionItems(completionRequest))
+    const memberCompletion = prefix
+      .slice(0, prefix.length - word.length)
+      .trimEnd()
+      .endsWith('.')
+    const hasMatchingCandidate =
+      word && items.some((item) => item.label.toLowerCase().startsWith(word.toLowerCase()))
+    if (
+      !memberCompletion &&
+      !hasMatchingCandidate &&
+      includeTypeScriptPackageAutoImports(snapshot.projectRoot, snapshot.requestAbsolutePath)
+    ) {
+      ;({ items, isIncomplete } = buildTypeScriptCompletionItems(completionRequest))
     } else if (!memberCompletion && hasMatchingCandidate) {
       // Retry as the prefix narrows instead of eagerly loading all development dependency types.
       isIncomplete = true
@@ -1083,18 +1099,23 @@ class WorkbenchLanguageServices {
       }
     }
     if (resolved.service?.runtime === 'markdown-language-service')
-      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
-        const hover = await markdown.service.getHover(
-          markdown.document,
-          this.languageServicePosition(request.position),
-          markdown.token
-        )
-        return {
-          projectRoot: resolved.projectRoot,
-          path: request.path,
-          hover: hover ? buildExternalHoverResult(hover.contents) : null,
-        }
-      }, signal)
+      return this.withMarkdownLanguageService(
+        request,
+        resolved.projectRoot,
+        async (markdown) => {
+          const hover = await markdown.service.getHover(
+            markdown.document,
+            this.languageServicePosition(request.position),
+            markdown.token
+          )
+          return {
+            projectRoot: resolved.projectRoot,
+            path: request.path,
+            hover: hover ? buildExternalHoverResult(hover.contents) : null,
+          }
+        },
+        signal
+      )
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, hover: null }
 
@@ -1426,21 +1447,26 @@ class WorkbenchLanguageServices {
       }
     }
     if (resolved.service?.runtime === 'markdown-language-service')
-      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
-        const highlights = await markdown.service.getDocumentHighlights(
-          markdown.document,
-          this.languageServicePosition(request.position),
-          markdown.token
-        )
-        return {
-          projectRoot: resolved.projectRoot,
-          path: request.path,
-          highlights: highlights.map((highlight) => ({
-            range: this.rangeFromLanguageServiceRange(highlight.range),
-            kind: highlight.kind === 3 ? ('write' as const) : ('read' as const),
-          })),
-        }
-      }, signal)
+      return this.withMarkdownLanguageService(
+        request,
+        resolved.projectRoot,
+        async (markdown) => {
+          const highlights = await markdown.service.getDocumentHighlights(
+            markdown.document,
+            this.languageServicePosition(request.position),
+            markdown.token
+          )
+          return {
+            projectRoot: resolved.projectRoot,
+            path: request.path,
+            highlights: highlights.map((highlight) => ({
+              range: this.rangeFromLanguageServiceRange(highlight.range),
+              kind: highlight.kind === 3 ? ('write' as const) : ('read' as const),
+            })),
+          }
+        },
+        signal
+      )
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, highlights: [] }
 

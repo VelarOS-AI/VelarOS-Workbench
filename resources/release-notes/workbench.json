@@ -3,6 +3,30 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.45",
+      "releasedAt": "2026-11-27",
+      "title": {
+        "zh": "更快的运行菜单与语言交互",
+        "en": "Faster run menu and language interactions"
+      },
+      "added": {
+        "zh": ["新会话可以在项目范围内召回相关记忆。"],
+        "en": ["New chats can recall relevant memories within the project."]
+      },
+      "fixed": {
+        "zh": [
+          "运行菜单先显示可用的构建命令，同时读取解决方案中的项目配置。",
+          "悬浮提示和补全可在外部语言服务器处理后台请求时继续查询，初次启动按当前语言服务的预算等待。",
+          "点击符号时等待语义高亮，终端使用稳定的光标。Windows 终端启动不再因独立的 shell 自检超时报错。"
+        ],
+        "en": [
+          "Show build commands immediately while reading projects from the solution.",
+          "Keep hover and completion queries moving while external language servers handle background requests, and use each language server's cold-start budget.",
+          "Wait for semantic highlights when a symbol is clicked, use a steady terminal cursor, and avoid blocking Windows terminal startup on separate shell probes."
+        ]
+      }
+    },
+    {
       "version": "0.4.44",
       "releasedAt": "2026-11-27",
       "title": {

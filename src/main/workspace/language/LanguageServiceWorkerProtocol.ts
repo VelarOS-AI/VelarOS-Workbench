@@ -177,21 +177,16 @@ export function getWorkbenchLanguageServiceWorkerPriority(
 /** 排队、冷工具启动/执行/退出共用调用方这一张预算，不在下层续期。 */
 export function getWorkbenchLanguageServiceRequestTimeoutMs(
   operation: WorkbenchLanguageServiceWorkerOperation,
-  initializingProject = false
+  initializingProject = false,
+  externalInitializeTimeoutMs = 0
 ): number {
   if (operation === 'getDiagnostics') return 90_000
-  // Cold TypeScript projects can spend tens of seconds loading dependency declarations.
-  // Let the first analysis finish rather than repeatedly cancelling its type checker.
-  if (initializingProject && getWorkbenchLanguageServiceWorkerPriority(operation) !== 'lifecycle')
-    return 45_000
-  switch (getWorkbenchLanguageServiceWorkerPriority(operation)) {
-    case 'background':
-      return 30_000
-    case 'lifecycle':
-      return 15_000
-    default:
-      return 12_000
-  }
+  const priority = getWorkbenchLanguageServiceWorkerPriority(operation)
+  if (priority === 'lifecycle') return 15_000
+  const requestTimeoutMs = priority === 'background' ? 30_000 : 12_000
+  if (!initializingProject) return requestTimeoutMs
+  // 冷启动请求须容纳服务初始化和实际查询；已就绪服务仍沿用交互预算。
+  return Math.max(45_000, externalInitializeTimeoutMs + requestTimeoutMs)
 }
 
 export function isWorkbenchLanguageServiceOperationSuperseded(

@@ -45,11 +45,13 @@ configureTypeScriptProjectPool(v8.getHeapStatistics().heap_size_limit)
 if (!(workerData?.processPort instanceof MessagePort))
   throw new AppError('INVARIANT', 'Language worker needs its main-owned process transport')
 const projects = new AsyncLocalStorage<ExternalLspProjectLease | undefined>()
+const releaseForInteractive = new AsyncLocalStorage<() => void>()
 const projectTools = new ProjectToolWorkerEndpoint((message) => port.postMessage(message))
 const languageServices = new WorkbenchLanguageServices(
   new PathResolver(),
   new ExternalLspWorkerTransport(workerData.processPort, () => projects.getStore()),
-  projectTools
+  projectTools,
+  () => releaseForInteractive.getStore()?.()
 )
 
 async function dispatch(
@@ -113,7 +115,9 @@ const cancellation =
 const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
   dispatch: (request, signal, yieldToInteractive) =>
     projects.run(request.projectLease, () =>
-      projectTools.withRequest(request, () => dispatch(request, signal), yieldToInteractive)
+      releaseForInteractive.run(yieldToInteractive, () =>
+        projectTools.withRequest(request, () => dispatch(request, signal), yieldToInteractive)
+      )
     ),
   post: (message) => port.postMessage(message),
   cancellation,

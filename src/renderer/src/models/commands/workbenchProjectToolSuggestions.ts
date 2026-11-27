@@ -10,6 +10,27 @@ import { normalizeWorkbenchRunConfigurationCwd } from './workbenchNamedRunConfig
 type ReadManifest = (path: string) => Promise<string | null>
 type LabelTask = (kind: 'build' | 'dev', name: string) => string
 
+const ManifestReadConcurrency = 8
+
+async function readManifests(
+  paths: readonly string[],
+  readManifest: ReadManifest
+): Promise<Array<{ path: string; content: string | null }>> {
+  const manifests: Array<{ path: string; content: string | null }> = []
+  for (let offset = 0; offset < paths.length; offset += ManifestReadConcurrency) {
+    const batch = paths.slice(offset, offset + ManifestReadConcurrency)
+    manifests.push(
+      ...(await Promise.all(
+        batch.map(async (path) => ({
+          path,
+          content: await readManifest(path),
+        }))
+      ))
+    )
+  }
+  return manifests
+}
+
 function parseXml(content: string): Document | null {
   const document = new DOMParser().parseFromString(content, 'application/xml')
   return document.querySelector('parsererror') ? null : document
@@ -109,19 +130,14 @@ function readGradleModules(settings: string): string[] {
 export async function buildWorkbenchProjectToolSuggestions(
   rootEntries: readonly WorkbenchDirectoryEntry[],
   readManifest: ReadManifest,
-  labelTask: LabelTask
+  labelTask: LabelTask,
+  onBuildSuggestions?: (suggestions: WorkbenchCommandSuggestion[]) => void
 ): Promise<WorkbenchCommandSuggestion[]> {
   const files = rootEntries
     .filter((entry) => entry.type === 'file' && !entry.symlink)
     .map((entry) => entry.name)
   const solutions = files.filter((file) => /\.slnx?$/iu.test(file))
   const rootProjects = files.filter((file) => /\.csproj$/iu.test(file))
-  const projects = new Set(rootProjects)
-  for (const path of solutions) {
-    const content = await readManifest(path)
-    if (content) for (const project of readSolutionProjects(path, content)) projects.add(project)
-  }
-
   const suggestions: WorkbenchCommandSuggestion[] = []
   function add(
     program: WorkbenchProjectToolTarget['program'],
@@ -140,26 +156,31 @@ export async function buildWorkbenchProjectToolSuggestions(
 
   for (const path of [...solutions, ...rootProjects])
     add('dotnet', 'build', path, path, ['build', `./${path}`])
-  for (const path of projects) {
-    const content = await readManifest(path)
-    if (content && canStartDotnetProject(content))
-      add('dotnet', 'dev', path, path, ['run', '--project', `./${path}`])
-  }
-
-  if (files.includes('pom.xml')) {
-    add('mvn', 'build', 'Maven', 'pom.xml', ['package'])
-    const pom = await readManifest('pom.xml')
-    const argv = pom && readMavenStartArguments(pom)
-    if (argv) add('mvn', 'dev', 'Maven', 'pom.xml', argv)
-  }
-
+  const hasMaven = files.includes('pom.xml')
+  if (hasMaven) add('mvn', 'build', 'Maven', 'pom.xml', ['package'])
   const gradleBuild = files.find((file) => file === 'build.gradle' || file === 'build.gradle.kts')
   const gradleSettings = files.find(
     (file) => file === 'settings.gradle' || file === 'settings.gradle.kts'
   )
   const gradleSource = gradleBuild ?? gradleSettings
+  if (gradleSource) add('gradle', 'build', 'Gradle', gradleSource, ['build'])
+  if (suggestions.length) onBuildSuggestions?.([...suggestions])
+
+  const projects = new Set(rootProjects)
+  for (const { path, content } of await readManifests(solutions, readManifest)) {
+    if (content) for (const project of readSolutionProjects(path, content)) projects.add(project)
+  }
+  for (const { path, content } of await readManifests([...projects], readManifest)) {
+    if (content && canStartDotnetProject(content))
+      add('dotnet', 'dev', path, path, ['run', '--project', `./${path}`])
+  }
+  if (hasMaven) {
+    const pom = await readManifest('pom.xml')
+    const argv = pom && readMavenStartArguments(pom)
+    if (argv) add('mvn', 'dev', 'Maven', 'pom.xml', argv)
+  }
+
   if (gradleSource) {
-    add('gradle', 'build', 'Gradle', gradleSource, ['build'])
     const content = gradleBuild && (await readManifest(gradleBuild))
     const task = content && readGradleStartTask(content)
     if (task && gradleBuild) add('gradle', 'dev', 'Gradle', gradleBuild, [task])

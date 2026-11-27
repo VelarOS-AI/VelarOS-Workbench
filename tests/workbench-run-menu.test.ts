@@ -4,19 +4,73 @@ import { readFile } from 'node:fs/promises'
 import { describe, test } from 'bun:test'
 
 import { findLastRunningWorkbenchRunSession } from '../src/renderer/src/hooks/useWorkbenchTopRunControl'
-import { readWorkbenchGeneratedRunLaunch, workbenchRunCommandKey } from '../src/renderer/src/models/commands/workbenchCommandLines'
+import {
+  readWorkbenchGeneratedRunLaunch,
+  workbenchRunCommandKey,
+} from '../src/renderer/src/models/commands/workbenchCommandLines'
 import { buildPackageScriptCommandSuggestions } from '../src/renderer/src/models/commands/workbenchCommandSuggestions'
 import { buildWorkbenchPackageScriptRunCommand } from '../src/renderer/src/models/commands/workbenchPackageScriptCommand'
+import { buildWorkbenchProjectToolSuggestions } from '../src/renderer/src/models/commands/workbenchProjectToolSuggestions'
 import { buildWorkbenchRunConfigurations } from '../src/renderer/src/models/commands/workbenchRunConfigurations'
 
 void describe('Workbench run button menu', () => {
+  void test('shows the solution build before reading its projects and reads project manifests together', async () => {
+    const solution = Promise.withResolvers<string>()
+    const projects = Promise.withResolvers<null>()
+    const initial: string[][] = []
+    const reads: string[] = []
+    const result = buildWorkbenchProjectToolSuggestions(
+      [
+        {
+          name: 'Repo.sln',
+          path: 'Repo.sln',
+          type: 'file',
+          size: null,
+          modifiedAt: null,
+          hasChildren: false,
+        },
+      ],
+      (path) => {
+        reads.push(path)
+        return path === 'Repo.sln' ? solution.promise : projects.promise
+      },
+      (kind, name) => `${kind} ${name}`,
+      (suggestions) => initial.push(suggestions.map((suggestion) => suggestion.command))
+    )
+    assert.deepEqual(initial, [['dotnet build ./Repo.sln']])
+    assert.deepEqual(reads, ['Repo.sln'])
+    solution.resolve(
+      'Project("{1}") = "App", "App/App.csproj"\nProject("{2}") = "Tools", "Tools/Tools.csproj"'
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.deepEqual(reads, ['Repo.sln', 'App/App.csproj', 'Tools/Tools.csproj'])
+    projects.resolve(null)
+    assert.deepEqual(
+      (await result).map((suggestion) => suggestion.command),
+      initial[0]
+    )
+  })
+
   void test('restores generated project tool arguments without evaluating display text', () => {
-    const dotnet = { kind: 'project-tool', program: 'dotnet', argv: ['run', '--project', './App & Tools/App.csproj'] }
-    const maven = { kind: 'project-tool', program: 'mvn', argv: ['compile', 'exec:java', '-Dexec.mainClass=example.Main'] }
+    const dotnet = {
+      kind: 'project-tool',
+      program: 'dotnet',
+      argv: ['run', '--project', './App & Tools/App.csproj'],
+    }
+    const maven = {
+      kind: 'project-tool',
+      program: 'mvn',
+      argv: ['compile', 'exec:java', '-Dexec.mainClass=example.Main'],
+    }
     for (const process of [dotnet, maven]) {
       assert.deepEqual(readWorkbenchGeneratedRunLaunch({ process }), { process })
     }
-    assert.equal(readWorkbenchGeneratedRunLaunch({ process: { ...maven, argv: ['compile & echo unexpected'] } }), null)
+    assert.equal(
+      readWorkbenchGeneratedRunLaunch({
+        process: { ...maven, argv: ['compile & echo unexpected'] },
+      }),
+      null
+    )
   })
 
   void test('keeps every runnable root package.json script', () => {
@@ -39,32 +93,63 @@ void describe('Workbench run button menu', () => {
     )
 
     assert.equal(suggestions.length, 2)
-    assert.equal(
-      buildWorkbenchRunConfigurations({ suggestions, history: [], limit: 1 }).length,
-      1
-    )
+    assert.equal(buildWorkbenchRunConfigurations({ suggestions, history: [], limit: 1 }).length, 1)
   })
 
   void test('retains literal generated targets through menus and distinguishes shell text', () => {
     const name = 'task "quoted" 100% $(echo marker) `literal`'
-    const suggestions = buildPackageScriptCommandSuggestions(JSON.stringify({ scripts: { [name]: 'echo ok' } }), 'npm')
+    const suggestions = buildPackageScriptCommandSuggestions(
+      JSON.stringify({ scripts: { [name]: 'echo ok' } }),
+      'npm'
+    )
     const generated = suggestions[0]!
     const configurations = buildWorkbenchRunConfigurations({
       suggestions,
-      history: [{ command: generated.command, lastRunAt: 1, lastSuccess: true, durationMs: 0, exitCode: 0 }],
+      history: [
+        { command: generated.command, lastRunAt: 1, lastSuccess: true, durationMs: 0, exitCode: 0 },
+      ],
     })
     assert.equal(configurations.length, 2)
-    assert.deepEqual(configurations.find((configuration) => configuration.source === 'package.json')?.launch?.process, { kind: 'package-manager', program: 'npm', argv: ['run', name] })
-    assert.notEqual(workbenchRunCommandKey(generated.command, generated.launch), workbenchRunCommandKey(generated.command))
-    const nested = buildWorkbenchPackageScriptRunCommand({ packageJsonPath: 'packages/a $quoted/package.json', packageManager: 'pnpm', scriptName: name })
-    assert.deepEqual(nested.launch, { cwd: 'packages/a $quoted', process: { kind: 'package-manager', program: 'pnpm', argv: ['run', name] } })
+    assert.deepEqual(
+      configurations.find((configuration) => configuration.source === 'package.json')?.launch
+        ?.process,
+      { kind: 'package-manager', program: 'npm', argv: ['run', name] }
+    )
+    assert.notEqual(
+      workbenchRunCommandKey(generated.command, generated.launch),
+      workbenchRunCommandKey(generated.command)
+    )
+    const nested = buildWorkbenchPackageScriptRunCommand({
+      packageJsonPath: 'packages/a $quoted/package.json',
+      packageManager: 'pnpm',
+      scriptName: name,
+    })
+    assert.deepEqual(nested.launch, {
+      cwd: 'packages/a $quoted',
+      process: { kind: 'package-manager', program: 'pnpm', argv: ['run', name] },
+    })
     const sessions = [
       { id: 'generated', command: generated.command, launch: generated.launch, isRunning: true },
       { id: 'shell', command: generated.command, isRunning: true },
     ]
     assert.equal(findLastRunningWorkbenchRunSession(generated.command, sessions)?.id, 'shell')
-    assert.equal(findLastRunningWorkbenchRunSession(generated.command, sessions, undefined, false, generated.launch)?.id, 'generated')
-    assert.equal(findLastRunningWorkbenchRunSession(generated.command, sessions, undefined, false, { ...generated.launch, cwd: 'another-package' }), undefined)
+    assert.equal(
+      findLastRunningWorkbenchRunSession(
+        generated.command,
+        sessions,
+        undefined,
+        false,
+        generated.launch
+      )?.id,
+      'generated'
+    )
+    assert.equal(
+      findLastRunningWorkbenchRunSession(generated.command, sessions, undefined, false, {
+        ...generated.launch,
+        cwd: 'another-package',
+      }),
+      undefined
+    )
   })
 
   void test('detects the latest still-running session for the selected command only', () => {
@@ -112,7 +197,10 @@ void describe('Workbench run button menu', () => {
 
     assert.match(terminalChrome, /styles\.runStopButton/u)
     assert.match(styles, /\.runStopButton:not\(:disabled\)[\s\S]*color: var\(--status-red\)/u)
-    assert.match(styles, /\.runStopButton:hover:not\(:disabled\)[\s\S]*background: var\(--status-red-soft\)/u)
+    assert.match(
+      styles,
+      /\.runStopButton:hover:not\(:disabled\)[\s\S]*background: var\(--status-red-soft\)/u
+    )
   })
 
   void test('shows a green rail indicator while any run session is still executing', async () => {

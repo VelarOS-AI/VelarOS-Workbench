@@ -228,26 +228,37 @@ void describe('language worker client', () => {
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getProjectDiagnostics'), 30_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('projectFilesChanged'), 15_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getHover', true), 45_000)
+    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getHover', true, 90_000), 102_000)
+    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getHover', false, 90_000), 12_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDiagnostics', true), 90_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('projectFilesChanged', true), 15_000)
   })
 
-  void test('initial analysis gets a cold-start budget once per project and resets after release', async () => {
-    const initializing: boolean[] = []
+  void test('initial analysis gets a cold-start budget per language and project', async () => {
+    const initializing: Array<[boolean, number | undefined]> = []
     const client = new WorkbenchLanguageServiceWorkerClient(
       (options) => new FakeLanguageServiceWorker('respond', options),
-      (operation, cold) => {
-        if (operation === 'getDefinition') initializing.push(cold ?? false)
+      (operation, cold, initializeTimeout) => {
+        if (operation === 'getDefinition') initializing.push([cold ?? false, initializeTimeout])
         return 1_000
       }
     )
     try {
       await client.getDefinition(request)
       await client.getDefinition(request)
+      await client.getDefinition({ ...request, path: 'Program.cs' })
+      await client.getDefinition({ ...request, path: 'Program.cs' })
       await client.getDefinition({ ...request, projectRoot: '/another-project' })
       await client.invalidateProject({ projectRoot: request.projectRoot })
       await client.getDefinition(request)
-      assert.deepEqual(initializing, [true, false, true, true])
+      assert.deepEqual(initializing, [
+        [true, undefined],
+        [false, undefined],
+        [true, 90_000],
+        [false, 90_000],
+        [true, undefined],
+        [true, undefined],
+      ])
     } finally {
       await client.dispose()
     }
@@ -283,12 +294,15 @@ void describe('language worker client', () => {
     let worker!: FakeLanguageServiceWorker
     const client = new WorkbenchLanguageServiceWorkerClient(
       (options) => (worker = new FakeLanguageServiceWorker('silent', options)),
-      (operation) => operation === 'projectFilesChanged' ? 15 : 200,
+      (operation) => (operation === 'projectFilesChanged' ? 15 : 200),
       { hangTimeoutMs: 20 }
     )
     const initializing = client.getDefinition(request)
     try {
-      await assert.rejects(client.projectFilesChanged({ projectRoot: request.projectRoot, paths: ['src/index.ts'] }), /请求超时/u)
+      await assert.rejects(
+        client.projectFilesChanged({ projectRoot: request.projectRoot, paths: ['src/index.ts'] }),
+        /请求超时/u
+      )
       await sleep(45)
       assert.equal(worker.terminated, false)
       worker.reply(worker.requests[0]!)

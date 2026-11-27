@@ -611,7 +611,8 @@ export class ExternalLspClient {
     private readonly runtimeRoot: string,
     private readonly descriptor: WorkbenchLanguageServiceDescriptor,
     private readonly requestTimeoutMs = DefaultRequestTimeoutMs,
-    private readonly workspaceRoot?: string
+    private readonly workspaceRoot?: string,
+    private readonly onAwaitResponse?: () => void
   ) {}
 
   public accepts(path: string): boolean {
@@ -987,7 +988,7 @@ export class ExternalLspClient {
     const current = this.diagnostics.get(document.uri)
     if (current && current.version >= document.version) return current.diagnostics
 
-    return new Promise((resolve) => {
+    const response = new Promise<ExternalLspDiagnostic[]>((resolve) => {
       const waiter = { version: document.version, resolve }
       const waiters = this.diagnosticWaiters.get(document.uri) ?? []
       waiters.push(waiter)
@@ -1002,6 +1003,8 @@ export class ExternalLspClient {
         resolve(this.diagnostics.get(document.uri)?.diagnostics ?? [])
       }, DiagnosticWaitTimeoutMs)
     })
+    this.onAwaitResponse?.()
+    return response
   }
 
   public dispose(): Promise<void> {
@@ -1284,6 +1287,7 @@ export class ExternalLspClient {
       signal?.addEventListener('abort', onAbort, { once: true })
       try {
         this.send({ jsonrpc: '2.0', id, method, params })
+        if (method.startsWith('textDocument/')) this.onAwaitResponse?.()
       } catch (error) {
         const pending = this.pending.get(id)
         if (pending) clearTimeout(pending.timeout)
@@ -1583,7 +1587,10 @@ function normalizeLocations(value: unknown): ExternalLspLocation[] {
 }
 
 export class ExternalLspManager {
-  public constructor(private readonly launcher: ExternalLspLauncherGroup) {}
+  public constructor(
+    private readonly launcher: ExternalLspLauncherGroup,
+    private readonly onAwaitResponse?: () => void
+  ) {}
   private readonly clients = new Map<
     string,
     {
@@ -1660,7 +1667,8 @@ export class ExternalLspManager {
         runtimeRoot,
         descriptor,
         DefaultRequestTimeoutMs,
-        boundary
+        boundary,
+        this.onAwaitResponse
       )
       this.clients.set(key, {
         client,

@@ -14,6 +14,7 @@ const observed = {
   workspaceFolders: 'none',
 }
 let observedFileChanges = []
+let openedDocument = null
 
 function send(message) {
   const json = JSON.stringify(message)
@@ -43,9 +44,11 @@ function initializeResult(id) {
       capabilities: {
         completionProvider: {},
         hoverProvider: true,
-        ...(mode === 'extension' ? {
-          experimental: { velar: { ownershipGraph: { protocolVersion: 1 } } },
-        } : {}),
+        ...(mode === 'extension'
+          ? {
+              experimental: { velar: { ownershipGraph: { protocolVersion: 1 } } },
+            }
+          : {}),
       },
       serverInfo: { name: 'Protocol Fixture Language Server', version: '1.0.0' },
     },
@@ -57,7 +60,12 @@ function handleClientRequest(message) {
     case 'initialize':
       if (mode === 'server-request') {
         // 与客户端 initialize 请求同一个 id：按 id 分派的客户端会用它错误地 resolve 掉自己的 Promise。
-        send({ jsonrpc: '2.0', id: message.id, method: 'client/registerCapability', params: { registrations: [] } })
+        send({
+          jsonrpc: '2.0',
+          id: message.id,
+          method: 'client/registerCapability',
+          params: { registrations: [] },
+        })
         send({ jsonrpc: '2.0', id: 'unknown-1', method: 'custom/serverOnly', params: {} })
         send({
           jsonrpc: '2.0',
@@ -71,7 +79,11 @@ function handleClientRequest(message) {
       break
     case 'textDocument/completion':
       if (mode === 'chunked') {
-        sendChunked({ jsonrpc: '2.0', id: message.id, result: { items: [{ label: largeLabel(), kind: 14 }] } })
+        sendChunked({
+          jsonrpc: '2.0',
+          id: message.id,
+          result: { items: [{ label: largeLabel(), kind: 14 }] },
+        })
         break
       }
       send({
@@ -79,6 +91,25 @@ function handleClientRequest(message) {
         id: message.id,
         result: { items: [{ label: JSON.stringify(observed), kind: 14 }] },
       })
+      if (mode === 'diagnostic-gate' && openedDocument) {
+        send({
+          jsonrpc: '2.0',
+          method: 'textDocument/publishDiagnostics',
+          params: {
+            uri: openedDocument.uri,
+            version: openedDocument.version,
+            diagnostics: [
+              {
+                message: 'fixture diagnostic',
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+              },
+            ],
+          },
+        })
+      }
+      break
+    case 'textDocument/didOpen':
+      openedDocument = message.params?.textDocument
       break
     case 'workspace/didChangeWatchedFiles':
       observedFileChanges = message.params?.changes ?? []
@@ -103,7 +134,9 @@ function handleClientRequest(message) {
 }
 
 function handleClientResponse(message) {
-  const outcome = message.error ? `error:${message.error.code}` : JSON.stringify(message.result ?? null)
+  const outcome = message.error
+    ? `error:${message.error.code}`
+    : JSON.stringify(message.result ?? null)
   switch (message.id) {
     case 'unknown-1':
       observed.unknownMethod = outcome

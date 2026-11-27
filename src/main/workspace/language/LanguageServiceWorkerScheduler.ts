@@ -49,14 +49,14 @@ export class WorkbenchLanguageServiceWorkerScheduler {
     background: [],
   }
   private running: Nullable<RunningLanguageServiceRequest> = null
-  private readonly waitingForTools = new Map<number, RunningLanguageServiceRequest>()
+  private readonly yieldedBackground = new Map<number, RunningLanguageServiceRequest>()
   private draining = false
 
   public constructor(private readonly options: WorkbenchLanguageServiceWorkerSchedulerOptions) {}
 
   /** 正在处理请求（内存看守此时不动手）。 */
   public get busy(): boolean {
-    return this.draining || this.waitingForTools.size > 0
+    return this.draining || this.yieldedBackground.size > 0
   }
 
   public receive(message: WorkbenchLanguageServiceWorkerMessage): void {
@@ -97,7 +97,9 @@ export class WorkbenchLanguageServiceWorkerScheduler {
       return
     }
     const running =
-      this.running?.request.id === message.id ? this.running : this.waitingForTools.get(message.id)
+      this.running?.request.id === message.id
+        ? this.running
+        : this.yieldedBackground.get(message.id)
     if (!running) return
     running.cancelled = true
     running.controller.abort()
@@ -107,7 +109,7 @@ export class WorkbenchLanguageServiceWorkerScheduler {
     return (
       this.queues.lifecycle.shift() ??
       this.queues.interactive.shift() ??
-      (this.waitingForTools.size === 0 ? this.queues.background.shift() : undefined)
+      (this.yieldedBackground.size === 0 ? this.queues.background.shift() : undefined)
     )
   }
 
@@ -133,13 +135,16 @@ export class WorkbenchLanguageServiceWorkerScheduler {
       release = resolve
     })
     const completed = this.execute(running, () => {
-      // The TypeScript phase is finished. Only the independent tools worker and
-      // its cleanup remain; keep one background tool run but let input through.
-      if (this.running !== running || request.operation !== 'getDiagnostics') return
-      this.waitingForTools.set(request.id, running)
+      // 可变文档已同步，只剩独立工具或语言服务器的应答。保留一个后台任务，让交互先通过。
+      if (
+        this.running !== running ||
+        getWorkbenchLanguageServiceWorkerPriority(request.operation) !== 'background'
+      )
+        return
+      this.yieldedBackground.set(request.id, running)
       release()
     }).finally(() => {
-      this.waitingForTools.delete(request.id)
+      this.yieldedBackground.delete(request.id)
       if (this.running === running) this.running = null
       if (!this.draining) void this.drain()
     })

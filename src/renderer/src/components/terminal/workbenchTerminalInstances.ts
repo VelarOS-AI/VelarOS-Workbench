@@ -118,7 +118,7 @@ export function acquireWorkbenchTerminal(
 
   const terminal = new Terminal({
     allowProposedApi: true,
-    cursorBlink: true,
+    cursorBlink: false,
     cursorStyle: 'bar',
     cursorWidth: 2,
     fontFamily: options.fontFamily,

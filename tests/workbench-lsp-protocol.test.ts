@@ -22,19 +22,27 @@ const fixture = fileURLToPath(new URL('./fixtures/protocol-lsp.cjs', import.meta
 function protocolClient(
   lspProcesses: ExternalLspProcessHost,
   projectRoot: string,
-  mode: string
+  mode: string,
+  onAwaitResponse?: () => void
 ): ExternalLspClient {
-  return new ExternalLspClient(lspProcesses, projectRoot, {
-    id: `protocol-fixture-${mode}`,
-    label: 'Protocol Fixture Language',
-    installKind: 'builtin',
-    runtime: 'lsp-server',
-    extensions: ['protocol'],
-    languages: ['protocol-fixture'],
-    command: process.execPath,
-    args: [fixture, mode],
-    documentLanguageId: 'protocol-fixture',
-  })
+  return new ExternalLspClient(
+    lspProcesses,
+    projectRoot,
+    {
+      id: `protocol-fixture-${mode}`,
+      label: 'Protocol Fixture Language',
+      installKind: 'builtin',
+      runtime: 'lsp-server',
+      extensions: ['protocol'],
+      languages: ['protocol-fixture'],
+      command: process.execPath,
+      args: [fixture, mode],
+      documentLanguageId: 'protocol-fixture',
+    },
+    undefined,
+    undefined,
+    onAwaitResponse
+  )
 }
 
 function extensionClient(
@@ -63,6 +71,28 @@ function extensionClient(
 }
 
 void describe('external LSP protocol boundaries', () => {
+  void test('releases the worker queue after synchronizing a document awaiting diagnostics', async () => {
+    const lspProcesses = new ExternalLspProcessHost()
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-diagnostic-gate-'))
+    const ready = Promise.withResolvers<void>()
+    const client = protocolClient(lspProcesses, projectRoot, 'diagnostic-gate', ready.resolve)
+    try {
+      const path = join(projectRoot, 'probe.protocol')
+      const diagnostics = client.getDiagnostics(path, 'comp')
+      await ready.promise
+      const { items } = await client.completion(path, 'comp', { line: 0, character: 4 })
+      assert.equal(items.length, 1)
+      assert.deepEqual(
+        (await diagnostics).map((diagnostic) => diagnostic.message),
+        ['fixture diagnostic']
+      )
+    } finally {
+      await client.dispose()
+      await lspProcesses.close()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('answers server-initiated requests instead of treating them as responses', async () => {
     const lspProcesses = new ExternalLspProcessHost()
     try {

@@ -1,4 +1,10 @@
-import { type EditorState, type Extension, RangeSetBuilder, StateEffect, Text } from '@codemirror/state'
+import {
+  type EditorState,
+  type Extension,
+  RangeSetBuilder,
+  StateEffect,
+  Text,
+} from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -17,8 +23,7 @@ import {
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 
 /**
- * 语言无关的「同词高亮」：光标停在某个标识符上时，给可视区里所有相同单词
- * 轻轻包一层背景（类似 WebStorm）。不走语言服务，任何文件类型都生效。
+ * 支持语义服务时只高亮同一符号，服务不可用时才匹配可视区里的同词。
  * 背景色取自该标识符自身的语法着色，做成低透明度的浅色包裹，不刺眼。
  */
 
@@ -150,6 +155,7 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
       decorations: DecorationSet = Decoration.none
       private token: Nullable<WorkbenchCaretToken> = null
       private semanticDecorations: Nullable<DecorationSet> = null
+      private useTextMatches = !runtime
       private requestGeneration = 0
       private timer: Nullable<ReturnType<typeof setTimeout>> = null
 
@@ -176,10 +182,10 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
         this.token = token
         if (semanticChanged) {
           this.semanticDecorations = null
+          this.useTextMatches = !runtime
           this.scheduleSemantic(update.view, token)
         }
-        // Semantic ranges cover the document. Scrolling only redraws local fallback
-        // matches while a request is pending; it must not re-query the same symbol.
+        // 滚动只重绘可视区内的同词匹配，语义范围覆盖全文。
         if (this.semanticDecorations) this.decorations = this.semanticDecorations
         else this.applyToken(update.view, token, semanticChanged)
       }
@@ -205,7 +211,10 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
         token: Nullable<WorkbenchCaretToken>,
         shouldMeasureBackground = true
       ): void {
-        this.decorations = token ? buildTokenOccurrenceDecorations(view, token) : Decoration.none
+        this.decorations =
+          token && this.useTextMatches
+            ? buildTokenOccurrenceDecorations(view, token)
+            : Decoration.none
 
         if (!token) {
           view.dom.style.removeProperty(TOKEN_OCCURRENCE_BG_VAR)
@@ -238,20 +247,24 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
             offset: token.from,
           })
         } catch {
-          return
+          highlights = null
         }
         if (
           generation !== this.requestGeneration ||
           view.state.doc !== doc ||
-          this.token?.from !== token.from ||
-          !highlights
+          this.token?.from !== token.from
         )
           return
-        this.semanticDecorations = buildWorkbenchSemanticOccurrenceDecorations(
-          doc.toString(),
-          highlights
-        )
-        this.decorations = this.semanticDecorations
+        if (highlights) {
+          this.semanticDecorations = buildWorkbenchSemanticOccurrenceDecorations(
+            doc.toString(),
+            highlights
+          )
+          this.decorations = this.semanticDecorations
+        } else {
+          this.useTextMatches = true
+          this.applyToken(view, token, false)
+        }
         view.dispatch({ effects: semanticOccurrenceRefreshEffect.of() })
       }
     },

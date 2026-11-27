@@ -96,7 +96,7 @@ apply to engine sessions.
 
 ## Development
 
-当前使用 Platform `v0.7.24` 正式发布的配套 Velaros / capabilities `0.12.11`，UI 版本为 `1.1.4`。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+当前使用 Platform `v0.7.25` 正式发布的配套 Velaros / capabilities `0.12.12`，UI 版本为 `1.1.4`。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
 
 `resources/runtime-snapshot.json` 分别记录 Platform 和 UI 正式发布的来源、版本与哈希，锁文件固定完整依赖。
 首次使用从声明的 GitHub Release 恢复归档；已有缓存时可用 `--verify-only` 离线核验：
