@@ -3,6 +3,22 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.44",
+      "releasedAt": "2026-11-27",
+      "title": {
+        "zh": "项目记忆与模型运行时更新",
+        "en": "Project memory and model runtime update"
+      },
+      "added": {
+        "zh": ["新会话可以在项目范围内召回相关记忆。"],
+        "en": ["New chats can recall relevant memories within the project."]
+      },
+      "fixed": {
+        "zh": ["更新配套的 Platform 运行时和能力包。"],
+        "en": ["Update the Platform runtime and its matching capabilities package."]
+      }
+    },
+    {
       "version": "0.4.43",
       "releasedAt": "2026-11-27",
       "title": {
@@ -23,7 +39,9 @@
       },
       "fixed": {
         "zh": ["修复 Windows 语言服务线程无法通过 Path 找到已安装的 csharp-ls 的问题。"],
-        "en": ["Find the installed csharp-ls on Windows when the language worker receives Path with mixed-case spelling."]
+        "en": [
+          "Find the installed csharp-ls on Windows when the language worker receives Path with mixed-case spelling."
+        ]
       }
     },
     {
