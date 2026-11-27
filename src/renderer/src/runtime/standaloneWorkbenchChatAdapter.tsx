@@ -11,7 +11,6 @@ import {
 import { ArrowRightIcon } from '@phosphor-icons/react'
 import {
   type WorkbenchChatCompositionAdapter,
-  type WorkbenchChatLiveRunChanges,
   type WorkbenchChatProjectRuntime,
   type WorkbenchChatSessionActionsProps,
   type WorkbenchChatSessionSnapshot,
@@ -56,7 +55,6 @@ import {
   type WorkbenchConversationState,
   type WorkbenchExecutionMode,
 } from '@shared/workbenchConversation'
-import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 import type { WorkbenchPeerEvent, WorkbenchPeerTask } from '@shared/workbenchSessionPeers'
 
 import workbenchAppIconUrl from '../../../../resources/icons/icon.svg?url'
@@ -156,12 +154,6 @@ import {
   type StandaloneRunMarker,
 } from './standaloneWorkbenchChatRuntime'
 import {
-  appendStandaloneCheckpoint,
-  createStandaloneSystemNotice,
-  isStoredStandaloneCheckpoint,
-  type StandaloneChatCheckpoint,
-} from './standaloneWorkbenchCheckpoints'
-import {
   type StandaloneConversationStreamRun,
   type StandaloneConversationSubmission,
   StandaloneWorkbenchConversationRecovery,
@@ -178,11 +170,7 @@ import {
   selectStandaloneWorkbenchAgentModel,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
-import {
-  createStandaloneRunChangeCapture,
-  type StandaloneRunChangeCapture,
-  StandaloneRunChangeCaptureTiming,
-} from './standaloneWorkbenchRunChangeCapture'
+import { createStandaloneSystemNotice } from './standaloneWorkbenchSystemNotice'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
 import {
   readWorkbenchEngineSelection,
@@ -215,12 +203,8 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
    * 随会话持久化（有上限），重启后已完成回答的约价仍在。
    */
   readonly usageTelemetry: readonly StandaloneUsageTelemetry[]
-  /** 每轮开跑前的工作区检查点（对话边界 + git 影子提交），「本轮改动」据此比对。 */
-  readonly checkpoints: readonly StandaloneChatCheckpoint[]
   /** 每轮收尾时记在这一轮最后一条助手消息上的运行标记（已处理折叠、耗时、中止/失败角标）。 */
   readonly messageRunMarkers: readonly StandaloneRunMarker[]
-  /** 正在跑的这一轮实时采到的改动；不持久化——重启时那次执行早已不在。 */
-  readonly liveRunChanges: Nullable<WorkbenchChatLiveRunChanges>
   /**
    * 这个会话交给哪个外部引擎（Claude Code、Codex）执行；null 是 VelarOS 自己的 Agent。会话发出第一条消息后
    * 就定下来，引擎的上下文在引擎那边，换执行体要新开会话。
@@ -236,11 +220,6 @@ interface ActiveConversationRun extends StandaloneConversationStreamRun {
   /** 这一轮的界面身份（用户消息与运行消息同一组）。 */
   readonly scope: { readonly runId: string; readonly turnId: string }
   readonly goalMode: boolean
-  /**
-   * 这一轮的「本轮改动」：运行中的实时采集与收尾时的最终采集；没有检查点（不是 git 仓库）时为 null。
-   * 收尾一律走它的 `finish`。
-   */
-  runChangeCapture: Nullable<StandaloneRunChangeCapture>
   readonly terminalSettlement: Promise<StandaloneAgentTerminalKind>
   terminalKind: StandaloneAgentTerminalKind | null
   readonly settleTerminal: (kind: StandaloneAgentTerminalKind) => void
@@ -335,9 +314,7 @@ function createState(
     workerThreads: [],
     contextUsage: null,
     usageTelemetry: [],
-    checkpoints: [],
     messageRunMarkers: [],
-    liveRunChanges: null,
     engine: null,
     revision: 0,
   }
@@ -413,9 +390,6 @@ function restoreStoredState(
         : undefined,
     reasoningLevel: readReasoningLevel(stored.reasoningLevel),
     ...restoredStatus,
-    checkpoints: Array.isArray(stored.checkpoints)
-      ? stored.checkpoints.filter(isStoredStandaloneCheckpoint)
-      : [],
     messageRunMarkers: restoreStandaloneRunMarkers(stored.messageRunMarkers, messages),
     revision: typeof stored.revision === 'number' ? stored.revision : 0,
     lastRunStartedAt: typeof stored.lastRunStartedAt === 'number' ? stored.lastRunStartedAt : null,
@@ -541,157 +515,6 @@ function useStandaloneChatState(projectRoot: string): StandaloneChatState {
   )
 }
 
-/**
- * 本轮开跑前的检查点：对话边界（这条用户消息的下标）+ 项目工作树的 git 影子提交。
- * 不是 git 仓库或捕获失败时 commitId 为 null——照样记下边界，这一轮只是没有「本轮改动」。
- */
-async function captureRunCheckpoint(
-  run: ActiveConversationRun,
-  submission: StandaloneConversationSubmission,
-  captureMessageCount: number,
-  label: string
-): Promise<StandaloneChatCheckpoint> {
-  const { projectRoot, sessionId } = run
-  const checkpointId = nextId('workbench-checkpoint')
-  const captured = await window.velarosWorkbenchGit
-    .captureChatCheckpoint({
-      workspaceRoot: projectRoot,
-      sessionId,
-      checkpointId,
-      label: label.replace(/\s+/gu, ' ').trim().slice(0, 48),
-    })
-    .catch(() => null)
-  const checkpoint: StandaloneChatCheckpoint = {
-    id: checkpointId,
-    captureMessageCount,
-    createdAt: Date.now(),
-    commitId: captured?.ok ? captured.value.commitId : null,
-  }
-  try {
-    conversationRecovery.assertSubmission(submission)
-    if (findActiveRun(projectRoot, sessionId) !== run)
-      throw new AppError('CANCELLED', '运行准备已撤销。')
-  } catch (error) {
-    releaseCheckpointRefs(projectRoot, sessionId, [checkpoint])
-    releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
-    throw error
-  }
-  let evicted: StandaloneChatCheckpoint[] = []
-  updateSession(projectRoot, sessionId, (state) => {
-    const appended = appendStandaloneCheckpoint(state.checkpoints, checkpoint)
-    evicted = appended.evicted
-    return { ...state, checkpoints: appended.checkpoints }
-  })
-  releaseCheckpointRefs(projectRoot, sessionId, evicted)
-  return checkpoint
-}
-
-/**
- * 这一轮的「本轮改动」：Agent 每改一次项目（主进程推来项目动静）按节奏拿工作树与这一轮开跑前的检查点比
- * 一次，与收尾时的最终采集用同一个记录 id、覆盖同一条记录；摘要挂在会话的「进行中」上，「AI 改动」面板
- * 据此实时显示这一轮。收尾时的最终采集见 `captureRunChanges`。
- */
-function createRunChangeCapture(
-  projectRoot: string,
-  sessionId: string,
-  checkpoint: StandaloneChatCheckpoint
-): Nullable<StandaloneRunChangeCapture> {
-  const baseCommitId = checkpoint.commitId
-  if (!baseCommitId) return null
-  return createStandaloneRunChangeCapture({
-    timing: StandaloneRunChangeCaptureTiming,
-    capture: () =>
-      window.velarosWorkbenchGit
-        .captureChatRunChanges({
-          workspaceRoot: projectRoot,
-          sessionId,
-          recordId: checkpoint.id,
-          baseCommitId,
-        })
-        .then(
-          (result) => {
-            if (result.ok) return result.value
-            log.warn('本轮改动实时采集失败', { sessionId, message: result.message })
-            return null
-          },
-          (error: unknown) => {
-            log.warn('本轮改动采集通道不可用', { sessionId, error })
-            return null
-          }
-        ),
-    onCaptured: (summary) => {
-      updateSession(projectRoot, sessionId, (state) => ({
-        ...state,
-        liveRunChanges: { firstMessageIndex: checkpoint.captureMessageCount, summary },
-      }))
-    },
-    settle: () => captureRunChanges(projectRoot, sessionId, checkpoint),
-  })
-}
-
-/**
- * 一轮收尾后记下「本轮改动」：拿工作树与这一轮开跑前的检查点比、按这一轮的改动归属只留 Agent 改的文件，
- * 补丁落进主进程的记录文件，运行标记上只挂摘要；运行中实时采到的那份随之撤下。主进程采完这一次就关掉
- * 这一轮的归属账本。
- *
- * 采集请求在收尾的同一拍同步发出：main 按项目根串行，它排在下一条排队消息开跑前的检查点之前，下一轮的
- * 改动混不进这一轮。
- */
-function captureRunChanges(
-  projectRoot: string,
-  sessionId: string,
-  checkpoint: StandaloneChatCheckpoint
-): void {
-  const baseCommitId = checkpoint.commitId
-  const session = readSession(projectRoot, sessionId)
-  if (!baseCommitId || !session) return
-  const anchorId = resolveStandaloneRunChangesAnchor(
-    session.messages,
-    session.messageRunMarkers,
-    checkpoint.captureMessageCount
-  )
-  // 最终摘要挂不上：运行中实时采到的那份撤下，面板里不留一轮永远「进行中」；它的记录连同主进程里
-  // 这一轮还开着的归属账本一起清掉。
-  const withdrawLive = (): void => {
-    withdrawLiveRunChanges(projectRoot, sessionId, checkpoint.id)
-    releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
-  }
-  if (!anchorId) {
-    withdrawLive()
-    return
-  }
-
-  void window.velarosWorkbenchGit
-    .captureChatRunChanges({
-      workspaceRoot: projectRoot,
-      sessionId,
-      recordId: checkpoint.id,
-      baseCommitId,
-      final: true,
-    })
-    .then(
-      (result) => {
-        if (!result.ok) {
-          log.warn('本轮改动采集失败', { sessionId, message: result.message })
-          withdrawLive()
-          return
-        }
-        const attached = attachRunChanges(projectRoot, sessionId, anchorId, result.value)
-        // 这条消息在采集期间已经不在了：刚写下的记录没人引用；被替换掉的旧记录同理。
-        const orphaned = attached
-          ? attached.replacedRecordId
-          : result.value.fileCount > 0
-            ? checkpoint.id
-            : null
-        if (orphaned) releaseRunChangeRecords(projectRoot, sessionId, [orphaned])
-      },
-      (error: unknown) => {
-        log.warn('本轮改动采集通道不可用', { sessionId, error })
-        withdrawLive()
-      }
-    )
-}
-
 async function prepareWorkbenchPeerTask(
   task: WorkbenchPeerTask,
   signal: AbortSignal,
@@ -732,7 +555,6 @@ async function prepareWorkbenchPeerTask(
       lastSequence: 0,
       scope,
       goalMode: false,
-      runChangeCapture: null,
     })
     activeRuns.set(targetKey, run)
     ensureConversationEventSubscription()
@@ -756,8 +578,6 @@ async function prepareWorkbenchPeerTask(
       workerThreads: [],
       revision: state.revision + 1,
     }))
-    const checkpoint = await captureRunCheckpoint(run, submission, target.messages.length, task.text)
-    run.runChangeCapture = createRunChangeCapture(projectRoot, task.sessionId, checkpoint)
     await syncWorkbenchPeerCatalog(projectRoot)
     conversationRecovery.assertSubmission(submission)
     if (findActiveRun(projectRoot, task.sessionId) !== run)
@@ -893,8 +713,9 @@ function ensureConversationEventSubscription(): void {
   if (typeof window === 'undefined') return
   peerEventSubscription ??= window.velarosWorkbenchSessionPeers.onEvent(receiveWorkbenchPeerEvent)
   if (conversationEventSubscription) return
-  conversationEventSubscription =
-    window.velarosWorkbenchConversation.onEvent((envelope) => conversationRecovery.receive(envelope))
+  conversationEventSubscription = window.velarosWorkbenchConversation.onEvent((envelope) =>
+    conversationRecovery.receive(envelope)
+  )
 }
 
 const conversationRecovery = new StandaloneWorkbenchConversationRecovery<ActiveConversationRun>({
@@ -919,7 +740,6 @@ const conversationRecovery = new StandaloneWorkbenchConversationRecovery<ActiveC
       lastSequence: 0,
       scope,
       goalMode: header.goalMode,
-      runChangeCapture: null,
     })
     activeRuns.set(runKey(projectRoot, sessionId), run)
     updateSession(projectRoot, sessionId, (state) => ({
@@ -964,8 +784,7 @@ function applyConversationEnvelope(
       return
     }
     if (event.kind === ConversationProjectActivityNotice) {
-      // Agent 改项目的一段时间窗结束：这一轮的「本轮改动」跟上，Git 等界面也按项目根收到通知。
-      run.runChangeCapture?.request()
+      // 写入结束后按项目根刷新 Git 和编辑器。
       publishWorkbenchAgentProjectWrite(run.projectRoot)
       return
     }
@@ -1050,6 +869,8 @@ function finishRun(
   const key = runKey(run.projectRoot, run.sessionId)
   if (activeRuns.get(key) !== run) return
   const terminalKind = readStandaloneTerminalKind(runtime) ?? 'error'
+  const runChanges = 'runChanges' in runtime ? runtime.runChanges : undefined
+  let orphanedRecordId = runChanges?.recordId ?? null
   updateSession(run.projectRoot, run.sessionId, (state) => {
     const settled = applyStandaloneConversationState(
       {
@@ -1060,11 +881,27 @@ function finishRun(
       runtime,
       emittedAt
     )
+    const marked = withRunMarker(settled, {
+      goalMode: run.goalMode,
+      goalStatus: runtime.kind === 'done' ? runtime.goalStatus : undefined,
+    })
+    const inputIndex = marked.messages.findIndex((message) => message.id === run.inputId)
+    const anchor =
+      runChanges && inputIndex >= 0
+        ? resolveStandaloneRunChangesAnchor(
+            marked.messages,
+            marked.messageRunMarkers,
+            inputIndex + 1
+          )
+        : null
+    const attached =
+      anchor && runChanges
+        ? attachStandaloneRunChanges(marked.messageRunMarkers, anchor, runChanges)
+        : null
+    if (attached) orphanedRecordId = attached.replacedRecordId
     return {
-      ...withRunMarker(settled, {
-        goalMode: run.goalMode,
-        goalStatus: runtime.kind === 'done' ? runtime.goalStatus : undefined,
-      }),
+      ...marked,
+      messageRunMarkers: attached?.markers ?? marked.messageRunMarkers,
       revision: state.revision + 1,
     }
   })
@@ -1072,8 +909,7 @@ function finishRun(
   run.settleTerminal(terminalKind)
   // 一轮收尾时回答已经完整：立刻落盘，不等合并窗口。
   flushChatPersistence()
-  // 停下或失败的一轮也可能已经改了文件：「AI 改动」要列全每一轮。
-  run.runChangeCapture?.finish()
+  if (orphanedRecordId) releaseRunChangeRecords(run.projectRoot, run.sessionId, [orphanedRecordId])
 }
 
 /** 没跑完就收尾的工具卡上写的那一句，按此刻的界面语言。 */
@@ -1158,7 +994,6 @@ function readProjectRuntimeFieldIdentities(state: StandaloneChatState): unknown[
     state.lastRunStartedAt,
     state.lastRunFinishedAt,
     state.messageRunMarkers,
-    state.liveRunChanges,
   ]
 }
 
@@ -1180,7 +1015,6 @@ function toSnapshot(state: StandaloneChatState, folderId: string): WorkbenchChat
     activeBranchId: 'main',
     messagePaging: null,
     messageRunMarkers: state.messageRunMarkers,
-    liveRunChanges: state.liveRunChanges,
     workerThreads: [],
   }
 }
@@ -1268,14 +1102,19 @@ function buildStandaloneProjectRuntime(
         const configuration = {
           engine: active.engine,
           modelSelection:
-            active.modelSelection?.provider === provider ? active.modelSelection : { provider, model },
+            active.modelSelection?.provider === provider
+              ? active.modelSelection
+              : { provider, model },
           reasoningLevel: active.reasoningLevel ?? readStoredReasoningLevel(),
         }
         const next = { ...(unstarted ?? createState(normalizedRoot, false)), ...configuration }
         if (unstarted)
           updateStandaloneChatDraft(runKey(normalizedRoot, unstarted.sessionId), (draft) =>
             draft.context
-              ? { ...draft, context: { ...draft.context, reasoningLevel: configuration.reasoningLevel } }
+              ? {
+                  ...draft,
+                  context: { ...draft.context, reasoningLevel: configuration.reasoningLevel },
+                }
               : draft
           )
         inactiveStates.set(key, [
@@ -1867,7 +1706,11 @@ function StandaloneWorkbenchChatSessionSurface({
           draftFiles.length === 0 &&
           selections.length === 0 &&
           referencedFilePaths.length === 0) ||
-        shouldBlockStandaloneRunSubmission(currentSession.status, !!currentRun, accountSignInPending)
+        shouldBlockStandaloneRunSubmission(
+          currentSession.status,
+          !!currentRun,
+          accountSignInPending
+        )
       )
         return false
       if (engine) {
@@ -2018,7 +1861,6 @@ function StandaloneWorkbenchChatSessionSurface({
         lastSequence: 0,
         scope,
         goalMode: executionModes.includes('goal'),
-        runChangeCapture: null,
       })
       activeRuns.set(runKey(projectRoot, sessionId), run)
       ensureConversationEventSubscription()
@@ -2043,14 +1885,6 @@ function StandaloneWorkbenchChatSessionSurface({
         workerThreads: [],
         revision: state.revision + 1,
       }))
-      // 开跑前拍下本轮的工作区检查点，收尾后拿它比出「本轮改动」。
-      const runCheckpoint = await captureRunCheckpoint(
-        run,
-        submission,
-        submittingSession.messages.length,
-        text || submittedMessage.attachments?.map((attachment) => attachment.name).join(', ') || ''
-      )
-      run.runChangeCapture = createRunChangeCapture(projectRoot, sessionId, runCheckpoint)
       const inputText = systemNotice
         ? systemNotice.detail
         : [text, currentFileContext, fileReferenceContext, attachmentContext, browserElementContext]
@@ -2750,7 +2584,9 @@ function readStoredReasoningLevel(): ReasoningLevel {
 }
 
 function readReasoningLevel(value: unknown): ReasoningLevel | undefined {
-  return WorkbenchReasoningLevels.has(value as ReasoningLevel) ? (value as ReasoningLevel) : undefined
+  return WorkbenchReasoningLevels.has(value as ReasoningLevel)
+    ? (value as ReasoningLevel)
+    : undefined
 }
 
 function storeReasoningLevel(level: ReasoningLevel): void {
@@ -2848,7 +2684,6 @@ function readPersistedFieldIdentities(state: StandaloneChatState): unknown[] {
     state.lastRunFinishedAt,
     state.status,
     interrupted ? state.lastError : null,
-    state.checkpoints,
     state.messageRunMarkers,
     state.contextUsage,
     state.usageTelemetry,
@@ -2872,7 +2707,6 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     lastRunFinishedAt: state.lastRunFinishedAt,
     status: state.status,
     lastError: isInterruptedRunStatus(state.status) ? state.lastError : null,
-    checkpoints: state.checkpoints,
     messageRunMarkers: state.messageRunMarkers,
     contextUsage: toOptional(state.contextUsage),
     usageTelemetry: optionalWhenLazy(state.usageTelemetry.length > 0, () =>
@@ -2883,74 +2717,23 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
 }
 
 /**
- * 会话从存储里整个移除：它的检查点与本轮改动记录不再有人看，主进程里它的 Platform 会话数据（上下文、目标、
+ * 会话从存储里整个移除：同步删除其提交补丁，主进程里它的 Platform 会话数据（上下文、目标、
  * 运行状态）与它起的后台任务一并清掉。
  */
 function releaseRemovedSession(session: StandaloneChatState): void {
   forgetStandaloneChatSession(session.sessionId)
   forgetStandaloneChatDraft(runKey(session.projectRoot, session.sessionId))
   forgetStandaloneQueuedDrafts(runKey(session.projectRoot, session.sessionId))
-  releaseCheckpointRefs(session.projectRoot, session.sessionId, session.checkpoints)
-  releaseRunChangeRecords(session.projectRoot, session.sessionId)
   void window.velarosWorkbenchConversation
     .deleteSession({ sessionId: session.sessionId, projectRoot: session.projectRoot })
     .catch(() => {
       // 释放失败只会在主进程数据区留下一份没人用的会话数据。
     })
-}
-
-/** 清掉检查点的影子 ref（超出保留上限的、被删掉的会话的）。 */
-function releaseCheckpointRefs(
-  projectRoot: string,
-  sessionId: string,
-  checkpoints: readonly StandaloneChatCheckpoint[]
-): void {
-  const checkpointIds = checkpoints
-    .filter((checkpoint) => checkpoint.commitId)
-    .map((checkpoint) => checkpoint.id)
-  if (!projectRoot || checkpointIds.length === 0) return
-  void window.velarosWorkbenchGit
-    .deleteChatCheckpoints({ workspaceRoot: projectRoot, sessionId, checkpointIds })
-    .catch(() => {
-      // 清理按幂等处理：残留的私有 ref 只占少量对象，不影响任何功能。
-    })
+    .finally(() => releaseRunChangeRecords(session.projectRoot, session.sessionId))
 }
 
 /**
- * 把本轮改动摘要记到指定会话的运行标记上，同一次更新里撤下这一轮运行中实时采到的那份——面板里同一轮从
- * 「进行中」直接变成已完成，中间不空一拍。null = 标记已不在或不再是已完成。
- */
-function attachRunChanges(
-  projectRoot: string,
-  sessionId: string,
-  messageId: string,
-  runChanges: WorkbenchChatRunChangesSummary
-): ReturnType<typeof attachStandaloneRunChanges> {
-  let attached: ReturnType<typeof attachStandaloneRunChanges> = null
-  updateSession(projectRoot, sessionId, (state) => {
-    attached = attachStandaloneRunChanges(state.messageRunMarkers, messageId, runChanges)
-    const settled = withoutLiveRunChanges(state, runChanges.recordId)
-    return attached
-      ? { ...settled, messageRunMarkers: attached.markers, revision: state.revision + 1 }
-      : settled
-  })
-  return attached
-}
-
-/** 撤下这一轮运行中实时采到的改动。 */
-function withdrawLiveRunChanges(projectRoot: string, sessionId: string, recordId: string): void {
-  updateSession(projectRoot, sessionId, (state) => withoutLiveRunChanges(state, recordId))
-}
-
-function withoutLiveRunChanges(state: StandaloneChatState, recordId: string): StandaloneChatState {
-  return state.liveRunChanges?.summary.recordId === recordId
-    ? { ...state, liveRunChanges: null }
-    : state
-}
-
-/**
- * 删掉本轮改动的记录文件：被替换掉的记录、被移除的会话（不传 recordIds = 整个会话）。与检查点 ref 一样按
- * 幂等清理，残留文件不影响任何功能。
+ * 删掉本轮改动的记录文件：被替换掉的记录、被移除的会话（不传 recordIds = 整个会话）。按会话或记录身份删除。
  */
 function releaseRunChangeRecords(
   projectRoot: string,

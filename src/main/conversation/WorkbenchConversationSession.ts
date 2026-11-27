@@ -40,10 +40,10 @@ import type {
 import { createNodeExecutionEnvironment, resolveNodeRuntimeBinding } from '@velaros-ai/velaros/node'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
-import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 import { isRelativePathInsideRoot } from '../workspace/PathContainmentHelper'
 
 import { LoginConfirmation } from './ConversationInteractions'
+import ProjectFeature from './projectFeature.json'
 import { createWorkbenchConsoleModule } from './WorkbenchConsoleModule'
 import {
   bindWorkbenchConversationExecution,
@@ -56,6 +56,7 @@ import type {
   ConversationControlOptions,
   ConversationWorkspaceHandle,
   ConversationWorkspaceOptions,
+  WorkbenchAgentProjectActivityPort,
 } from './WorkbenchConversationTypes'
 import {
   resolveWorkbenchNodeEnvironment,
@@ -75,6 +76,7 @@ const ModelUsageBudget = Object.freeze({
 const WorkerRunTimeoutMs = 4 * 60 * 60 * 1000
 const ProjectMemoryRecallInstruction =
   '当新会话的第一条请求依赖过往背景，或当前对话不足以判断用户指的是谁、哪件事、哪个版本或哪条约定时，先从 velaros:system 导入 memory，用已有名称或主题作为 query 调用 memory.recall({query})，查找当前项目的相关记忆。按本轮用户说明核对结果，仍有影响执行的歧义时再向用户确认。'
+const ProjectFeatureInstructions = `${ProjectFeature.name} (${ProjectFeature.id})\n${ProjectFeature.instructions.join('\n')}`
 
 export interface WorkbenchConversationSessionApi {
   open(options: ConversationWorkspaceOptions): Promise<ConversationWorkspaceHandle>
@@ -232,19 +234,21 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
       storage = localContextStorage({
         path: join(options.dataDir, WorkbenchConversationContextFileName),
       })
+      const instructions = [options.instructions, ProjectFeatureInstructions].filter(Boolean)
       runtime = await createRuntime({
         binding,
         storage,
         resources: [project.resource],
         node,
         residentModules: [],
-        instructions: memory
-          ? [options.instructions, ProjectMemoryRecallInstruction].filter(Boolean).join('\n')
-          : options.instructions,
+        instructions: [...instructions, ...(memory ? [ProjectMemoryRecallInstruction] : [])].join(
+          '\n'
+        ),
         environment: () => ({
           ...options.environment?.(),
           ...browser?.environment(),
           cwd: root,
+          projects: JSON.stringify([root]),
           workspace: `project; ${sandbox ? 'workspace-write sandbox' : 'full local access'}`,
           home: homedir(),
         }),
@@ -269,7 +273,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
           profiles: {
             worker: {
               description: `在当前项目内完成子任务；继承主任务的模型连接与推理设置。`,
-              instructions: options.instructions,
+              instructions: instructions.join('\n'),
               model: options.model,
               node: true,
               modules: modules.map((module) => module.binding.moduleId),

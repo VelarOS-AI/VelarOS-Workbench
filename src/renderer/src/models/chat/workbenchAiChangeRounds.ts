@@ -6,19 +6,9 @@ import type {
 } from '@shared/workbenchGit'
 
 import {
-  buildWorkbenchContentDiffRows,
   buildWorkbenchPatchDiffRows,
-  resolveWorkbenchFullFileDiffContents,
   type WorkbenchUnifiedDiffRow,
 } from '../git/workbenchGitDiffModel'
-
-/**
- * 「AI 改动」面板的数据模型：一个会话里每一轮 AI 运行改了哪些文件。
- *
- * 收尾的轮次来自会话的运行标记——本轮改动的摘要（记录 id、文件数、增删行）挂在标记上；还在跑的
- * 那一轮来自会话上实时采集的摘要，记录 id 与它收尾后的一样，同一轮在面板里从「进行中」无缝变成
- * 已完成。逐文件补丁在主进程的记录文件里，面板展开某一轮时再按记录 id 读。这里只做纯投影，不读盘。
- */
 
 export interface WorkbenchAiChangeRoundSource {
   readonly id: string
@@ -27,10 +17,6 @@ export interface WorkbenchAiChangeRoundSource {
     readonly messageId: string
     readonly timestamp: number
     readonly runChanges?: WorkbenchChatRunChangesSummary
-  }>
-  readonly liveRunChanges: Nullable<{
-    readonly firstMessageIndex: number
-    readonly summary: WorkbenchChatRunChangesSummary
   }>
 }
 
@@ -50,8 +36,6 @@ export interface WorkbenchAiChangeRound {
   readonly prompt: string
   /** 这一轮是所属会话的第几轮运行（从 1 开始）。 */
   readonly runNumber: number
-  /** 这一轮还在跑：改动随写入实时刷新，收尾时的最终采集覆盖同一条记录。 */
-  readonly live: boolean
 }
 
 export function getWorkbenchAiChangeRoundKey(sessionId: string, recordId: string): string {
@@ -70,7 +54,7 @@ function readMessageText(message: ChatMessage): string {
 
 /**
  * 这一轮的诉求：`endIndex` 之前最近的一条用户消息（宿主写的系统留痕不算）。收尾的一轮从它的运行标记
- * 所在的回答往前找；还在跑的一轮从会话末尾往前找——与它收尾后找到的是同一条。
+ * 所在的回答往前找。
  */
 function findRoundPrompt(messages: readonly ChatMessage[], endIndex: number): string {
   for (let cursor = endIndex - 1; cursor >= 0; cursor -= 1) {
@@ -88,7 +72,7 @@ function hasRoundChanges(summary: WorkbenchChatRunChangesSummary): boolean {
   return summary.fileCount > 0 || !!summary.error
 }
 
-/** 一个会话里改过文件的轮次，最近的在前（还在跑的那一轮排最前）。 */
+/** 一个会话里改过文件的轮次，最近的在前。 */
 export function listWorkbenchAiChangeRounds(
   session: WorkbenchAiChangeRoundSource
 ): WorkbenchAiChangeRound[] {
@@ -99,8 +83,7 @@ export function listWorkbenchAiChangeRounds(
   const toRound = (
     summary: WorkbenchChatRunChangesSummary,
     promptEndIndex: number,
-    runNumber: number,
-    live: boolean
+    runNumber: number
   ): WorkbenchAiChangeRound => ({
     key: getWorkbenchAiChangeRoundKey(session.id, summary.recordId),
     sessionId: session.id,
@@ -112,7 +95,6 @@ export function listWorkbenchAiChangeRounds(
     error: summary.error,
     prompt: findRoundPrompt(session.messages, promptEndIndex),
     runNumber,
-    live,
   })
 
   const rounds = markers.flatMap((marker, index) =>
@@ -121,20 +103,11 @@ export function listWorkbenchAiChangeRounds(
           toRound(
             marker.runChanges,
             messageIndexes.get(marker.messageId) ?? session.messages.length,
-            index + 1,
-            false
+            index + 1
           ),
         ]
       : []
   )
-  const live = session.liveRunChanges
-  if (live && hasRoundChanges(live.summary)) {
-    // 这一轮排在开跑前那些轮之后：它收尾时记下的运行标记（若已记上）不算在前面。
-    const earlierRuns = markers.filter(
-      (marker) => (messageIndexes.get(marker.messageId) ?? Infinity) < live.firstMessageIndex
-    ).length
-    rounds.push(toRound(live.summary, session.messages.length, earlierRuns + 1, true))
-  }
   return rounds.reverse()
 }
 
@@ -188,15 +161,13 @@ function toTreeNodes(directory: MutableDirectory): WorkbenchAiChangeTreeNode[] {
     })
   const files = [...directory.files]
     .sort((left, right) => compareNames(left.path, right.path))
-    .map(
-      (change): WorkbenchAiChangeTreeNode => ({
-        kind: 'file',
-        key: `file:${change.path}`,
-        name: change.path.slice(change.path.lastIndexOf('/') + 1),
-        path: change.path,
-        change,
-      })
-    )
+    .map((change): WorkbenchAiChangeTreeNode => ({
+      kind: 'file',
+      key: `file:${change.path}`,
+      name: change.path.slice(change.path.lastIndexOf('/') + 1),
+      path: change.path,
+      change,
+    }))
   return [...directories, ...files]
 }
 
@@ -232,43 +203,17 @@ export function listWorkbenchAiChangeTreeFiles(
 }
 
 export type WorkbenchAiChangeDiffView =
-  | { readonly kind: 'rows'; readonly rows: WorkbenchUnifiedDiffRow[]; readonly fullFile: boolean }
+  | { readonly kind: 'rows'; readonly rows: WorkbenchUnifiedDiffRow[] }
   | { readonly kind: 'binary' }
   | { readonly kind: 'omitted' }
   | { readonly kind: 'empty' }
 
-/**
- * 一个文件在这一轮里的差异行。
- *
- * 能拼出前后两份全文时显示整份文件、改动处高亮：新建文件的「前」是空文件；改动与删除的「前」来自这一轮
- * 开跑前的检查点（`baseContent`）。拼不出来（旧记录没有起点提交、快照已被清理）时退回补丁本身。
- */
+/** 按提交顺序显示归档的补丁。 */
 export function buildWorkbenchAiChangeDiffView(
-  change: WorkbenchChatRunFileChange,
-  baseContent: string | null
+  change: WorkbenchChatRunFileChange
 ): WorkbenchAiChangeDiffView {
   if (change.binary) return { kind: 'binary' }
-  if (change.patchOmitted) return { kind: 'omitted' }
-  if (!change.patch) return { kind: 'empty' }
-
-  const before = change.status === 'added' ? '' : baseContent
-  if (before !== null) {
-    const contents = resolveWorkbenchFullFileDiffContents({
-      diff: change.patch,
-      scope: 'staged',
-      baseContent: before,
-      currentContent: '',
-    })
-    if (contents) {
-      const rows = buildWorkbenchContentDiffRows(
-        change.path,
-        contents.beforeContent,
-        contents.afterContent,
-        { fullFile: true }
-      )
-      if (rows.length > 0) return { kind: 'rows', rows, fullFile: true }
-    }
-  }
-  const rows = buildWorkbenchPatchDiffRows(change.patch)
-  return rows.length > 0 ? { kind: 'rows', rows, fullFile: false } : { kind: 'empty' }
+  const rows = change.patches.flatMap(buildWorkbenchPatchDiffRows)
+  if (rows.length > 0) return { kind: 'rows', rows }
+  return { kind: change.patchOmitted ? 'omitted' : 'empty' }
 }

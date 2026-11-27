@@ -13,7 +13,10 @@ import type {
   WorkbenchPermissionConfirmationMode,
 } from '../../shared/workbenchConversation'
 import type { ConversationBrowser } from '../browser/WorkbenchBrowserService'
-import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
+
+export interface WorkbenchAgentProjectActivityPort {
+  beginCommand(): () => void
+}
 
 /** 当前模型驱动。 */
 export type ConversationModel = ModelDriver
@@ -69,7 +72,7 @@ export interface ConversationWorkspaceOptions {
   showWidget(widget: WidgetView): void
   /** 把 Node 执行进程跑着时吐出的输出画到它所在的脚本卡上。 */
   showCommandOutput(output: NodeExecutionOutput): void
-  /** 这一轮 Agent 改项目的时间窗报到这里：「本轮改动」据此认出哪些改动是 Agent 做的。 */
+  /** 项目写操作与命令执行的生命周期通知。 */
   activity?: WorkbenchAgentProjectActivityPort
   /**
    * 一次项目编辑成功写完，带上它写到的路径（相对项目根）：语言服务据此当场刷新，不等文件监听。在那段改项目的

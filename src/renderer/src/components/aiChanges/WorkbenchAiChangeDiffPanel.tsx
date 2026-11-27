@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactElement, useEffect, useMemo, useRef } from 'react'
 import { ArrowLeftIcon, ArrowRightIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
@@ -11,10 +11,7 @@ import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import type { WorkbenchAiChangeTab } from '../../hooks/useWorkbenchAiChanges'
 import { buildWorkbenchAiChangeDiffView } from '../../models/chat/workbenchAiChangeRounds'
 import type { WorkbenchUnifiedDiffRow } from '../../models/git/workbenchGitDiffModel'
-import {
-  readWorkbenchRunChangeBaseFile,
-  useWorkbenchRunChangeRecord,
-} from '../../runtime/workbenchRunChangeRecords'
+import { useWorkbenchRunChangeRecord } from '../../runtime/workbenchRunChangeRecords'
 import pageStyles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 import { WorkbenchDiffLayoutToggle } from '../git/WorkbenchDiffLayoutToggle'
@@ -32,11 +29,6 @@ interface WorkbenchAiChangeDiffPanelProps {
   onOpenFile: (path: string, line: number) => void
 }
 
-interface BaseFileLoad {
-  readonly key: string
-  readonly content: string | null
-}
-
 /** 编辑器里对应到这处改动的行：第一行新增的行，纯删除时取删除处紧挨着的那一行。 */
 function findFirstChangedLine(rows: readonly WorkbenchUnifiedDiffRow[]): number {
   let lastNewLine = 1
@@ -48,13 +40,6 @@ function findFirstChangedLine(rows: readonly WorkbenchUnifiedDiffRow[]): number 
   return 1
 }
 
-/**
- * 「AI 改动」标签页：某一轮里某个文件改了什么，只读。
- *
- * 能拼出前后全文时显示整份文件、新增行绿底删除行红底，打开时跳到第一处改动；这一轮的起点快照读不到时
- * 退回补丁本身（只有改动附近的行），顶上标一句说明。这一轮里 AI 之外也改过的文件同样在顶上说明：差异里
- * 混着两边的改动。
- */
 export function WorkbenchAiChangeDiffPanel({
   projectRoot,
   tab,
@@ -63,7 +48,6 @@ export function WorkbenchAiChangeDiffPanel({
 }: WorkbenchAiChangeDiffPanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const diffViewRef = useRef<WorkbenchUnifiedDiffRowsHandle>(null)
-  // 还在跑的一轮每采一次，标签上的采集时刻就跟着换：对比内容随之重读。
   const { record, loading, failed } = useWorkbenchRunChangeRecord(
     projectRoot,
     tab.sessionId,
@@ -72,34 +56,10 @@ export function WorkbenchAiChangeDiffPanel({
   )
   const change = record?.changes.find((candidate) => candidate.path === tab.path) ?? null
   const status = change?.status ?? tab.status
-  const needsBaseFile =
-    !!change && change.status !== 'added' && !change.binary && !change.patchOmitted && !!change.patch
-  const baseKey = `${tab.id}\0${record?.baseCommitId ?? ''}`
-  const [baseLoad, setBaseLoad] = useState<BaseFileLoad | null>(null)
-
-  useEffect(() => {
-    if (!needsBaseFile || !record?.baseCommitId) return undefined
-    let cancelled = false
-    void readWorkbenchRunChangeBaseFile(projectRoot, tab.sessionId, tab.recordId, tab.path).then(
-      (content) => {
-        if (!cancelled) setBaseLoad({ key: baseKey, content })
-      }
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [baseKey, needsBaseFile, projectRoot, record?.baseCommitId, tab.path, tab.recordId, tab.sessionId])
-
-  const baseReady = !needsBaseFile || !record?.baseCommitId || baseLoad?.key === baseKey
-  const baseContent = baseLoad?.key === baseKey ? baseLoad.content : null
-  const view = useMemo(
-    () => (change && baseReady ? buildWorkbenchAiChangeDiffView(change, baseContent) : null),
-    [baseContent, baseReady, change]
-  )
+  const view = useMemo(() => (change ? buildWorkbenchAiChangeDiffView(change) : null), [change])
   const rows = view?.kind === 'rows' ? view.rows : null
   const changedLineCount = useMemo(
-    () =>
-      rows?.filter((row) => row.kind === 'addition' || row.kind === 'deletion').length ?? 0,
+    () => rows?.filter((row) => row.kind === 'addition' || row.kind === 'deletion').length ?? 0,
     [rows]
   )
 
@@ -139,8 +99,12 @@ export function WorkbenchAiChangeDiffPanel({
         <div className={pageStyles.diffViewerSummaryGroup}>
           {!!change && (
             <span className={styles.lineStats}>
-              <span className={styles.additions}>+{change.additions}</span>
-              <span className={styles.deletions}>-{change.deletions}</span>
+              <span className={styles.additions}>
+                +{change.statsOmitted ? '?' : change.additions}
+              </span>
+              <span className={styles.deletions}>
+                -{change.statsOmitted ? '?' : change.deletions}
+              </span>
             </span>
           )}
           <div className={pageStyles.diffViewerNav}>
@@ -178,18 +142,8 @@ export function WorkbenchAiChangeDiffPanel({
           </Button>
         </div>
       </div>
-      {change?.attribution === 'mixed' && (
-        <div className={pageStyles.aiChangesDiffFallbackNotice}>
-          {t('workbench.aiChangesMixedHint')}
-        </div>
-      )}
-      {view?.kind === 'rows' && !view.fullFile && (
-        <div className={pageStyles.aiChangesDiffFallbackNotice}>
-          {t('workbench.aiChangesPatchOnly')}
-        </div>
-      )}
       <div className={pageStyles.diffEditorScroll}>
-        {loading || (!!change && !baseReady) ? (
+        {loading ? (
           <Paragraph spacing="none" className={pageStyles.editorPlaceholder}>
             {t('workbench.aiChangesLoading')}
           </Paragraph>

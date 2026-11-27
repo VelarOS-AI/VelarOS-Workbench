@@ -41,13 +41,14 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
   标准 Node 执行环境复用应用共用的执行宿主（`WorkbenchShellHostRegistry`）。Node、基础工具与代码工具随产品分发，
   `node-runtime/node_modules` 保存固定版本依赖闭包，发行脚本核验全部资源字节及原包实际执行。
   项目、代码、图片、子任务、交互、组件、工作记忆、网页搜索和浏览器能力由 Platform 提供，模型按需发现合同。
-  原生程序和项目写操作各自登记 Agent 时间窗，完成后通知 Git、AI 改动采集与编辑器刷新；项目编辑先通知语言服务。
+  主任务和子任务内部预载「项目工具」Feature 的说明，文本取自 Desktop 内置的 `@velaros-ai/skill-project`；聊天框只显示用户输入与手选项。
+  原生程序和项目写操作各自登记 Agent 时间窗，完成后通知 Git 和编辑器刷新；项目编辑先通知语言服务。
   后台任务由应用持有，会话删除与应用退出时回收。
 - **会话协作**：`WorkbenchSessionPeers` 装配 `velaros:sessions` 的宿主端口。会话目录来自项目窗口，
   `ask` 等待匹配 inputId 的结果，`tell` 只向目标活动运行追加 guidance，空闲拒绝；依赖成环时拒绝。新会话沿用已批准的模型、
-  权限与沙箱，界面先建消息和改动检查点再回执，运行时接纳后才算投递成功。会话接收器跟随
+  权限与沙箱，界面先建消息再回执，运行时接纳后才算投递成功。会话接收器跟随
   renderer 会话存储，聊天面板收起仍可交接；项目关闭撤销等待。引导先在目标显示 pending 并回执，
-  再交给真实 steer，接纳后返回 queued；不建新运行或检查点，先到的 applied 不会降回 accepted。
+  再交给真实 steer，接纳后返回 queued；不建新运行，先到的 applied 不会降回 accepted。
 - **常驻服务**：与 Desktop 使用相同的 `velaros:console.start/list/read/stop` 合同，按需发现；进程由应用级 shell 宿主持有，按项目与宿主会话隔离，任务完成后保留，会话删除与退出应用时回收。每次询问模式在启动前确认命令，进程约束沿用项目沙箱；短命令仍使用 Node/Execa。
 - **后台进程**：聊天顶部进程入口查看当前会话的服务器与交互式命令，持续读取输出并提供输入、Ctrl+C、
   停止与强制停止。`WorkbenchShellHostRegistry` 按启动项目筛选宿主，IPC 再校验会话；命令 cwd 变化不改变归属。
@@ -95,7 +96,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
   项目里：标准 `on-request`、每次都问 `untrusted`、从不询问全权限；审批请求按同一套权限档答，
   `request_user_input` 画成提问卡。引擎的正文、思考、工具调用经 `EngineRunSurface` 变成与 Platform 运行同一套
   通知，工具调用是新通知 `conversation-tool-call`（renderer 画成 `tool-call` 块，工具名用界面认得的
-  `project:run` / `project:edit` …，计划更新成计划卡）；写文件、跑命令的时间窗同样报给改动归属账本。Workbench
+  `project:run` / `project:edit` …，计划更新成计划卡）；写文件和命令结束后刷新 Git 与编辑器。Workbench
   会话 → 引擎会话的对照在 `userData/agent-engines/sessions.json`，接不上时另开一段。引擎在本机的情况（装没装、
   登没登录、模型目录）经 `engines` 通道探，主进程缓存一分钟；登录与模型都归引擎自己。
 
@@ -109,13 +110,11 @@ renderer 侧 `standaloneWorkbenchChatAdapter.tsx` 把主进程推来的通知（
 ### AI 改动审阅
 
 Platform 项目编辑使用 `velaros:project.commit({ changes })`。Workbench 从正文变更的 `path` 和移动的
-`from` / `to` 收集项目内路径，在事务成功后先通知语言服务，再关闭归属时间窗并刷新界面。
+`from` / `to` 收集项目内路径，在事务成功后先通知语言服务，再刷新界面。
 
-每轮开跑前拍一个 Git 检查点（影子提交，不动用户的 HEAD / 索引），同时开这一轮的改动归属账本。Platform 的
-写操作都过同一道效果闸，闸放行（`effect-wait`）与这次操作跑完（`effect-run`）各报一次计量；项目与 shell
-模块的这两点之间就是一段 Agent 动手的时间窗，交给账本（`beginCommand`）。窗关闭时主进程推
-`conversation-project-activity`，renderer 据此实时采集改动、重读打开的文件；一轮结束做最终采集，改动卡列出
-Agent 改过的文件、差异与逐文件归属。回溯（把改动推回去）已下线。
+本轮提交与 Desktop 使用同一规则。主进程从执行追踪读取主任务与子任务成功执行 `velaros:project.commit` 的回执，
+按事务身份去重，按提交顺序归档逐文件补丁。终态带上摘要，改动卡从折叠的项目行展开，审核定位到这一轮的项目文件树。
+项目与 shell 操作结束时继续发送 `conversation-project-activity`，用于刷新 Git 状态和打开的文件。
 
 ## 文本文件的编码与换行
 

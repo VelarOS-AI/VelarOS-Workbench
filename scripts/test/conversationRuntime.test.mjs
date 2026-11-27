@@ -33,6 +33,7 @@ assert.equal(built.status, 0, built.stderr)
 const {
   createWorkbenchConversationRuntime,
   createWorkbenchConversationDispatcher,
+  WorkbenchChatRunChangeStore,
   WorkbenchMemoryService,
   WorkbenchShellHostRegistry,
   WorkbenchSessionPeers,
@@ -74,7 +75,6 @@ async function fixture(t, generate, options = {}) {
   // 项目编辑写到的文件：记下当时界面已经收到几次「改项目」通知（语言服务要先于界面拿到）
   const edits = []
   const activity = {
-    beginFileWrite: () => () => undefined,
     beginCommand: () => {
       windows.begun += 1
       return () => {
@@ -84,6 +84,7 @@ async function fixture(t, generate, options = {}) {
   }
   const shells = new WorkbenchShellHostRegistry()
   const memory = new WorkbenchMemoryService(join(directory, 'memory'))
+  const commits = new WorkbenchChatRunChangeStore(() => join(directory, 'commits'))
   // 网上查资料的无头页面：测试里只看模块挂没挂上，不真的开网页。
   const webPages = {
     openPage: async () => {
@@ -118,6 +119,7 @@ async function fixture(t, generate, options = {}) {
     }),
     environment: () => ({ os: 'test-os' }),
     activity: () => activity,
+    runChanges: options.trackCommits ? commits : undefined,
     projectFilesEdited: (ref, paths) =>
       edits.push({
         sessionId: ref.sessionId,
@@ -167,6 +169,7 @@ async function fixture(t, generate, options = {}) {
     windows,
     edits,
     memory,
+    commits,
     shells,
     browserCalls,
     sink,
@@ -182,15 +185,18 @@ test(
     const f = await fixture(
       t,
       async function* (frame, _signal, call) {
-        if (call === 1)
+        if (call === 1 || call === 3)
           yield execute(
             frame,
-            "// 改一下文件再跑命令\nimport {commit} from 'velaros:project';import {execa} from 'execa';await commit({changes:[{path:'hello.txt',oldText:'before',newText:'after'}]});await execa(process.execPath,['-e',\"require('node:fs').writeFileSync('shell-proof.txt','verified')\"]);console.log('NODE-PROOF');"
+            "// 改一下文件再跑命令\nimport {commit} from 'velaros:project';import {execa} from 'execa';await commit({requestId:'edit-hello',changes:[{path:'hello.txt',oldText:'before',newText:'after'}]});await execa(process.execPath,['-e',\"require('node:fs').writeFileSync('shell-proof.txt','verified')\"]);console.log('NODE-PROOF');"
           )
         else yield done(frame, '改好了')
         yield { type: 'finish', reason: 'stop' }
       },
-      { rules: [{ relativePath: 'AGENTS.md', content: '项目规则：回答要简短。' }] }
+      {
+        trackCommits: true,
+        rules: [{ relativePath: 'AGENTS.md', content: '项目规则：回答要简短。' }],
+      }
     )
     const support = f.shells.host(f.workspace, 'danger-full-access').observationSupport()
     assert.equal(typeof support.available, 'boolean')
@@ -205,9 +211,24 @@ test(
     assert.equal(await readFile(join(f.workspace, 'hello.txt'), 'utf8'), 'after\n')
     assert.equal(await readFile(join(f.workspace, 'shell-proof.txt'), 'utf8'), 'verified')
     assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-5)))
+    const summary = f.lastState()?.runChanges
+    assert.equal(summary?.fileCount, 1)
+    const record = await f.commits.read({
+      workspaceRoot: f.workspace,
+      sessionId: 'session-1',
+      recordId: summary.recordId,
+    })
+    assert.deepEqual(
+      record?.changes.map(({ path, additions, deletions }) => [path, additions, deletions]),
+      [['hello.txt', 1, 1]]
+    )
+    assert.match(record.changes[0].patches[0], /^\+after$/mu)
     const request = JSON.stringify(f.frames[0])
     assert.match(request, /你是 VelarOS Workbench（一个 IDE）里的编程助手/u)
     assert.match(request, /Shell 用 #，Node 用 \/\//u)
+    assert.match(f.frames[0].instructions, /@velaros-ai\/skill-project/u)
+    assert.equal(f.frames[0].instructions.split('## 确认项目与执行位置').length, 2)
+    assert.ok(!JSON.stringify(f.events).includes('## 确认项目与执行位置'))
     assert.match(request, /<project-rules path=\\"AGENTS\.md\\">\\n项目规则：回答要简短。/u)
     assert(f.windows.begun >= 2)
     assert.equal(f.windows.finished, f.windows.begun)
@@ -232,6 +253,11 @@ test(
           event.payload.text.includes('改好了')
       )
     )
+    const retry = f.runtime.submit(f.sink, f.request('重试同一次提交'))
+    await retry.accepted
+    await retry.completed
+    assert.equal(f.lastState()?.kind, 'done')
+    assert.equal(f.lastState()?.runChanges, undefined)
   }
 )
 
@@ -810,22 +836,38 @@ test(
   'real child execution reaches the Workbench thread transcript before resources close',
   { timeout: 30_000 },
   async (t) => {
-    const f = await fixture(t, async function* (frame, _signal, call) {
-      if (call === 1)
-        yield execute(
-          frame,
-          "// 派发独立审查\nimport {start,wait} from 'velaros:agents';const job=await start({title:'检查输出，保留标点',task:'打印 CHILD_TRACE_PROOF 再完成'});await wait({id:job.id});"
-        )
-      else if (call === 2)
-        yield execute(frame, "// 检查项目\nconsole.log('CHILD_TRACE_PROOF'.repeat(800))")
-      else yield done(frame, call === 3 ? '子任务完成' : '父任务完成')
-      yield { type: 'usage', inputTokens: 1000, outputTokens: 20, cacheReadTokens: 800 }
-      yield { type: 'finish', reason: 'stop' }
-    })
+    const f = await fixture(
+      t,
+      async function* (frame, _signal, call) {
+        if (call === 1)
+          yield execute(
+            frame,
+            "// 派发独立审查\nimport {start,wait} from 'velaros:agents';const job=await start({title:'检查输出，保留标点',task:'打印 CHILD_TRACE_PROOF 再完成'});await wait({id:job.id});"
+          )
+        else if (call === 2)
+          yield execute(
+            frame,
+            "// 检查并提交\nimport {commit} from 'velaros:project';await commit({changes:[{path:'worker.txt',before:null,after:'worker'}]});console.log('CHILD_TRACE_PROOF'.repeat(800))"
+          )
+        else yield done(frame, call === 3 ? '子任务完成' : '父任务完成')
+        yield { type: 'usage', inputTokens: 1000, outputTokens: 20, cacheReadTokens: 800 }
+        yield { type: 'finish', reason: 'stop' }
+      },
+      { trackCommits: true }
+    )
     const run = f.runtime.submit(f.sink, f.request('test child trace'))
     await run.accepted
     await run.completed
     assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-5)))
+    assert.ok(f.frames[1].instructions.includes('## 确认项目与执行位置'))
+    const summary = f.lastState()?.runChanges
+    assert.equal(summary?.fileCount, 1)
+    const record = await f.commits.read({
+      workspaceRoot: f.workspace,
+      sessionId: 'session-1',
+      recordId: summary.recordId,
+    })
+    assert.equal(record?.changes[0].path, 'worker.txt')
     const agents = f.events
       .filter((event) => event.kind === 'conversation-agent')
       .map((event) => event.payload)

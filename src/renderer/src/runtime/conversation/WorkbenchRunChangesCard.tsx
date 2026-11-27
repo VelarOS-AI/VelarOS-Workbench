@@ -4,10 +4,11 @@ import {
   type ReactElement,
   useCallback,
   useContext,
+  useId,
   useMemo,
   useState,
 } from 'react'
-import { MagnifyingGlassIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import { CaretRightIcon, MagnifyingGlassIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import {
@@ -17,6 +18,7 @@ import {
   type FileDiffSummary,
 } from '@velaros-ai/ui/conversation'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { isPresent, optionalWhen } from '@velaros-ai/velaros/core'
 
@@ -46,9 +48,10 @@ export const WorkbenchRunChangesScopeContext = createContext<WorkbenchRunChanges
 
 function buildRunChangeDiffSummary(
   change: WorkbenchChatRunFileChange,
+  patch: string,
   labels: { binary: string; patchOmitted: string }
 ): FileDiffSummary {
-  if (change.patchOmitted)
+  if (!patch && change.patchOmitted)
     return {
       added: change.additions,
       removed: change.deletions,
@@ -56,7 +59,7 @@ function buildRunChangeDiffSummary(
         { kind: 'context', oldLineNumber: null, newLineNumber: null, text: labels.patchOmitted },
       ],
     }
-  return buildFileDiffSummaryFromUnifiedPatch(change.patch, {
+  return buildFileDiffSummaryFromUnifiedPatch(patch, {
     additions: change.additions,
     deletions: change.deletions,
     binary: change.binary,
@@ -71,14 +74,6 @@ interface WorkbenchRunChangesCardProps {
   onReviewEntries?: (entries: FileChangeSummaryListEntry[]) => void | Promise<void>
 }
 
-/**
- * 一轮回答末尾的「本轮改动」卡（Desktop `MessageFileChangeSummary` 的对位件）：这一轮 AI 在磁盘上改了
- * 哪些文件、各增删多少行，展开看逐行差异，点开跳进编辑器。
- *
- * 数据是这一轮开跑前后两个工作树快照的 git diff，按改动归属只留 Agent 改过的文件；AI 之外也改过的文件
- * 在路径后面注明（它的差异里混着两边的改动）。Workbench 的文件编辑没有可单独撤销的事务，所以不带
- * Desktop 的逐文件撤销 / 恢复——整轮撤回走回溯。
- */
 export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
   messageId,
   formatPathForDisplay,
@@ -95,7 +90,11 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
     summary?.capturedAt ?? 0
   )
   const [expandedKeys, setExpandedKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const [expanded, setExpanded] = useState(false)
+  const bodyId = useId()
+  const titleId = `${bodyId}-project`
   const projectRoot = scope?.projectRoot ?? ''
+  const projectName = projectRoot.split(/[\\/]/u).filter(Boolean).at(-1) ?? projectRoot
   const binaryLabel = t('chat.fileChangeSummaryBinary')
   const patchOmittedLabel = t('chat.fileChangeSummaryPatchOmitted')
   const entries = useMemo<FileChangeSummaryListEntry[]>(
@@ -106,12 +105,14 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
         path: change.path,
         added: change.additions,
         removed: change.deletions,
-        diffSummaries: [
-          buildRunChangeDiffSummary(change, {
+        addedLabel: optionalWhen(change.statsOmitted, '+?'),
+        removedLabel: optionalWhen(change.statsOmitted, '-?'),
+        diffSummaries: (change.patches.length ? change.patches : ['']).map((patch) =>
+          buildRunChangeDiffSummary(change, patch, {
             binary: binaryLabel,
             patchOmitted: patchOmittedLabel,
-          }),
-        ],
+          })
+        ),
       })),
     [binaryLabel, patchOmittedLabel, projectRoot, record]
   )
@@ -123,19 +124,6 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
       return next
     })
   }, [])
-  const mixedPathSuffix = t('workbench.chatRunChangesMixedPathSuffix')
-  const formatEntryPath = useMemo(() => {
-    const mixedPaths = new Set(
-      (record?.changes ?? [])
-        .filter((change) => change.attribution === 'mixed')
-        .map((change) => change.path)
-    )
-    return (path: string): string => {
-      const displayPath = formatPathForDisplay ? formatPathForDisplay(path) : path
-      return mixedPaths.has(path) ? `${displayPath}${mixedPathSuffix}` : displayPath
-    }
-  }, [formatPathForDisplay, mixedPathSuffix, record])
-
   if (!summary || (summary.fileCount === 0 && !summary.error)) return null
 
   if (summary.error)
@@ -146,49 +134,77 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
     )
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} role="group" aria-labelledby={titleId}>
       <div className={styles.header}>
         <div className={styles.headerSummary}>
-          <Text>{t('chat.fileChangeSummaryFilesChanged', { count: summary.fileCount })}</Text>
-          <Text className={styles.added}>+{summary.additions}</Text>
-          <Text className={styles.removed}>-{summary.deletions}</Text>
+          <span id={titleId} className={styles.projectTitle} title={projectRoot}>
+            {projectName}
+          </span>
+          <Text>{t('chat.fileChangeSummaryCommitted', { count: summary.fileCount })}</Text>
+          <Text className={styles.added}>+{summary.statsOmitted ? '?' : summary.additions}</Text>
+          <Text className={styles.removed}>-{summary.statsOmitted ? '?' : summary.deletions}</Text>
         </div>
-        {(!!scope?.onReviewRound || !!onReviewEntries) && (
-          <Button
+        <div className={styles.headerActions}>
+          {(!!scope?.onReviewRound || !!onReviewEntries) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              hoverBackground={false}
+              className={styles.reviewButton}
+              disabled={entries.length === 0}
+              onClick={() => {
+                if (scope?.onReviewRound)
+                  scope.onReviewRound({ sessionId: scope.sessionId, recordId: summary.recordId })
+                else void onReviewEntries?.(entries)
+              }}
+            >
+              <MagnifyingGlassIcon size={15} />
+              {t('chat.fileChangeSummaryReview')}
+            </Button>
+          )}
+          <IconButton
+            label={t(
+              expanded
+                ? 'chat.fileChangeSummaryCollapseProject'
+                : 'chat.fileChangeSummaryExpandProject',
+              { project: projectName }
+            )}
             variant="ghost"
-            size="sm"
+            size="icon-sm"
             hoverBackground={false}
-            className={styles.reviewButton}
-            disabled={entries.length === 0}
-            onClick={() => {
-              if (scope?.onReviewRound)
-                scope.onReviewRound({ sessionId: scope.sessionId, recordId: summary.recordId })
-              else void onReviewEntries?.(entries)
-            }}
+            className={styles.expandButton}
+            aria-controls={bodyId}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
           >
-            <MagnifyingGlassIcon size={15} />
-            {t('chat.fileChangeSummaryReview')}
-          </Button>
-        )}
-      </div>
-      {loading ? (
-        <div className={styles.feedback}>
-          <SpinnerGapIcon size={14} className={styles.spinIcon} />
-          <Text>{t('chat.fileChangeSummaryLoading')}</Text>
+            <CaretRightIcon size={15} aria-hidden="true" className={styles.chevron} />
+          </IconButton>
         </div>
-      ) : failed ? (
-        <div className={styles.feedback}>{t('chat.fileChangeSummaryUnavailable')}</div>
-      ) : (
-        <FileChangeSummaryList
-          entries={entries}
-          expandedKeys={expandedKeys}
-          formatPathForDisplay={formatEntryPath}
-          onToggleEntry={toggleEntry}
-          onOpenEntry={optionalWhen(isPresent(onOpenEntry), (entry: FileChangeSummaryListEntry) => {
-            void onOpenEntry?.(entry)
-          })}
-        />
-      )}
+      </div>
+      <div id={bodyId} hidden={!expanded}>
+        {expanded &&
+          (loading ? (
+            <div className={styles.feedback}>
+              <SpinnerGapIcon size={14} className={styles.spinIcon} />
+              <Text>{t('chat.fileChangeSummaryLoading')}</Text>
+            </div>
+          ) : failed ? (
+            <div className={styles.feedback}>{t('chat.fileChangeSummaryUnavailable')}</div>
+          ) : (
+            <FileChangeSummaryList
+              entries={entries}
+              expandedKeys={expandedKeys}
+              formatPathForDisplay={formatPathForDisplay}
+              onToggleEntry={toggleEntry}
+              onOpenEntry={optionalWhen(
+                isPresent(onOpenEntry),
+                (entry: FileChangeSummaryListEntry) => {
+                  void onOpenEntry?.(entry)
+                }
+              )}
+            />
+          ))}
+      </div>
     </div>
   )
 })

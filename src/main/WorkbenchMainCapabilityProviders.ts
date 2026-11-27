@@ -1,5 +1,3 @@
-import { WorkbenchChatCheckpointService } from './workspace/git/WorkbenchChatCheckpoints'
-import { WorkbenchChatRunAttribution } from './workspace/git/WorkbenchChatRunAttribution'
 import { WorkbenchChatRunChangeStore } from './workspace/git/WorkbenchChatRunChanges'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
@@ -19,15 +17,8 @@ export interface WorkbenchMainCapabilityProviders {
   readonly parts: WorkbenchAppParts
   readonly fileSystem: WorkbenchProjectFileSystem
   readonly git: WorkbenchGitService
-  /** 「本轮改动」的工作区检查点（git 影子快照）。 */
-  readonly chatCheckpoints: WorkbenchChatCheckpointService
   /** 每轮「本轮改动」的补丁记录（落在数据区的文件里）。 */
   readonly chatRunChanges: WorkbenchChatRunChangeStore
-  /**
-   * 每轮改动的归属账本：会话运行时报 Agent 改项目的时间窗，文件监听报原始事件，Workbench 的写入口报
-   * 用户亲手的改动；「本轮改动」据此只认 Agent 的改动。
-   */
-  readonly chatRunAttribution: WorkbenchChatRunAttribution
   readonly language: WorkbenchLanguageServiceWorkerClient
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
@@ -44,40 +35,31 @@ export function createDefaultWorkbenchMainCapabilityProviders(
   dataRootDir: string,
   dependencies: WorkbenchAppPartsDependencies,
   /**
-   * 登录 shell 的环境：Git 命令连同它跑的提交钩子、git-lfs 都跑在里面；拍检查点的 `git add` 要跑仓库配置的
-   * 过滤器，也用这一份。
+   * 登录 shell 的环境：Git 命令连同它跑的提交钩子、git-lfs 都跑在里面。
    */
   loginEnvironment: () => Promise<NodeJS.ProcessEnv>
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
   const parts = createWorkbenchAppParts(dataRootDir, { ...dependencies, loginEnvironment })
-  const chatCheckpoints = new WorkbenchChatCheckpointService(
-    () => parts.storagePaths.getChatCheckpointIndexesDir(),
-    loginEnvironment
-  )
   const watch = new WorkbenchFileWatcher({
     onFilesChanged: (event) => {
-      void language.projectFilesChanged({
-        projectRoot: event.rootPath,
-        paths: event.paths,
-      }).catch(() => {
-        // 文件监听不能因语言服务器退出或项目切换制造未处理的 Promise 拒绝。
-      })
+      void language
+        .projectFilesChanged({
+          projectRoot: event.rootPath,
+          paths: event.paths,
+        })
+        .catch(() => {
+          // 文件监听不能因语言服务器退出或项目切换制造未处理的 Promise 拒绝。
+        })
     },
   })
-  const chatRunAttribution = new WorkbenchChatRunAttribution(watch)
   return {
     parts,
     fileSystem: new WorkbenchProjectFileSystem(),
     git: new WorkbenchGitService({ environment: loginEnvironment }),
-    chatCheckpoints,
-    chatRunChanges: new WorkbenchChatRunChangeStore(
-      chatCheckpoints,
-      () => parts.storagePaths.getChatRunChangesDir(),
-      Date.now,
-      chatRunAttribution
+    chatRunChanges: new WorkbenchChatRunChangeStore(() =>
+      parts.storagePaths.getChatRunChangesDir()
     ),
-    chatRunAttribution,
     language,
     watch,
     workspace: new ProjectCapabilityProvider(),

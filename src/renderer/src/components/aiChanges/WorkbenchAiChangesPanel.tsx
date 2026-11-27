@@ -153,7 +153,7 @@ const WorkbenchAiChangeRoundItem = memo(function WorkbenchAiChangeRoundItem({
         <span className={styles.roundLabel}>
           {t('workbench.aiChangesRunLabel', { number: round.runNumber })}
         </span>
-        {round.live && <span className={styles.roundLive}>{t('workbench.aiChangesLive')}</span>}
+
         <span className={styles.roundTime}>{timeLabel}</span>
         <span className={styles.roundStats}>
           <span className={styles.additions}>+{round.additions}</span>
@@ -217,7 +217,10 @@ function WorkbenchAiChangeRoundFiles({
       return next
     })
 
-  const renderNodes = (nodes: readonly WorkbenchAiChangeTreeNode[], depth: number): ReactElement[] =>
+  const renderNodes = (
+    nodes: readonly WorkbenchAiChangeTreeNode[],
+    depth: number
+  ): ReactElement[] =>
     nodes.map((node) => {
       const indent = { paddingInlineStart: `${10 + depth * 12}px` }
       if (node.kind === 'directory') {
@@ -245,7 +248,6 @@ function WorkbenchAiChangeRoundFiles({
         )
       }
       const { change } = node
-      const mixed = change.attribution === 'mixed'
       return (
         <button
           key={node.key}
@@ -255,14 +257,12 @@ function WorkbenchAiChangeRoundFiles({
           data-file="true"
           data-active={activePath === change.path}
           data-status={change.status}
-          data-attribution={change.attribution}
-          title={mixed ? `${change.path}\n${t('workbench.aiChangesMixedHint')}` : change.path}
+          title={change.path}
           onClick={() => onOpenFile(round, change)}
         >
           <span className={styles.treeCaretSpacer} />
           <WorkbenchFileTypeIcon fileName={change.path} size={14} />
           <span className={styles.treeName}>{node.name}</span>
-          {mixed && <span className={styles.statusChip}>{t('workbench.aiChangesMixedChip')}</span>}
           <span className={styles.treeStats}>
             {change.additions > 0 && <span className={styles.additions}>+{change.additions}</span>}
             {change.deletions > 0 && <span className={styles.deletions}>-{change.deletions}</span>}
@@ -273,7 +273,11 @@ function WorkbenchAiChangeRoundFiles({
     })
 
   return (
-    <div className={styles.tree} role="tree" aria-label={t('workbench.aiChangesRunLabel', { number: round.runNumber })}>
+    <div
+      className={styles.tree}
+      role="tree"
+      aria-label={t('workbench.aiChangesRunLabel', { number: round.runNumber })}
+    >
       {renderNodes(tree, 0)}
     </div>
   )

@@ -306,7 +306,6 @@ beforeEach(async () => {
       engines: [new ClaudeCodeEngine(environment), new CodexEngine(environment, '0.0.0-test')],
       sessions,
       activity: () => ({
-        beginFileWrite: () => () => undefined,
         beginCommand: () => {
           activity.push('begin')
           return () => activity.push('end')
@@ -397,7 +396,9 @@ async function readLog(): Promise<Array<Record<string, unknown>>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>)
 }
 
-async function waitForEngineLog(predicate: (entry: Record<string, unknown>) => boolean): Promise<void> {
+async function waitForEngineLog(
+  predicate: (entry: Record<string, unknown>) => boolean
+): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if ((await readLog()).some(predicate)) return
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -592,7 +593,10 @@ describe('Codex engine', () => {
     assert.deepEqual(await cancellation, { aborted: true })
     await assert.rejects(submitted.accepted, /运行已停止/u)
     await assert.rejects(submitted.completed, /运行已停止/u)
-    assert.equal((await readLog()).some((entry) => entry.codex === 'turn/start'), false)
+    assert.equal(
+      (await readLog()).some((entry) => entry.codex === 'turn/start'),
+      false
+    )
   })
 
   test('an unconfirmed stop keeps its owner and mapping until a late turn can be interrupted', async () => {
@@ -613,14 +617,23 @@ describe('Codex engine', () => {
     await assert.rejects(deletion, { code: 'TIMEOUT' })
     assert.equal(await rig.sessions.get('codex', ref()), 'thread-1')
     assert.throws(() => rig.runtime.submit(record().sink, request('codex', 'again', 'never-ask')))
-    assert.equal(first.states.some((state) => state.kind === 'aborted'), false)
-    assert.equal(second.states.some((state) => state.kind === 'aborted'), false)
+    assert.equal(
+      first.states.some((state) => state.kind === 'aborted'),
+      false
+    )
+    assert.equal(
+      second.states.some((state) => state.kind === 'aborted'),
+      false
+    )
 
     await writeFile(release, 'release')
     await submitted.accepted
     await submitted.completed
     assert.equal(first.states.at(-1)?.kind, 'aborted')
-    assert.equal(second.states.some((state) => state.kind === 'aborted'), false)
+    assert.equal(
+      second.states.some((state) => state.kind === 'aborted'),
+      false
+    )
     assert.equal((await readLog()).filter((entry) => entry.codexProcess !== undefined).length, 1)
     assert.deepEqual(await rig.runtime.cancel(other), { aborted: true })
     await otherRun.completed
@@ -640,14 +653,25 @@ describe('Codex engine', () => {
 
   test('global close joins engine processes that are still initializing', async () => {
     let enterEnvironment!: () => void
-    const entered = new Promise<void>((resolve) => { enterEnvironment = resolve })
+    const entered = new Promise<void>((resolve) => {
+      enterEnvironment = resolve
+    })
     let releaseEnvironment!: (env: NodeJS.ProcessEnv) => void
-    const environment = new Promise<NodeJS.ProcessEnv>((resolve) => { releaseEnvironment = resolve })
+    const environment = new Promise<NodeJS.ProcessEnv>((resolve) => {
+      releaseEnvironment = resolve
+    })
     const beforeSpawn = new WorkbenchEngineConversationRuntime({
-      engines: [new CodexEngine({ getEnvironment: () => {
-        enterEnvironment()
-        return environment
-      } }, '0.0.0-test')],
+      engines: [
+        new CodexEngine(
+          {
+            getEnvironment: () => {
+              enterEnvironment()
+              return environment
+            },
+          },
+          '0.0.0-test'
+        ),
+      ],
       sessions: rig.sessions,
     })
     const preparing = beforeSpawn.submit(record().sink, request('codex', 'hello', 'never-ask'))
@@ -657,7 +681,10 @@ describe('Codex engine', () => {
     await beforeSpawnClose
     await assert.rejects(preparing.accepted, /运行已停止/u)
     await assert.rejects(preparing.completed, /运行已停止/u)
-    assert.equal((await readLog()).some((entry) => entry.codexProcess !== undefined), false)
+    assert.equal(
+      (await readLog()).some((entry) => entry.codexProcess !== undefined),
+      false
+    )
 
     for (const id of ['codex', 'claude-code'] as const) {
       rig.env.FAKE_CODEX_HOLD_METHOD = 'initialize'
@@ -694,7 +721,9 @@ describe('Codex engine', () => {
       finish = resolve
     })
     let finishOtherClose!: () => void
-    const otherClose = new Promise<void>((resolve) => { finishOtherClose = resolve })
+    const otherClose = new Promise<void>((resolve) => {
+      finishOtherClose = resolve
+    })
     const runtime = new WorkbenchEngineConversationRuntime({
       sessions: rig.sessions,
       engines: [
@@ -728,12 +757,17 @@ describe('Codex engine', () => {
     await submitted.accepted
     let closeFinished = false
     const closing = runtime.close()
-    void closing.catch(() => { closeFinished = true })
+    void closing.catch(() => {
+      closeFinished = true
+    })
     await new Promise((resolve) => setImmediate(resolve))
     assert.equal(closeFinished, false)
     finishOtherClose()
     await assert.rejects(closing, /Process close failed[\s\S]*Other close failed/u)
-    assert.equal(recorded.states.some((state) => state.kind === 'aborted'), false)
+    assert.equal(
+      recorded.states.some((state) => state.kind === 'aborted'),
+      false
+    )
     let cancelled = false
     const cancellation = runtime.cancel(ref()).then((result) => {
       cancelled = true
@@ -760,28 +794,34 @@ describe('Codex engine', () => {
     await assert.rejects(submitted.accepted, /Initialize rejected/u)
     await assert.rejects(submitted.completed, /Initialize rejected/u)
     assert.equal(recorded.states.at(-1)?.kind, 'error')
-    const pid = (await readLog()).findLast((entry) => typeof entry.codexProcess === 'number')?.codexProcess
+    const pid = (await readLog()).findLast(
+      (entry) => typeof entry.codexProcess === 'number'
+    )?.codexProcess
     assert.ok(typeof pid === 'number')
     assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' })
   })
 
   test('an admitted failure rejects deletion and preserves the engine mapping despite cancellation', async () => {
     let finish!: () => void
-    const failed = new Promise<void>((resolve) => { finish = resolve })
+    const failed = new Promise<void>((resolve) => {
+      finish = resolve
+    })
     const runtime = new WorkbenchEngineConversationRuntime({
       sessions: rig.sessions,
-      engines: [{
-        id: 'codex',
-        label: 'controlled failure',
-        status: async () => ({ id: 'codex', available: true, models: [] }),
-        run: async (input) => {
-          await input.sessionStarted('native-failure')
-          input.accepted()
-          await failed
-          throw new Error('Protocol failed after acceptance')
+      engines: [
+        {
+          id: 'codex',
+          label: 'controlled failure',
+          status: async () => ({ id: 'codex', available: true, models: [] }),
+          run: async (input) => {
+            await input.sessionStarted('native-failure')
+            input.accepted()
+            await failed
+            throw new Error('Protocol failed after acceptance')
+          },
+          close: async () => {},
         },
-        close: async () => {},
-      }],
+      ],
     })
     const recorded = record()
     const submitted = runtime.submit(recorded.sink, request('codex', 'hello', 'never-ask'))
@@ -804,7 +844,9 @@ describe('Codex engine', () => {
     await once(child, 'spawn')
     const closed = waitForEngineProcessClose(child)
     let physicallyClosed = false
-    void closed.then(() => { physicallyClosed = true })
+    void closed.then(() => {
+      physicallyClosed = true
+    })
     const original = CommandHelper.prototype.terminateForegroundProcess
     const signals: NodeJS.Signals[] = []
     const failing = spyOn(CommandHelper.prototype, 'terminateForegroundProcess').mockImplementation(
@@ -814,8 +856,9 @@ describe('Codex engine', () => {
       }
     )
     try {
-      await assert.rejects(terminateEngineProcess(child), (error: unknown) =>
-        error instanceof EngineProcessCloseError && error.errors.length === 2
+      await assert.rejects(
+        terminateEngineProcess(child),
+        (error: unknown) => error instanceof EngineProcessCloseError && error.errors.length === 2
       )
       assert.deepEqual(signals, ['SIGTERM', 'SIGKILL'])
       assert.equal(physicallyClosed, false)
@@ -1088,7 +1131,9 @@ describe('conversation dispatcher', () => {
     void cancellation.then(() => {
       cancelled = true
     })
-    assert.throws(() => dispatcher.submit(sink, { ...request('codex', 'hi', 'never-ask'), ...target }))
+    assert.throws(() =>
+      dispatcher.submit(sink, { ...request('codex', 'hi', 'never-ask'), ...target })
+    )
     releasePreparation.release()
     await finishing.promise
     assert.equal(deleted, false)

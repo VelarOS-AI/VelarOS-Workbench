@@ -16,8 +16,8 @@ import {
 import { ConversationTextBoard } from '../conversation/ConversationText'
 import { ConversationThinkingBoard } from '../conversation/ConversationThinking'
 import type { WorkbenchConversationSink } from '../conversation/WorkbenchConversationRuntime'
+import type { WorkbenchAgentProjectActivityPort } from '../conversation/WorkbenchConversationTypes'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
-import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 /** 同一次运行里一张工具卡两次进度之间至少隔多久，毫秒；与正文、思考同一个节奏。 */
 const ToolProgressIntervalMs = 150
@@ -81,7 +81,7 @@ export class EngineRunSurface {
   private progressTimer?: ReturnType<typeof setTimeout>
   private progressPublishedAt = 0
   private readonly pending = new Map<string, PendingInteraction>()
-  private readonly windows = new Map<string, () => void>()
+  private readonly windows = new Map<string, (() => void) | undefined>()
   private interactionSequence = 0
   private currentPhase?: 'researching' | 'executing'
   private retries = 0
@@ -259,19 +259,18 @@ export class EngineRunSurface {
   // 改项目的时间窗
   // -------------------------------------------------------------------------------------------
 
-  /** 引擎开始改项目（写文件、跑命令）：从现在到 endProjectActivity 之间的改动算 Agent 的。 */
+  /** 引擎开始改项目（写文件、跑命令）：登记调用，完成后刷新 Git 与编辑器。 */
   public beginProjectActivity(key: string): void {
-    if (!this.options.activity || this.windows.has(key)) return
-    this.windows.set(key, this.options.activity.beginCommand())
+    if (this.windows.has(key)) return
+    this.windows.set(key, this.options.activity?.beginCommand())
   }
 
-  /** 这段改项目结束：带上写到的文件（相对项目根），界面据此刷新「本轮改动」与 Git 状态。 */
+  /** 这段改项目结束：带上写到的文件（相对项目根），界面据此刷新 Git 状态。 */
   public endProjectActivity(key: string, editedPaths: readonly string[] = []): void {
     const finish = this.windows.get(key)
-    if (!finish) return
-    this.windows.delete(key)
+    if (!this.windows.delete(key)) return
     if (editedPaths.length > 0) this.options.filesEdited?.(editedPaths)
-    finish()
+    finish?.()
     this.sink.notice(ConversationProjectActivityNotice, { runId: this.runId })
   }
 

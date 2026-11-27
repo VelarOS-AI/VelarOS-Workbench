@@ -52,7 +52,7 @@ import { WorkbenchFsChannels } from '../../shared/workbenchFs'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchWindowManager } from '../projects/WorkbenchWindowManager'
 
-import type { WorkbenchUserWriteSink } from './git/WorkbenchChatRunAttribution'
+import type { WorkbenchUserWriteSink } from './language/WorkbenchLanguageWriteSync'
 import {
   callWithEnvelope,
   callWithEnvelopeSync,
@@ -363,7 +363,9 @@ export function registerWorkbenchFsIpc(
       if (commandsClosed || closingCommandOwners.has(senderId))
         throw new AppError('CLOSED', '项目命令正在关闭。')
       const controller = new AbortController()
-      const cancel = (): void => { controller.abort() }
+      const cancel = (): void => {
+        controller.abort()
+      }
       sender.once('destroyed', cancel)
       sender.once('render-process-gone', cancel)
       const active = commands.get(senderId) ?? new Map<AbortController, Promise<unknown>>()
@@ -740,7 +742,9 @@ function createContentSearchRegistry(): ContentSearchRegistry {
       let owner = owners.get(senderId)
       if (owner?.closing) throw new AppError('CLOSED', 'Content search owner is closing.')
       if (!owner) {
-        const cancel = (): void => { void cancelForSender(senderId) }
+        const cancel = (): void => {
+          void cancelForSender(senderId)
+        }
         owner = {
           pending: new Set(),
           closing: false,

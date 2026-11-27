@@ -14,8 +14,8 @@ import type {
   WorkbenchConversationRef,
   WorkbenchConversationSink,
 } from '../conversation/WorkbenchConversationRuntime'
+import type { WorkbenchAgentProjectActivityPort } from '../conversation/WorkbenchConversationTypes'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
-import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 import { withTimeout } from './WorkbenchEngineProcess'
 import { EngineRunSurface } from './WorkbenchEngineRunSurface'
@@ -117,7 +117,11 @@ export class WorkbenchEngineConversationRuntime {
     if (!run) return { aborted: false }
     run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
     try {
-      await withTimeout(run.completed, InterruptGraceMs, workbenchMainText('engines.stopUnconfirmed'))
+      await withTimeout(
+        run.completed,
+        InterruptGraceMs,
+        workbenchMainText('engines.stopUnconfirmed')
+      )
     } catch (error) {
       if (run.outcome !== 'aborted') throw error
     }
@@ -158,7 +162,10 @@ export class WorkbenchEngineConversationRuntime {
       result.status === 'rejected' && runs[index]?.outcome !== 'aborted' ? [result.reason] : []
     )
     if (failures.length)
-      throw new AggregateError(failures, failures.map((error) => AppError.getMessage(error)).join('\n'))
+      throw new AggregateError(
+        failures,
+        failures.map((error) => AppError.getMessage(error)).join('\n')
+      )
   }
 
   /** 各引擎在本机的情况；探一次要起一回命令行，结果缓存一分钟，refresh 时重探。 */
@@ -183,16 +190,26 @@ export class WorkbenchEngineConversationRuntime {
           new AppError('CANCELLED', workbenchMainText('conversation.runStopped'))
         )
       // 先关闭真实引擎，才能解除握手/turn-start等尚无回执的等待。
-      const closed = await Promise.allSettled([...this.engines.values()].map((engine) => engine.close()))
-      const closeFailures = closed.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+      const closed = await Promise.allSettled(
+        [...this.engines.values()].map((engine) => engine.close())
+      )
+      const closeFailures = closed.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : []
+      )
       if (closeFailures.length)
-        throw new AggregateError(closeFailures, closeFailures.map((error) => AppError.getMessage(error)).join('\n'))
+        throw new AggregateError(
+          closeFailures,
+          closeFailures.map((error) => AppError.getMessage(error)).join('\n')
+        )
       const completed = await Promise.allSettled(runs.map((run) => run.completed))
       const failures = completed.flatMap((result, index) =>
         result.status === 'rejected' && runs[index]?.outcome !== 'aborted' ? [result.reason] : []
       )
       if (failures.length)
-        throw new AggregateError(failures, failures.map((error) => AppError.getMessage(error)).join('\n'))
+        throw new AggregateError(
+          failures,
+          failures.map((error) => AppError.getMessage(error)).join('\n')
+        )
     })()
     return this.closing
   }

@@ -96,7 +96,10 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /DefaultWorkbenchReasoningLevel: ReasoningLevel = 'medium'/)
     // 没有旧档位的迁移：存的不是这五档之一就用默认档。
     assert.doesNotMatch(adapter, /off: 'low'|ultra: 'max'/)
-    assert.match(adapter, /readReasoningLevel\(window\.localStorage\.getItem\(ReasoningLevelStorageKey\)\)\s*\?\?\s*DefaultWorkbenchReasoningLevel/)
+    assert.match(
+      adapter,
+      /readReasoningLevel\(window\.localStorage\.getItem\(ReasoningLevelStorageKey\)\)\s*\?\?\s*DefaultWorkbenchReasoningLevel/
+    )
     // 思考力度随每一轮与执行模式一起发给主进程。
     assert.match(adapter, /reasoningLevel,\n\s*executionModes,/)
     // Electron 里没有语音识别服务（与 Desktop 相同）。
@@ -133,26 +136,11 @@ void describe('Workbench chat composer parity', () => {
       slots,
       /messageFileChangeSummary: \(\{ message, formatPathForDisplay, onOpenEntry, onReviewEntries \}\) =>/
     )
-    // 每轮开跑前拍检查点；一轮收尾后拿它比出本轮改动（由这一轮的采集在 finish 时发出）；补丁落主进程记录文件，标记上只挂摘要。
-    assert.match(adapter, /const runCheckpoint = await captureRunCheckpoint\(/)
+    assert.doesNotMatch(adapter, /captureChatCheckpoint|captureChatRunChanges/u)
     assert.match(
       adapter,
-      /run\.runChangeCapture = createRunChangeCapture\(projectRoot, sessionId, runCheckpoint\)/
+      /attachStandaloneRunChanges\(marked\.messageRunMarkers, anchor, runChanges\)/u
     )
-    assert.match(adapter, /settle: \(\) => captureRunChanges\(projectRoot, sessionId, checkpoint\)/)
-    assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
-    // 收尾的最终采集带着标记：主进程等最后一条命令的余量走完再拍，采完关掉这一轮的改动归属账本。
-    assert.match(adapter, /baseCommitId,\n\s*final: true,\n\s*\}\)/)
-    // 摘要挂不上（这一轮没有回答、采集失败）时撤下「进行中」，记录连同归属账本一起清掉；挂上后被替换掉的旧记录同样清掉。
-    assert.match(
-      adapter,
-      /withdrawLiveRunChanges\(projectRoot, sessionId, checkpoint\.id\)\n\s*releaseRunChangeRecords\(projectRoot, sessionId, \[checkpoint\.id\]\)/
-    )
-    assert.match(
-      adapter,
-      /if \(orphaned\) releaseRunChangeRecords\(projectRoot, sessionId, \[orphaned\]\)/
-    )
-    // 被移除的会话，连同它的检查点与改动记录一起清掉。
     assert.match(adapter, /releaseRemovedSession\(target\)/)
     assert.match(adapter, /releaseRunChangeRecords\(session\.projectRoot, session\.sessionId\)/)
   })
@@ -229,7 +217,7 @@ void describe('Workbench chat composer parity', () => {
     assert.equal(adapter.match(/withRunMarker\(/g)?.length, 2)
     assert.match(
       adapter,
-      /\.\.\.withRunMarker\(settled, \{\n\s*goalMode: run\.goalMode,\n\s*goalStatus: runtime\.kind === 'done' \? runtime\.goalStatus : undefined,/
+      /const marked = withRunMarker\(settled, \{\n\s*goalMode: run\.goalMode,\n\s*goalStatus: runtime\.kind === 'done' \? runtime\.goalStatus : undefined,/
     )
     assert.match(
       adapter,

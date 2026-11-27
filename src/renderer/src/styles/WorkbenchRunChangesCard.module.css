@@ -31,11 +31,30 @@
   line-height: 1.4;
 }
 
-.headerSummary > span:first-child {
+.projectTitle {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.expandButton {
+  color: var(--foreground-secondary);
+}
+
+.chevron {
+  transition: transform 140ms ease;
+}
+
+.expandButton[aria-expanded='true'] .chevron {
+  transform: rotate(90deg);
 }
 
 .reviewButton {

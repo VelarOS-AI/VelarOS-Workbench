@@ -12,11 +12,9 @@ import type { WorkbenchChatRunChangesRecord } from '@shared/workbenchGit'
  * 版本）：缓存里那份比它旧就作废重读，重读期间仍显示旧的那份，不闪成「读取中」。
  */
 const RecordCacheLimit = 24
-const BaseFileCacheLimit = 16
 
 const recordCache = new Map<string, WorkbenchChatRunChangesRecord>()
 const recordRequests = new Map<string, Promise<WorkbenchChatRunChangesRecord | null>>()
-const baseFileCache = new Map<string, string | null>()
 
 function remember<T>(cache: Map<string, T>, key: string, value: T, limit: number): void {
   cache.delete(key)
@@ -77,24 +75,6 @@ export function readWorkbenchRunChangeRecord(
   return request
 }
 
-/** 这一轮改动前这个文件的全文（按记录里的起点提交读）；读不到时为 null，查看器退回只看补丁。 */
-export async function readWorkbenchRunChangeBaseFile(
-  projectRoot: string,
-  sessionId: string,
-  recordId: string,
-  path: string
-): Promise<string | null> {
-  const key = `${recordKey(projectRoot, sessionId, recordId)}\0${path}`
-  const cached = recall(baseFileCache, key)
-  if (cached !== undefined) return cached
-  const result = await window.velarosWorkbenchGit
-    .readChatRunChangeBaseFile({ workspaceRoot: projectRoot, sessionId, recordId, path })
-    .catch(() => null)
-  const content = result?.ok ? result.value.content : null
-  if (result?.ok) remember(baseFileCache, key, content, BaseFileCacheLimit)
-  return content
-}
-
 interface RecordLoad {
   readonly key: string
   readonly record: WorkbenchChatRunChangesRecord | null
@@ -119,9 +99,11 @@ export function useWorkbenchRunChangeRecord(
   useEffect(() => {
     if (!key || !recordId) return undefined
     let cancelled = false
-    void readWorkbenchRunChangeRecord(projectRoot, sessionId, recordId, capturedAt).then((record) => {
-      if (!cancelled) setLoad({ key, record })
-    })
+    void readWorkbenchRunChangeRecord(projectRoot, sessionId, recordId, capturedAt).then(
+      (record) => {
+        if (!cancelled) setLoad({ key, record })
+      }
+    )
     return () => {
       cancelled = true
     }

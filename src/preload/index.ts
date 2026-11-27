@@ -24,7 +24,10 @@ import {
 } from '../shared/workbenchDebugger'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
-import { type WorkbenchHistoryWindowBridge, WorkbenchHistoryWindowChannels } from '../shared/workbenchHistoryWindow'
+import {
+  type WorkbenchHistoryWindowBridge,
+  WorkbenchHistoryWindowChannels,
+} from '../shared/workbenchHistoryWindow'
 import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
@@ -207,7 +210,8 @@ const debuggerBridge: WorkbenchDebuggerBridge = {
 
 const gitBridge: WorkbenchGitBridge = {
   reloadEnvironment: () => ipcRenderer.invoke(WorkbenchGitChannels.reloadEnvironment),
-  onEnvironmentReloaded: (listener) => subscribe(WorkbenchGitChannels.environmentReloaded, listener),
+  onEnvironmentReloaded: (listener) =>
+    subscribe(WorkbenchGitChannels.environmentReloaded, listener),
   getSummary: (request) => ipcRenderer.invoke(WorkbenchGitChannels.summary, request),
   getLineStats: (request) => ipcRenderer.invoke(WorkbenchGitChannels.lineStats, request),
   getDiff: (request) => ipcRenderer.invoke(WorkbenchGitChannels.diff, request),
@@ -229,18 +233,10 @@ const gitBridge: WorkbenchGitBridge = {
   stash: (request) => ipcRenderer.invoke(WorkbenchGitChannels.stash, request),
   performStashAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.stashAction, request),
   performOperation: (request) => ipcRenderer.invoke(WorkbenchGitChannels.operation, request),
-  captureChatCheckpoint: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.captureChatCheckpoint, request),
-  deleteChatCheckpoints: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.deleteChatCheckpoints, request),
-  captureChatRunChanges: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.captureChatRunChanges, request),
   readChatRunChanges: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.readChatRunChanges, request),
   deleteChatRunChanges: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.deleteChatRunChanges, request),
-  readChatRunChangeBaseFile: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.readChatRunChangeBaseFile, request),
 }
 
 const agentProcessesBridge: WorkbenchAgentProcessesBridge = {
@@ -323,8 +319,10 @@ const historyWindowBridge: WorkbenchHistoryWindowBridge = {
   synchronize: (state) => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.synchronize, state),
   close: () => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.close),
   restore: (request) => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.restore, request),
-  onRestoreRequested: (listener) => subscribe(WorkbenchHistoryWindowChannels.restoreRequested, listener),
-  resolveRestore: (response) => ipcRenderer.invoke(WorkbenchHistoryWindowChannels.restoreResolved, response),
+  onRestoreRequested: (listener) =>
+    subscribe(WorkbenchHistoryWindowChannels.restoreRequested, listener),
+  resolveRestore: (response) =>
+    ipcRenderer.invoke(WorkbenchHistoryWindowChannels.restoreResolved, response),
 }
 
 const settingsWindowBridge: WorkbenchSettingsWindowBridge = {

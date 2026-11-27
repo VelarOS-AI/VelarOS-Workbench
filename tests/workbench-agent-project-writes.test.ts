@@ -45,19 +45,18 @@ void describe('Workbench agent project writes', () => {
     // 时间窗一关就推一条项目动静通知，带上这一轮的运行身份。
     assert.match(
       runtime,
-      /beginCommand: \(\) => \{\n\s*const finish = activity\.beginCommand\(\)\n\s*return \(\) => \{\n\s*finish\(\)\n[\s\S]*?sink\.notice\(ConversationProjectActivityNotice, \{ runId \}\)/u
+      /beginCommand: \(\) => \{\n\s*const finish = activity\?\.beginCommand\(\)\n\s*return \(\) => \{\n\s*finish\?\.\(\)\n[\s\S]*?sink\.notice\(ConversationProjectActivityNotice, \{ runId \}\)/u
     )
   })
 
-  void test('one project-activity notice feeds both the live AI-changes capture and the Git refresh', () => {
+  void test('one project-activity notice refreshes the Git and editor surfaces', () => {
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
     const gitState = readSource('src/renderer/src/hooks/useWorkbenchGitState.ts')
     const editor = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
-    const capture = readSource('src/renderer/src/runtime/standaloneWorkbenchRunChangeCapture.ts')
 
     assert.match(
       adapter,
-      /if \(event\.kind === ConversationProjectActivityNotice\) \{\n(?:\s*\/\/[^\n]*\n)*\s*run\.runChangeCapture\?\.request\(\)\n\s*publishWorkbenchAgentProjectWrite\(run\.projectRoot\)\n\s*return\n/u
+      /if \(event\.kind === ConversationProjectActivityNotice\) \{\n(?:\s*\/\/[^\n]*\n)*\s*publishWorkbenchAgentProjectWrite\(run\.projectRoot\)\n\s*return\n/u
     )
     assert.match(
       gitState,
@@ -67,6 +66,5 @@ void describe('Workbench agent project writes', () => {
     // 没有第二套识别器：会话面、Git 状态与实时采集都不再自己按工具名认执行事件。
     assert.doesNotMatch(adapter, /project:(?:edit|write|run)|tool-done|ProjectWriteTracker/u)
     assert.doesNotMatch(gitState, /onAgentExecution|changedFiles|tool-done/u)
-    assert.doesNotMatch(capture, /tool-done|tool-start|worker-thread/u)
   })
 })

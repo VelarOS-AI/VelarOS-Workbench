@@ -1,6 +1,8 @@
-import type { WorkbenchUserWriteSink } from '../git/WorkbenchChatRunAttribution'
-
 import type { WorkbenchLanguageServiceWorkerClient } from './LanguageServiceWorkerClient'
+
+export interface WorkbenchUserWriteSink {
+  recordUserWrites(request: { workspaceRoot: string; paths: readonly string[] }): void
+}
 
 type WorkbenchLanguageFilesChangedPort = Pick<
   WorkbenchLanguageServiceWorkerClient,
@@ -21,13 +23,11 @@ export function languageSyncOnAgentEdits(
   return (projectRoot, paths) => notifyLanguageFilesChanged(language, projectRoot, paths)
 }
 
-export function withLanguageSyncOnUserWrites(
-  inner: WorkbenchUserWriteSink,
+export function languageSyncOnUserWrites(
   language: WorkbenchLanguageFilesChangedPort
 ): WorkbenchUserWriteSink {
   return {
     recordUserWrites: (request) => {
-      inner.recordUserWrites(request)
       notifyLanguageFilesChanged(language, request.workspaceRoot, request.paths)
     },
   }

@@ -12,6 +12,7 @@ import type { ActInvocationSummary } from '@velaros-ai/velaros/contracts'
 import type { ModelSelection } from '@velaros-ai/velaros/model'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
+import type { WorkbenchChatRunChangesSummary } from './workbenchGit'
 
 /**
  * 主聊天与 Platform 会话运行时之间的合同（与 Desktop 的主聊天同一套：一次提交只交这一条用户输入，
@@ -272,7 +273,7 @@ export const ConversationInteractionLimits = Object.freeze({
 })
 
 export const ConversationProjectActivityNotice = 'conversation-project-activity'
-/** Agent 改项目的一段时间窗刚结束（一次项目编辑或一条命令跑完）：界面据此刷新「本轮改动」与 Git 状态。 */
+/** Agent 改项目的一段时间窗刚结束（一次项目编辑或一条命令跑完）：界面据此刷新 Git 状态。 */
 export interface ConversationProjectActivityProjection {
   runId: Nullable<string>
 }
@@ -341,9 +342,10 @@ export type WorkbenchConversationState =
   | {
       kind: 'done'
       goalStatus?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled' | 'removed'
+      runChanges?: WorkbenchChatRunChangesSummary
     }
-  | { kind: 'aborted'; message: string }
-  | { kind: 'error'; message: string }
+  | { kind: 'aborted'; message: string; runChanges?: WorkbenchChatRunChangesSummary }
+  | { kind: 'error'; message: string; runChanges?: WorkbenchChatRunChangesSummary }
 
 /** 一次模型请求的上下文占用（分子是服务商报告的输入 token，分母是模型的输入上限）。 */
 export interface WorkbenchConversationContextUsage {

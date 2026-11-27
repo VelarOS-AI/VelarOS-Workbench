@@ -4,7 +4,7 @@ import { normalizeWorkbenchProjectRootPath } from '../models/project/workbenchPr
  * 「Agent 写了项目文件」的投递点。
  *
  * 主进程在 Agent 改项目的一段时间窗（一次项目编辑、一条命令）结束时推来一条项目动静通知（见
- * `conversation-project-activity`）；会话面收到后跟上这一轮的「本轮改动」实时采集，再按项目根通知这里的
+ * `conversation-project-activity`）；会话面收到后按项目根通知这里的
  * 订阅者（Git 状态、编辑器）。用户自己在编辑器、终端里的改动不走这里，由文件监听负责。
  */
 const projectWriteListeners = new Map<string, Set<() => void>>()

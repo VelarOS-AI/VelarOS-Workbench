@@ -25,7 +25,7 @@ import {
 } from '../../shared/workbenchConversation'
 import type { ConversationBrowser } from '../browser/WorkbenchBrowserService'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
-import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
+import type { WorkbenchChatRunChangeStore } from '../workspace/git/WorkbenchChatRunChanges'
 
 import { ConversationAgentBoard } from './ConversationAgents'
 import { ConversationCommandOutputBoard } from './ConversationCommandOutput'
@@ -39,6 +39,7 @@ import { ConversationScriptBoard } from './ConversationScripts'
 import { ConversationTextBoard } from './ConversationText'
 import { ConversationThinkingBoard } from './ConversationThinking'
 import { ConversationTraceQueue } from './ConversationTraceQueue'
+import { WorkbenchConversationCommits } from './WorkbenchConversationCommits'
 import {
   buildHostInstructions,
   contextUsageFromProvider,
@@ -59,6 +60,7 @@ import type {
   ConversationSessionEvent,
   ConversationWorkspaceHandle,
   ConversationWorkspaceOptions,
+  WorkbenchAgentProjectActivityPort,
 } from './WorkbenchConversationTypes'
 import type { ConversationMemory } from './WorkbenchMemoryService'
 import type { WorkbenchShellHostRegistryApi } from './WorkbenchShellHostRegistry'
@@ -100,8 +102,9 @@ interface WorkbenchConversationRuntimeOptions {
   ): Promise<ConversationRunConfiguration>
   /** 宿主环境条目（如操作系统）；Platform 每帧把它和当地时间一起交给模型。 */
   environment?(): Readonly<Record<string, string>>
-  /** 这一轮 Agent 改项目的时间窗报到哪里（「本轮改动」的归属账本）。 */
+  /** 项目写操作与命令执行的生命周期通知。 */
   activity?(ref: WorkbenchConversationRef): WorkbenchAgentProjectActivityPort
+  runChanges?: Pick<WorkbenchChatRunChangeStore, 'write'>
   /** Agent 的一次项目编辑写完了这些文件（相对项目根）：告诉语言服务，不等文件监听。 */
   projectFilesEdited?(ref: WorkbenchConversationRef, paths: readonly string[]): void
   /** 这一轮接的长期记忆（`workspace` 是项目根的真实路径）；请求里关了记忆时不问。 */
@@ -488,6 +491,8 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     let admitted = false
     let failure: unknown
     let goal: Nullable<GoalState> = null
+    let commits: WorkbenchConversationCommits | undefined
+    let runChanges: Awaited<ReturnType<WorkbenchChatRunChangeStore['write']>> | undefined
     try {
       // 读目标会临时打开同一份会话（界面选中会话就会读目标）：等它们收尾再起跑，发送不因此被拒。
       // 运行已登记为活动，之后进来的控制操作不会再打开会话。
@@ -524,13 +529,12 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           sink.notice(ConversationWidgetNotice, { ...widget, runId })
         },
         showCommandOutput: (output) => commandOutput.write(output),
-        // 一段改项目的时间窗结束就告诉界面：「本轮改动」与 Git 状态据此刷新。
-        activity: activity && {
-          beginFileWrite: () => activity.beginFileWrite(),
+        // 命令与项目写入结束时刷新 Git 状态及受影响的编辑器。
+        activity: {
           beginCommand: () => {
-            const finish = activity.beginCommand()
+            const finish = activity?.beginCommand()
             return () => {
-              finish()
+              finish?.()
               const runId = lastTurn ? (turns.get(lastTurn) ?? null) : null
               sink.notice(ConversationProjectActivityNotice, { runId })
             }
@@ -558,6 +562,17 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         signal,
       })
       signal.throwIfAborted()
+      const read = run.handle.trace
+      if (this.options.runChanges && read) {
+        try {
+          const collector = new WorkbenchConversationCommits(request.sessionId, workspace, read)
+          await collector.prepare(signal)
+          commits = collector
+        } catch (error) {
+          signal.throwIfAborted()
+          log.warn('历史项目提交读取失败', { error })
+        }
+      }
       const session = run.handle.session
       // 运行期间定时重读：执行中的当前回合（父脚本等子任务时也看得到子任务在跑），以及还有子任务在跑的回合
       traces.watch(() => [
@@ -629,6 +644,25 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       } catch (error) {
         failure ??= AppError.from(error)
       }
+      if (
+        admitted &&
+        commits &&
+        turns.size &&
+        !signal.aborted &&
+        run.presentation?.status !== 'cancelled'
+      ) {
+        try {
+          const { changes, omittedFiles } = await commits.collect([...turns.keys()], signal)
+          if (changes.length || omittedFiles)
+            runChanges = await this.options.runChanges!.write(
+              { workspaceRoot: request.projectRoot, sessionId: request.sessionId },
+              changes,
+              omittedFiles
+            )
+        } catch (error) {
+          if (!signal.aborted) log.warn('项目提交回执读取或归档失败', { error })
+        }
+      }
       // 这次运行改过的目标，完成时带上它现在的状态；读不到不影响收尾
       try {
         goal = toNullable(await run.handle?.session.getGoal())
@@ -676,7 +710,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       sink.state(
         signal.aborted
           ? { kind: 'aborted', message: workbenchMainText('conversation.runStopped') }
-          : { kind: 'error', message }
+          : { kind: 'error', message, runChanges }
       )
       outcome(signal.aborted ? 'cancelled' : 'failed', message)
       if (!admitted) throw failure ?? new AppError('VALIDATION', message)
@@ -686,12 +720,16 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       sink.state({ kind: 'aborted', message: workbenchMainText('conversation.runStopped') })
       outcome('cancelled', workbenchMainText('conversation.runStopped'))
     } else if (status === 'completed') {
-      sink.state(conversationDone({ goal, startedAt }))
+      sink.state({
+        ...conversationDone({ goal, startedAt }),
+        runChanges,
+      })
       outcome('completed', null)
     } else {
       const notice = run.presentation?.notice
       sink.state({
         kind: 'aborted',
+        runChanges,
         message:
           notice?.kind === 'stalled'
             ? stalledMessage(notice.repeatedSteps, run.locale)

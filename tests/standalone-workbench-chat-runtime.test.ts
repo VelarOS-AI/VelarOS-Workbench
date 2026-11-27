@@ -269,10 +269,15 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.equal(readStandaloneContextUsageEstimate(contextUsage({ usableContextWindow: 0 })), null)
     assert.equal(readStandaloneContextUsageEstimate(contextUsage({ percent: Number.NaN })), null)
     assert.equal(readStandaloneContextUsageEstimate(undefined), null)
-    const provisional = readStandaloneContextUsageEstimate(contextUsage({ contextWindowEstimated: true }))
+    const provisional = readStandaloneContextUsageEstimate(
+      contextUsage({ contextWindowEstimated: true })
+    )
     assert.equal(provisional?.contextWindowEstimated, true)
     assert.equal(
-      readStandaloneContextUsageEstimate({ ...JSON.parse(JSON.stringify(provisional)), kind: 'context-usage-estimate' })?.contextWindowEstimated,
+      readStandaloneContextUsageEstimate({
+        ...JSON.parse(JSON.stringify(provisional)),
+        kind: 'context-usage-estimate',
+      })?.contextWindowEstimated,
       true
     )
   })
@@ -411,9 +416,18 @@ void describe('standalone Workbench conversation runtime', () => {
 
   void test('input-applied acknowledgements leave ordinary messages and interaction replies unchanged', () => {
     const messages: ChatMessage[] = [
-      { ...message('user', [{ type: 'text', text: 'hello' }], 'first'), conversationKind: 'turn-input' },
-      { ...message('user', [{ type: 'text', text: 'next task' }], 'next'), conversationKind: 'turn-input' },
-      { ...message('user', [{ type: 'text', text: 'yes' }], 'reply'), conversationKind: 'interaction-reply' },
+      {
+        ...message('user', [{ type: 'text', text: 'hello' }], 'first'),
+        conversationKind: 'turn-input',
+      },
+      {
+        ...message('user', [{ type: 'text', text: 'next task' }], 'next'),
+        conversationKind: 'turn-input',
+      },
+      {
+        ...message('user', [{ type: 'text', text: 'yes' }], 'reply'),
+        conversationKind: 'interaction-reply',
+      },
       message('assistant', [{ type: 'text', text: 'hello' }], 'assistant'),
       guidance('guidance', 'pending'),
     ]
@@ -547,6 +561,7 @@ void describe('standalone Workbench conversation runtime', () => {
   void test("keeps only a summary of a run's file changes on its marker", () => {
     const summary = {
       recordId: 'checkpoint-2',
+      statsOmitted: false,
       capturedAt: 9,
       fileCount: 2,
       additions: 5,

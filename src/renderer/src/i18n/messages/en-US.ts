@@ -32,7 +32,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       'Browser storage could not be written (it may be full). You can keep chatting, but this history may be lost after a restart; a local backup was attempted.',
     runStopped: 'The run was stopped.',
     fileChangeOpenErrorTitle: 'Failed to open file',
-    fileChangeSummaryFilesChanged: '{count} files changed',
+    fileChangeSummaryCommitted: 'Run commits · {count} files',
+    fileChangeSummaryExpandProject: 'Expand commits for {project}',
+    fileChangeSummaryCollapseProject: 'Collapse commits for {project}',
     fileChangeSummaryReview: 'Review',
     fileChangeSummaryLoading: 'Loading change summary…',
     fileChangeSummaryUnavailable: 'Failed to load change summary',
@@ -185,17 +187,11 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     aiChangesStatusDeleted: 'Deleted',
     aiChangesStatusModified: 'Modified',
     aiChangesOpenFile: 'Open file',
-    aiChangesPatchOnly:
-      'The snapshot from before this run is no longer available, so only the lines around each change are shown.',
     aiChangesBinary: 'Binary file, no line-by-line diff.',
     aiChangesOmitted:
       'The change is too large (+{additions} -{deletions}), so no line-by-line diff was saved.',
     aiChangesNoLineChanges: 'This file has no line changes.',
     aiChangesDiffLabel: 'AI changes in {path}',
-    aiChangesMixedChip: 'Outside edits',
-    aiChangesMixedHint:
-      'This file was also changed outside the AI during this run (by you or another program): the diff mixes both, and rewinding this run won’t roll it back.',
-    chatRunChangesMixedPathSuffix: ' (also edited outside the AI)',
     commitGroupConflicted: 'Merge Conflicts',
     commitGroupChanged: 'Changes',
     commitGroupUnversioned: 'Unversioned Files',
@@ -398,7 +394,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     fileHistoryRestoreStale: 'The file just changed. Review the comparison and try again.',
     fileHistoryRestoreClosed: 'Reopen the original file to restore this version.',
     fileHistoryRestoreReadOnly: 'Switch the original file to edit mode to restore this version.',
-    fileHistoryRestoreUnavailable: 'Unable to restore right now. Reopen file history and try again.',
+    fileHistoryRestoreUnavailable:
+      'Unable to restore right now. Reopen file history and try again.',
     fileHistoryViewContent: 'Content',
     fileHistoryViewDiff: 'Diff',
     fileHistoryNoDiff: 'No differences from the current version.',

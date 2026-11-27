@@ -54,7 +54,10 @@ export interface WorkbenchAiChangesState {
     change: { path: string; status: WorkbenchChatRunFileChangeStatus }
   ) => void
   /** 打开一轮的文件（最多 {@link MaxAutoOpenedTabs} 个），并在左侧面板里展开这一轮。 */
-  openRound: (target: { sessionId: string; recordId: string }, options?: { auto?: boolean }) => Promise<void>
+  openRound: (
+    target: { sessionId: string; recordId: string },
+    options?: { auto?: boolean }
+  ) => Promise<void>
   selectTab: (tabId: string) => void
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
@@ -92,7 +95,10 @@ interface TabGroupState {
 const EmptyTabGroup: TabGroupState = { tabs: [], activeTabId: null, shown: false }
 
 /** 关掉一些标签后的标签组：当前标签没了就落到它右边那个（没有就左边），一个不剩就收起。 */
-function withoutTabs(state: TabGroupState, removed: (tab: WorkbenchAiChangeTab) => boolean): TabGroupState {
+function withoutTabs(
+  state: TabGroupState,
+  removed: (tab: WorkbenchAiChangeTab) => boolean
+): TabGroupState {
   const next = state.tabs.filter((tab) => !removed(tab))
   if (next.length === state.tabs.length) return state
   if (next.length === 0) return EmptyTabGroup
@@ -117,7 +123,9 @@ function syncTabsWithRounds(
   return {
     ...kept,
     tabs: kept.tabs.map((tab) =>
-      stale(tab) ? { ...tab, capturedAt: capturedAtByRound.get(tab.roundKey) ?? tab.capturedAt } : tab
+      stale(tab)
+        ? { ...tab, capturedAt: capturedAtByRound.get(tab.roundKey) ?? tab.capturedAt }
+        : tab
     ),
   }
 }
@@ -157,7 +165,6 @@ export function useWorkbenchAiChanges({
               : marker.messageId
           )
           .join(','),
-        session.liveRunChanges ? summaryFingerprint(session.liveRunChanges.summary) : '',
       ].join('\u0001')
     )
     .join('\u0002')
@@ -236,22 +243,21 @@ export function useWorkbenchAiChanges({
         round?.capturedAt ?? 0
       )
       if (!record || generation !== openGenerationRef.current) return
-      const files = listWorkbenchAiChangeTreeFiles(buildWorkbenchAiChangeTree(record.changes))
-        .slice(0, MaxAutoOpenedTabs)
+      const files = listWorkbenchAiChangeTreeFiles(
+        buildWorkbenchAiChangeTree(record.changes)
+      ).slice(0, MaxAutoOpenedTabs)
       if (files.length === 0) return
-      const opened = files.map(
-        (change): WorkbenchAiChangeTab => ({
-          id: tabId(target.sessionId, target.recordId, change.path),
-          roundKey,
-          sessionId: target.sessionId,
-          recordId: target.recordId,
-          capturedAt: record.capturedAt,
-          path: change.path,
-          status: change.status,
-          runNumber: round?.runNumber ?? 0,
-          auto,
-        })
-      )
+      const opened = files.map((change): WorkbenchAiChangeTab => ({
+        id: tabId(target.sessionId, target.recordId, change.path),
+        roundKey,
+        sessionId: target.sessionId,
+        recordId: target.recordId,
+        capturedAt: record.capturedAt,
+        path: change.path,
+        status: change.status,
+        runNumber: round?.runNumber ?? 0,
+        auto,
+      }))
       setTabGroup((current) => {
         const openedIds = new Set(opened.map((tab) => tab.id))
         // 自动打开的一批替换上一批自动打开的；用户点开过的标签不动。
@@ -273,7 +279,7 @@ export function useWorkbenchAiChanges({
       knownRoundsRef.current = {
         sessionId: currentSessionId,
         seen: new Set(rounds.map((round) => round.key)),
-        settled: new Set(rounds.filter((round) => !round.live).map((round) => round.key)),
+        settled: new Set(rounds.map((round) => round.key)),
       }
       setSeenUntil(latestCapturedAt)
       const newest = rounds[0]
@@ -284,7 +290,7 @@ export function useWorkbenchAiChanges({
       return
     }
     const appeared = rounds.filter((round) => !known.seen.has(round.key))
-    const settled = rounds.filter((round) => !round.live && !known.settled.has(round.key))
+    const settled = rounds.filter((round) => !known.settled.has(round.key))
     for (const round of appeared) known.seen.add(round.key)
     for (const round of settled) known.settled.add(round.key)
     // 一轮收尾、最终摘要挂上了（包括来不及实时采集就收尾的短轮次）：按设置把它改过的文件摆进编辑区。
@@ -295,7 +301,9 @@ export function useWorkbenchAiChanges({
     }
     // 新出现的一轮（多半还在跑）只在面板里展开，不抢编辑区。
     if (appeared.length > 0)
-      setExpandedRoundKeys((current) => new Set([...current, ...appeared.map((round) => round.key)]))
+      setExpandedRoundKeys(
+        (current) => new Set([...current, ...appeared.map((round) => round.key)])
+      )
   }, [autoOpen, currentSessionId, latestCapturedAt, openRound, rounds])
 
   const openFile = useCallback(

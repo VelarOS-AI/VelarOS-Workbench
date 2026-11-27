@@ -25,7 +25,10 @@ import {
   normalizeWorkbenchBrowserPageUrl,
   WorkbenchBrowserPartition,
 } from '../shared/workbenchBrowser'
-import { WorkbenchHistoryWindowChannels, WorkbenchHistoryWindowQuery } from '../shared/workbenchHistoryWindow'
+import {
+  WorkbenchHistoryWindowChannels,
+  WorkbenchHistoryWindowQuery,
+} from '../shared/workbenchHistoryWindow'
 import {
   WorkbenchSettingsWindowChannels,
   WorkbenchSettingsWindowQuery,
@@ -94,7 +97,7 @@ import { WorkbenchInlineCompletionGenerator } from './workspace/language/Workben
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
 import {
   languageSyncOnAgentEdits,
-  withLanguageSyncOnUserWrites,
+  languageSyncOnUserWrites,
 } from './workspace/language/WorkbenchLanguageWriteSync'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
@@ -432,8 +435,7 @@ if (hasSingleInstanceLock)
       dataDir: providers.parts.storagePaths.getConversationRuntimeDir(),
       configure: createWorkbenchConversationConfiguration(modelComposition.agentModelResolver),
       environment: () => WorkbenchHostEnvironment,
-      // Agent 改项目的时间窗报给改动归属账本：「本轮改动」只认 Agent 的改动。
-      activity: (ref) => providers.chatRunAttribution.activityFor(ref),
+      runChanges: providers.chatRunChanges,
       // Agent 改完的文件当场告诉语言服务，别的文件里的诊断不等文件监听。
       projectFilesEdited: (ref, paths) => syncAgentEdits(ref.projectRoot, paths),
       projectRules: async (projectRoot) =>
@@ -450,7 +452,6 @@ if (hasSingleInstanceLock)
         new CodexEngine(shellEnvironment, app.getVersion()),
       ],
       sessions: new WorkbenchEngineSessionStore(dataRootDir),
-      activity: (ref) => providers.chatRunAttribution.activityFor(ref),
       projectFilesEdited: (ref, paths) => syncAgentEdits(ref.projectRoot, paths),
     })
     const conversationRecovery = new WorkbenchConversationRecovery(
@@ -461,7 +462,7 @@ if (hasSingleInstanceLock)
       engineConversationRuntime,
       conversationRecovery
     )
-    registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges, () =>
+    registerWorkbenchGitIpc(providers.git, providers.chatRunChanges, () =>
       shellEnvironment.refresh()
     )
     windowManager = new WorkbenchWindowManager(dataRootDir, {
@@ -565,33 +566,46 @@ if (hasSingleInstanceLock)
       assertSearchSettingsSender(event)
       return Boolean(await tavilySettings.getApiKey())
     })
-    ipcMain.handle(
-      WorkbenchSettingsWindowChannels.setTavilyApiKey,
-      (event, value: unknown) =>
-        callWithEnvelope(async () => {
-          assertSearchSettingsSender(event)
-          if (!isString(value) || value.length > 512)
-            throw new AppError('VALIDATION', 'Invalid Tavily API key.')
-          return tavilySettings.setApiKey(value.trim())
-        })
+    ipcMain.handle(WorkbenchSettingsWindowChannels.setTavilyApiKey, (event, value: unknown) =>
+      callWithEnvelope(async () => {
+        assertSearchSettingsSender(event)
+        if (!isString(value) || value.length > 512)
+          throw new AppError('VALIDATION', 'Invalid Tavily API key.')
+        return tavilySettings.setApiKey(value.trim())
+      })
     )
     const historyWindows = new WorkbenchHistoryWindows({
       windows: windowManager,
       createWindow: (owner) => {
         const window = createAuxiliaryWindow(owner, 'File History', {
-          width: 1120, height: 760, minWidth: 760, minHeight: 480,
+          width: 1120,
+          height: 760,
+          minWidth: 760,
+          minHeight: 480,
         })
         installWorkbenchEditorZoom(window)
         return window
       },
       loadWindow: (window) => loadAuxiliaryWindow(window, WorkbenchHistoryWindowQuery),
     })
-    ipcMain.handle(WorkbenchHistoryWindowChannels.open, (event, file) => historyWindows.open(event.sender, file))
-    ipcMain.handle(WorkbenchHistoryWindowChannels.state, (event) => historyWindows.getState(event.sender))
-    ipcMain.handle(WorkbenchHistoryWindowChannels.synchronize, (event, update) => historyWindows.synchronize(event.sender, update))
-    ipcMain.handle(WorkbenchHistoryWindowChannels.close, (event) => historyWindows.close(event.sender))
-    ipcMain.handle(WorkbenchHistoryWindowChannels.restore, (event, request) => historyWindows.restore(event.sender, request))
-    ipcMain.handle(WorkbenchHistoryWindowChannels.restoreResolved, (event, response) => historyWindows.resolveRestore(event.sender, response))
+    ipcMain.handle(WorkbenchHistoryWindowChannels.open, (event, file) =>
+      historyWindows.open(event.sender, file)
+    )
+    ipcMain.handle(WorkbenchHistoryWindowChannels.state, (event) =>
+      historyWindows.getState(event.sender)
+    )
+    ipcMain.handle(WorkbenchHistoryWindowChannels.synchronize, (event, update) =>
+      historyWindows.synchronize(event.sender, update)
+    )
+    ipcMain.handle(WorkbenchHistoryWindowChannels.close, (event) =>
+      historyWindows.close(event.sender)
+    )
+    ipcMain.handle(WorkbenchHistoryWindowChannels.restore, (event, request) =>
+      historyWindows.restore(event.sender, request)
+    )
+    ipcMain.handle(WorkbenchHistoryWindowChannels.restoreResolved, (event, response) =>
+      historyWindows.resolveRestore(event.sender, response)
+    )
     // 项目准入由同一个窗口 record 持有；先完成真实 owner，再注册会新建资源的入口。
     registerWorkbenchTerminalIpc(providers.parts.terminal, windowManager)
     const disposeDebugIpc = registerWorkbenchDebugIpc(providers.parts.debug, windowManager)
@@ -628,7 +642,7 @@ if (hasSingleInstanceLock)
       providers.fileSystem,
       providers.parts,
       windowManager,
-      withLanguageSyncOnUserWrites(providers.chatRunAttribution, providers.language)
+      languageSyncOnUserWrites(providers.language)
     )
     registerProjectHubIpc(windowManager, new WorkbenchProjectRegistry(dataRootDir))
     registerWorkbenchWindowStateIpc(

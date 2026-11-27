@@ -436,10 +436,11 @@ function restoreStandaloneRunMarkers(
 
 function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | null {
   const record = asRecord(value)
-  const { recordId, capturedAt, fileCount, additions, deletions, error } = record
+  const { recordId, capturedAt, fileCount, additions, deletions, error, statsOmitted } = record
   if (
     typeof recordId !== 'string' ||
     typeof capturedAt !== 'number' ||
+    typeof statsOmitted !== 'boolean' ||
     !isCount(fileCount) ||
     !isCount(additions) ||
     !isCount(deletions)
@@ -451,6 +452,7 @@ function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | 
     fileCount,
     additions,
     deletions,
+    statsOmitted,
     error: readNonBlankString(error),
   }
 }
@@ -460,16 +462,16 @@ function isCount(value: unknown): value is number {
 }
 
 /**
- * 这一轮的「本轮改动」记在哪条消息上：刚收尾的这一轮、已完成的运行标记所在的那条助手消息。
- * 它必须排在这一轮开跑前的检查点之后——这一轮一条助手消息都没产出时，最近的助手回复属于上一轮。
+ * 这一轮的「本轮改动」记在哪条消息上：刚收尾的一轮中运行标记所在的助手消息。
+ * 它必须排在本轮输入之后——这一轮一条助手消息都没产出时，最近的助手回复属于上一轮。
  */
 function resolveStandaloneRunChangesAnchor(
   messages: readonly ChatMessage[],
   markers: readonly StandaloneRunMarker[],
-  captureMessageCount: number
+  firstReplyIndex: number
 ): string | null {
   const anchorIndex = messages.findLastIndex((message) => message.role === 'assistant')
-  if (anchorIndex < 0 || anchorIndex < captureMessageCount) return null
+  if (anchorIndex < 0 || anchorIndex < firstReplyIndex) return null
   const messageId = messages[anchorIndex]!.id
   // 停下、失败的一轮同样记：文件可能已经改了，「AI 改动」要列全每一轮。
   return markers.some(

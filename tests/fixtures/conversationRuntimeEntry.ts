@@ -4,3 +4,4 @@ export { createWorkbenchConversationRuntime } from '../../src/main/conversation/
 export { WorkbenchMemoryService } from '../../src/main/conversation/WorkbenchMemoryService'
 export { WorkbenchSessionPeers } from '../../src/main/conversation/WorkbenchSessionPeers'
 export { WorkbenchShellHostRegistry } from '../../src/main/conversation/WorkbenchShellHostRegistry'
+export { WorkbenchChatRunChangeStore } from '../../src/main/workspace/git/WorkbenchChatRunChanges'

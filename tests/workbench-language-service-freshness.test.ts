@@ -25,7 +25,7 @@ import {
 } from '../src/main/workspace/language/TypeScriptProjectHost'
 import {
   languageSyncOnAgentEdits,
-  withLanguageSyncOnUserWrites,
+  languageSyncOnUserWrites,
 } from '../src/main/workspace/language/WorkbenchLanguageWriteSync'
 import { PathResolver } from '../src/main/workspace/PathResolver'
 import { mayAffectWorkbenchDiagnostics } from '../src/renderer/src/models/editor/workbenchEditorTabs'
@@ -45,19 +45,32 @@ async function createProject(): Promise<{
   await writeFile(
     join(projectRoot, 'tsconfig.json'),
     JSON.stringify({
-      compilerOptions: { module: 'ESNext', moduleResolution: 'bundler', target: 'ESNext', strict: true },
+      compilerOptions: {
+        module: 'ESNext',
+        moduleResolution: 'bundler',
+        target: 'ESNext',
+        strict: true,
+      },
       include: ['src/**/*.ts'],
     }),
     'utf8'
   )
   const mainPath = join(projectRoot, 'src', 'main.ts')
   const dependencyPath = join(projectRoot, 'src', 'dependency.ts')
-  await writeFile(mainPath, "import { value } from './dependency'\nexport const copied: number = value\n", 'utf8')
+  await writeFile(
+    mainPath,
+    "import { value } from './dependency'\nexport const copied: number = value\n",
+    'utf8'
+  )
   await writeFile(dependencyPath, 'export const value = "text"\n', 'utf8')
   return { projectRoot, mainPath, dependencyPath }
 }
 
-function semanticMessages(projectRoot: string, mainPath: string, overlay: Map<string, string>): string[] {
+function semanticMessages(
+  projectRoot: string,
+  mainPath: string,
+  overlay: Map<string, string>
+): string[] {
   const project = acquireTypeScriptLanguageService(projectRoot, mainPath, [mainPath], overlay)
   return project.service
     .getSemanticDiagnostics(mainPath)
@@ -131,7 +144,10 @@ void describe('language service freshness after files change on disk', () => {
       )
 
       refreshTypeScriptProjectFilesFromDisk(projectRoot, [dependencyPath])
-      assert.deepEqual(semanticMessages(projectRoot, mainPath, new Map([[mainPath, mainSource]])), [])
+      assert.deepEqual(
+        semanticMessages(projectRoot, mainPath, new Map([[mainPath, mainSource]])),
+        []
+      )
 
       // 依赖被删掉：导入解析失败，而不是继续用内存里的旧文本。
       await rm(dependencyPath)
@@ -155,7 +171,10 @@ void describe('language service freshness after files change on disk', () => {
         semanticMessages(
           projectRoot,
           mainPath,
-          new Map([[mainPath, mainSource], [dependencyPath, editedDependency]])
+          new Map([
+            [mainPath, mainSource],
+            [dependencyPath, editedDependency],
+          ])
         ),
         []
       )
@@ -166,7 +185,10 @@ void describe('language service freshness after files change on disk', () => {
         semanticMessages(
           projectRoot,
           mainPath,
-          new Map([[mainPath, mainSource], [dependencyPath, editedDependency]])
+          new Map([
+            [mainPath, mainSource],
+            [dependencyPath, editedDependency],
+          ])
         ),
         []
       )
@@ -191,7 +213,10 @@ void describe('language service freshness after files change on disk', () => {
     )
     const request = { projectRoot, path: 'src/main.ts', language: 'typescript' }
     try {
-      const before = await services.getDiagnostics({ ...request, content: readFileSync(mainPath, 'utf8') })
+      const before = await services.getDiagnostics({
+        ...request,
+        content: readFileSync(mainPath, 'utf8'),
+      })
       assert.equal(before.diagnostics.filter((item) => item.severity === 'error').length, 1)
 
       await writeFile(dependencyPath, 'export const value = 21\n', 'utf8')
@@ -199,8 +224,14 @@ void describe('language service freshness after files change on disk', () => {
         projectRoot,
         paths: ['src/dependency.ts', '../outside.ts', '/etc/hosts'],
       })
-      const after = await services.getDiagnostics({ ...request, content: readFileSync(mainPath, 'utf8') })
-      assert.deepEqual(after.diagnostics.filter((item) => item.severity === 'error'), [])
+      const after = await services.getDiagnostics({
+        ...request,
+        content: readFileSync(mainPath, 'utf8'),
+      })
+      assert.deepEqual(
+        after.diagnostics.filter((item) => item.severity === 'error'),
+        []
+      )
     } finally {
       await services.dispose()
       clearTypeScriptProjectCache(projectRoot)
@@ -235,9 +266,10 @@ class RecordingLanguageServiceWorker implements WorkbenchLanguageServiceWorkerPo
     for (const message of this.pending.splice(0)) {
       const response: WorkbenchLanguageServiceWorkerResponse = {
         id: message.id,
-        result: message.operation === 'getDiagnostics'
-          ? { projectRoot: '/project', path: 'src/main.ts', diagnostics: [] }
-          : undefined,
+        result:
+          message.operation === 'getDiagnostics'
+            ? { projectRoot: '/project', path: 'src/main.ts', diagnostics: [] }
+            : undefined,
       }
       this.events.emit('message', response)
     }
@@ -247,7 +279,10 @@ class RecordingLanguageServiceWorker implements WorkbenchLanguageServiceWorkerPo
 void describe('language worker client after project files change', () => {
   void test('an identical diagnostics request no longer reuses the in-flight one once files changed', async () => {
     const worker = new RecordingLanguageServiceWorker()
-    const client = new WorkbenchLanguageServiceWorkerClient(() => worker, () => 5_000)
+    const client = new WorkbenchLanguageServiceWorkerClient(
+      () => worker,
+      () => 5_000
+    )
     const request = {
       projectRoot: '/project',
       path: 'src/main.ts',
@@ -257,11 +292,20 @@ void describe('language worker client after project files change', () => {
 
     const first = client.getDiagnostics(request)
     const reused = client.getDiagnostics(request)
-    assert.equal(worker.messages.filter((message) => message.operation === 'getDiagnostics').length, 1)
+    assert.equal(
+      worker.messages.filter((message) => message.operation === 'getDiagnostics').length,
+      1
+    )
 
-    const changed = client.projectFilesChanged({ projectRoot: '/project', paths: ['src/dependency.ts'] })
+    const changed = client.projectFilesChanged({
+      projectRoot: '/project',
+      paths: ['src/dependency.ts'],
+    })
     const fresh = client.getDiagnostics(request)
-    assert.equal(worker.messages.filter((message) => message.operation === 'getDiagnostics').length, 2)
+    assert.equal(
+      worker.messages.filter((message) => message.operation === 'getDiagnostics').length,
+      2
+    )
     assert.deepEqual(
       worker.messages.map((message) => message.operation),
       ['getDiagnostics', 'projectFilesChanged', 'getDiagnostics']
@@ -274,37 +318,16 @@ void describe('language worker client after project files change', () => {
 })
 
 void describe('user and agent writes reach the language service without waiting for the file watcher', () => {
-  void test('user writes reach the attribution ledger first, then the language service', () => {
-    const order: string[] = []
-    const notified: Array<{ projectRoot: string; paths: string[] }> = []
-    const sink = withLanguageSyncOnUserWrites(
-      { recordUserWrites: (request) => order.push(`ledger:${request.paths.join(',')}`) },
-      {
-        projectFilesChanged: async (request) => {
-          order.push(`language:${request.paths.join(',')}`)
-          notified.push(request)
-        },
-      }
-    )
-
-    sink.recordUserWrites({ workspaceRoot: '/project', paths: ['src/a.ts', 'src/b.ts'] })
-    // 没写成任何文件：账本照记，语言服务不必打扰。
-    sink.recordUserWrites({ workspaceRoot: '/project', paths: [] })
-
-    assert.deepEqual(order, ['ledger:src/a.ts,src/b.ts', 'language:src/a.ts,src/b.ts', 'ledger:'])
-    assert.deepEqual(notified, [{ projectRoot: '/project', paths: ['src/a.ts', 'src/b.ts'] }])
-  })
-
-  void test('user writes from the editor and the file tree report the same way, and a failing notification is swallowed', async () => {
-    const recorded: string[] = []
-    const sink = withLanguageSyncOnUserWrites(
-      { recordUserWrites: (request) => recorded.push(request.paths.join(',')) },
-      { projectFilesChanged: () => Promise.reject(new Error('worker gone')) }
-    )
+  void test('user writes notify the language service and skip empty paths', () => {
+    const calls: unknown[] = []
+    const sink = languageSyncOnUserWrites({
+      projectFilesChanged: async (request) => {
+        calls.push(request)
+      },
+    })
     sink.recordUserWrites({ workspaceRoot: '/project', paths: ['src/a.ts'] })
     sink.recordUserWrites({ workspaceRoot: '/project', paths: [] })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    assert.deepEqual(recorded, ['src/a.ts', ''])
+    assert.deepEqual(calls, [{ projectRoot: '/project', paths: ['src/a.ts'] }])
   })
 
   void test('agent edits notify the language service by path, skip empty edits, and swallow a failing worker', async () => {
@@ -328,9 +351,15 @@ void describe('user and agent writes reach the language service without waiting 
   void test('the main composition root wires user writes and agent edits into the language service', () => {
     // 用户经 fs IPC 的写入、Agent 在 Platform 里的项目编辑都提前通知；命令的产物由文件监听送到。
     const main = readSource('src/main/index.ts')
-    assert.match(main, /registerWorkbenchFsIpc\([\s\S]*?withLanguageSyncOnUserWrites\(providers\.chatRunAttribution, providers\.language\)\s*\)/u)
+    assert.match(
+      main,
+      /registerWorkbenchFsIpc\([\s\S]*?languageSyncOnUserWrites\(providers\.language\)\s*\)/u
+    )
     assert.match(main, /const syncAgentEdits = languageSyncOnAgentEdits\(providers\.language\)/u)
-    assert.match(main, /projectFilesEdited: \(ref, paths\) => syncAgentEdits\(ref\.projectRoot, paths\)/u)
+    assert.match(
+      main,
+      /projectFilesEdited: \(ref, paths\) => syncAgentEdits\(ref\.projectRoot, paths\)/u
+    )
   })
 })
 
@@ -353,7 +382,10 @@ void describe('editor re-checks diagnostics when the workspace changes outside t
 
   void test('the editor controller listens to agent writes and never drops a watch event mid-refresh', () => {
     const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
-    assert.match(controller, /subscribeWorkbenchAgentProjectWrites\(activeProjectRootPath, \(\) => \{/u)
+    assert.match(
+      controller,
+      /subscribeWorkbenchAgentProjectWrites\(activeProjectRootPath, \(\) => \{/u
+    )
     assert.match(controller, /externalFileRefreshQueuedRef\.current = true/u)
     assert.doesNotMatch(controller, /refreshInFlightRef:/u)
     const watchHook = readSource('src/renderer/src/support/useWorkspaceFilesChangedRefresh.ts')
@@ -367,6 +399,9 @@ void describe('editor re-checks diagnostics when the workspace changes outside t
     assert.match(editor, /externalWorkspaceChange\.of\(externalRevision\)/u)
     const insights = readSource('src/renderer/src/hooks/useWorkbenchLanguageServiceInsights.ts')
     // 只是工作区在外面变了：旧诊断留在面板上直到新结果回来，只有内容变了的文件先撤下。
-    assert.match(insights, /if \(changedPaths\.size > 0\)\n\s+setDiagnosticsByPath\(\(current\) => omitWorkbenchPendingDiagnostics\(current, changedPaths\)\)/u)
+    assert.match(
+      insights,
+      /if \(changedPaths\.size > 0\)\n\s+setDiagnosticsByPath\(\(current\) => omitWorkbenchPendingDiagnostics\(current, changedPaths\)\)/u
+    )
   })
 })

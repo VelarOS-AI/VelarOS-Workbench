@@ -10,16 +10,14 @@ import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
-const { ConversationRenderSlotsProvider, useConversationRenderSlots } = await import(
-  '@velaros-ai/ui/conversation'
-)
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
-const { standaloneWorkbenchConversationRenderSlots } = await import(
-  '../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots'
-)
-const { WorkbenchRunChangesScopeContext } = await import(
-  '../src/renderer/src/runtime/conversation/WorkbenchRunChangesCard'
-)
+const { ConversationRenderSlotsProvider, useConversationRenderSlots } =
+  await import('@velaros-ai/ui/conversation')
+const { WorkbenchLocalizationProvider } =
+  await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
+const { standaloneWorkbenchConversationRenderSlots } =
+  await import('../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots')
+const { WorkbenchRunChangesScopeContext } =
+  await import('../src/renderer/src/runtime/conversation/WorkbenchRunChangesCard')
 
 type SlotMessage = Parameters<
   ReturnType<typeof useConversationRenderSlots>['messageFileChangeSummary']
@@ -27,7 +25,12 @@ type SlotMessage = Parameters<
 
 function SummaryProbe({ messageId }: { messageId: string }): Nullable<ReactElement> {
   const slots = useConversationRenderSlots()
-  const message = { id: messageId, role: 'assistant', blocks: [], timestamp: 1 } as unknown as SlotMessage
+  const message = {
+    id: messageId,
+    role: 'assistant',
+    blocks: [],
+    timestamp: 1,
+  } as unknown as SlotMessage
   return slots.messageFileChangeSummary({
     message,
     sessionId: 'session',
@@ -68,15 +71,15 @@ const Summary: WorkbenchChatRunChangesSummary = {
 }
 
 void describe('Workbench run changes card', () => {
-  void test('heads the answer with the files and lines the run changed while the patches load', () => {
+  void test('heads the answer with the files and lines the run changed and starts with the patches collapsed', () => {
     const markup = renderCard('reply', new Map([['reply', Summary]]))
 
-    assert.match(markup, /chat\.fileChangeSummaryFilesChanged\{&quot;count&quot;:3\}/u)
+    assert.match(markup, /chat\.fileChangeSummaryCommitted\{&quot;count&quot;:3\}/u)
     assert.match(markup, />\+12</u)
     assert.match(markup, />-4</u)
     assert.match(markup, /chat\.fileChangeSummaryReview/u)
-    // 补丁全文在主进程的记录文件里，挂出来之后才去读。
-    assert.match(markup, /chat\.fileChangeSummaryLoading/u)
+    assert.match(markup, /aria-expanded="false"/u)
+    assert.doesNotMatch(markup, /chat\.fileChangeSummaryLoading/u)
   })
 
   void test('stays out of answers whose run changed nothing, and says so when capture failed', () => {
@@ -88,6 +91,6 @@ void describe('Workbench run changes card', () => {
       new Map([['reply', { ...Summary, fileCount: 0, error: 'git diff 执行失败' }]])
     )
     assert.match(failed, /chat\.fileChangeSummaryUnavailable/u)
-    assert.doesNotMatch(failed, /chat\.fileChangeSummaryFilesChanged/u)
+    assert.doesNotMatch(failed, /chat\.fileChangeSummaryCommitted/u)
   })
 })
