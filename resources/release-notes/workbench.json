@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.45",
+      "version": "0.4.46",
       "releasedAt": "2026-11-27",
       "title": {
         "zh": "更快的运行菜单与语言交互",

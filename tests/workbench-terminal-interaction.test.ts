@@ -128,7 +128,7 @@ test('terminal selection copies, output clicks do not interrupt, and input click
   }
 }, 30_000)
 
-test('a newly mounted terminal starts blinking after its initial theme and input options settle', async () => {
+test('a newly mounted terminal keeps a steady cursor after its initial theme and input options settle', async () => {
   const bundle = await build({
     stdin: {
       contents: `import { createElement } from 'react';
@@ -142,7 +142,12 @@ test('a newly mounted terminal starts blinking after its initial theme and input
         window.readCursor = () => {
           const terminal = findWorkbenchTerminal('initial-focus')?.terminal;
           const blink = terminal?._core._renderService._renderer.value._cursorBlinkStateManager?.value;
-          return {focused:!!terminal && document.activeElement===terminal.textarea,paused:blink?.isPaused,visible:blink?.isCursorVisible};
+          return {
+            focused:!!terminal && document.activeElement===terminal.textarea,
+            blinkEnabled:terminal?.options.cursorBlink,
+            hasBlinkTimer:!!blink,
+            hasBlinkAnimation:!!terminal?.element?.querySelector('.xterm-cursor-blink'),
+          };
         };`,
       resolveDir: process.cwd(),
     },
@@ -166,9 +171,22 @@ test('a newly mounted terminal starts blinking after its initial theme and input
     })
     await page.addScriptTag({ content: bundle.outputFiles[0]!.text })
     await page.waitForFunction(() => (window as any).readCursor?.().focused)
-    assert.equal(await page.evaluate(() => (window as any).readCursor().paused), false)
-    await page.waitForFunction(() => (window as any).readCursor().visible === false)
-    await page.waitForFunction(() => (window as any).readCursor().visible === true)
+    const samples = await page.evaluate(async () => {
+      const observed = []
+      for (let index = 0; index < 7; index += 1) {
+        observed.push((window as any).readCursor())
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+      return observed
+    })
+    for (const sample of samples) {
+      assert.deepEqual(sample, {
+        focused: true,
+        blinkEnabled: false,
+        hasBlinkTimer: false,
+        hasBlinkAnimation: false,
+      })
+    }
   } finally {
     await browser.close()
   }
