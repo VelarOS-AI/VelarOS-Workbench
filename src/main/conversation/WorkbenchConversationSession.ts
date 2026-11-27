@@ -20,11 +20,7 @@ import { VelarSessionsModule } from '@velaros-ai/capabilities/sessions/contracts
 import { webOperations } from '@velaros-ai/capabilities/web'
 import { VelarWebModule } from '@velaros-ai/capabilities/web/contracts'
 import type { RuntimeMetric, VelarosRuntime, VelarosSession } from '@velaros-ai/velaros'
-import {
-  createCapabilityModule,
-  createRuntime,
-  openSessionControl,
-} from '@velaros-ai/velaros'
+import { createCapabilityModule, createRuntime, openSessionControl } from '@velaros-ai/velaros'
 import { localContextStorage } from '@velaros-ai/velaros/context/node'
 import {
   isArray,
@@ -77,6 +73,8 @@ const ModelUsageBudget = Object.freeze({
   modelTokens: Number.MAX_SAFE_INTEGER,
 })
 const WorkerRunTimeoutMs = 4 * 60 * 60 * 1000
+const ProjectMemoryRecallInstruction =
+  '当新会话的第一条请求依赖过往背景，或当前对话不足以判断用户指的是谁、哪件事、哪个版本或哪条约定时，先从 velaros:system 导入 memory，用已有名称或主题作为 query 调用 memory.recall({query})，查找当前项目的相关记忆。按本轮用户说明核对结果，仍有影响执行的歧义时再向用户确认。'
 
 export interface WorkbenchConversationSessionApi {
   open(options: ConversationWorkspaceOptions): Promise<ConversationWorkspaceHandle>
@@ -240,7 +238,9 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         resources: [project.resource],
         node,
         residentModules: [],
-        instructions: options.instructions,
+        instructions: memory
+          ? [options.instructions, ProjectMemoryRecallInstruction].filter(Boolean).join('\n')
+          : options.instructions,
         environment: () => ({
           ...options.environment?.(),
           ...browser?.environment(),

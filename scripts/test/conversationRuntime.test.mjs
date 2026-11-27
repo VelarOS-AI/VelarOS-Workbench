@@ -302,7 +302,7 @@ test(
       if (call === 1)
         yield execute(
           frame,
-          "// 查构建记忆和网页能力\nimport {memory} from 'velaros:system';import {search} from 'velaros:web';console.log('memory-recall:' + JSON.stringify(await memory.recall({id:'build-command'})));console.log('web-module:' + typeof search);"
+          "// 查构建记忆和网页能力\nimport {memory} from 'velaros:system';import {search} from 'velaros:web';console.log('memory-recall:' + JSON.stringify(await memory.recall({query:'构建'})));console.log('web-module:' + typeof search);"
         )
       else if (call === 3)
         yield execute(
@@ -322,11 +322,13 @@ test(
     })
     await f.runtime.submit(f.sink, f.request('构建怎么跑')).completed
     assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-3)))
+    assert.match(f.frames[0].instructions, /当新会话的第一条请求依赖过往背景/u)
     assert.doesNotMatch(JSON.stringify(f.frames[0]), /构建用 bun run build/u)
     assert.match(JSON.stringify(f.frames[1]), /构建用 bun run build/u)
     assert.match(JSON.stringify(f.frames[1]), /web-module:function/u)
     await f.runtime.submit(f.sink, f.request('再问一次', { memory: false, sessionId: 'session-2' }))
       .completed
+    assert.doesNotMatch(f.frames[2].instructions, /当新会话的第一条请求依赖过往背景/u)
     assert.match(JSON.stringify(f.frames[3]), /memory-recall-type:undefined/u)
     assert.doesNotMatch(JSON.stringify(f.frames[3]), /构建用 bun run build/u)
   }
@@ -468,9 +470,11 @@ test('reports model reconnection until a retried response succeeds', async (t) =
   assert.equal(states[retry].attempt, 1)
   assert(states[retry].maxAttempts >= 1)
   assert.equal(states[retry].message, 'Connection interrupted')
-  const nextProgress = states.slice(retry + 1).find(
-    (state) => state.kind === 'turn-start' || state.kind === 'turn-end' || state.kind === 'phase'
-  )
+  const nextProgress = states
+    .slice(retry + 1)
+    .find(
+      (state) => state.kind === 'turn-start' || state.kind === 'turn-end' || state.kind === 'phase'
+    )
   assert(
     nextProgress?.kind === 'turn-end' ||
       (nextProgress?.kind === 'phase' && nextProgress.teamPhase !== 'researching'),
@@ -827,7 +831,8 @@ test(
       .map((event) => event.payload)
     assert(
       agents.some(
-        (agent) => agent.status === 'completed' && agent.agentId && agent.title === '检查输出，保留标点'
+        (agent) =>
+          agent.status === 'completed' && agent.agentId && agent.title === '检查输出，保留标点'
       )
     )
     assert(
