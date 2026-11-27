@@ -3,6 +3,19 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.47",
+      "releasedAt": "2026-11-27",
+      "title": {
+        "zh": "聊天组件与模型运行时更新",
+        "en": "Conversation and model runtime update"
+      },
+      "added": { "zh": [], "en": [] },
+      "fixed": {
+        "zh": ["更新共享聊天组件，继续中断的任务时保留原会话回合。", "更新配套的 Platform 运行时和能力包。"],
+        "en": ["Update the shared conversation UI to keep resumed tasks in the same turn.", "Update the Platform runtime and its matching capabilities package."]
+      }
+    },
+    {
       "version": "0.4.46",
       "releasedAt": "2026-11-27",
       "title": {
