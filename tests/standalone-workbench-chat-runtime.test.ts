@@ -17,6 +17,7 @@ import {
   readStandaloneContextUsageEstimate,
   readStandaloneModelVisibleText,
   readStandaloneTerminalKind,
+  resolveStandalonePresentationPhase,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   restoreStandaloneRunStatus,
@@ -124,6 +125,41 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.equal(apply(runtime, { kind: 'phase', teamPhase: 'dreaming' as never }), runtime)
     assert.equal(apply(runtime, { kind: 'input-applied', inputId: 'guidance-1' }), runtime)
     assert.equal(apply(runtime, contextUsage({ percent: 40 })), runtime)
+  })
+
+  void test('the live status only shows tools that belong to the current turn', () => {
+    const active: ChatMessage = {
+      id: 'active',
+      role: 'assistant',
+      timestamp: 2,
+      blocks: [
+        { type: 'tool-call', toolName: 'Read', toolCallId: 'read', args: {}, isRunning: true },
+      ],
+    }
+    const input: ChatMessage = {
+      id: 'input',
+      role: 'user',
+      conversationKind: 'turn-input',
+      timestamp: 1,
+      blocks: [{ type: 'text', text: 'Check project' }],
+    }
+    const runtime = { status: 'running', teamPhase: 'researching' } as const
+    assert.equal(
+      resolveStandalonePresentationPhase({ ...runtime, messages: [input, active] }),
+      'executing'
+    )
+    assert.equal(
+      resolveStandalonePresentationPhase({ ...runtime, messages: [active, input] }),
+      'researching'
+    )
+    assert.equal(
+      resolveStandalonePresentationPhase({
+        ...runtime,
+        teamPhase: 'collecting-context',
+        messages: [input, active],
+      }),
+      'collecting-context'
+    )
   })
 
   void test('projects awaiting states into interaction states that the next progress clears', () => {

@@ -342,13 +342,14 @@ export function FilePanel({
   function openContextMenu(entry: WorkbenchDirectoryEntry, event: MouseEvent): void {
     event.preventDefault()
     event.stopPropagation()
-    // 右键点在一组多选里时保留这组选择（菜单里的「添加到聊天」作用于整组），否则选中右键的这一项。
-    if (!isTreeEntryInMultiSelection(treeApiRef.current, entry.path)) onSelectEntryPath(entry.path)
+    // 文件树多选只作用于树行，搜索结果有自己的选中项。
+    const tree = searchActive && projectSearch.isOpen ? null : treeApiRef.current
+    if (!isTreeEntryInMultiSelection(tree, entry.path)) onSelectEntryPath(entry.path)
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
       entry,
-      chatFilePaths: resolveTreeChatFilePaths(treeApiRef.current, entry),
+      chatFilePaths: resolveTreeChatFilePaths(tree, entry),
     })
   }
 

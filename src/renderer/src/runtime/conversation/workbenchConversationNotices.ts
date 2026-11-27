@@ -1,5 +1,4 @@
 import type { ConversationWorkerThread } from '@velaros-ai/ui/conversation'
-import { isRunGuidanceMessage } from '@velaros-ai/ui/conversation/contracts'
 import type {
   ChatMessage,
   ContentBlock,
@@ -10,6 +9,7 @@ import type {
   ToolCallBlock,
   WidgetBlock,
 } from '@velaros-ai/ui/conversation/contracts'
+import { isRunGuidanceMessage } from '@velaros-ai/ui/conversation/contracts'
 import {
   isArray,
   isBoolean,
@@ -207,9 +207,7 @@ function applyScript(
       payload.runId,
       scope,
       (item) => item.type === 'script-execution' && item.id === payload.id,
-      (blocks, index) => {
-        return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
-      }
+      (blocks, index) => (index < 0 ? blocks : blocks.filter((_, position) => position !== index))
     )
   const block: ScriptExecutionBlock &
     Pick<ConversationScriptProjection, 'language' | 'processOutput' | 'processOutputTruncated'> = {
@@ -263,9 +261,7 @@ function applyScript(
     payload.runId,
     scope,
     (item) => item.type === 'script-execution' && item.id === payload.id,
-    (blocks, index) => {
-      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-    }
+    (blocks, index) => (index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block])
   )
 }
 
@@ -287,9 +283,7 @@ function applyWidget(
     payload.runId,
     scope,
     (item) => item.type === 'widget' && item.id === payload.id,
-    (blocks, index) => {
-      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-    }
+    (blocks, index) => (index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block])
   )
 }
 
@@ -317,9 +311,7 @@ function applyToolCall(
     payload.runId,
     scope,
     (item) => item.type === 'tool-call' && item.toolCallId === payload.id,
-    (blocks, index) => {
-      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-    }
+    (blocks, index) => (index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block])
   )
 }
 
@@ -336,9 +328,7 @@ function applyInteraction(
     runId,
     scope,
     (item) => item.type === 'interaction' && item.id === card.id,
-    (blocks, index) => {
-      return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
-    }
+    (blocks, index) => (index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block])
   )
 }
 

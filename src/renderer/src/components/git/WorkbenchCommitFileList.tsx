@@ -1,5 +1,4 @@
 import { type CSSProperties, type ReactElement, useLayoutEffect, useRef, useState } from 'react'
-
 import { resolveWorkbenchGitLogWindow } from '@renderer/models/git/workbenchGitGraph'
 import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 
