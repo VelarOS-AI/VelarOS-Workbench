@@ -3,6 +3,30 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.43",
+      "releasedAt": "2026-11-27",
+      "title": {
+        "zh": "C# 和 Java 编辑体验改进",
+        "en": "C# and Java editing improvements"
+      },
+      "added": {
+        "zh": [
+          "强化 C# 和 Java 的语法着色，区分类型、方法、字段、属性和注解，并将着色用于 Git 差异、文件历史、搜索结果和 Markdown 代码块。",
+          "补齐 C# 的自动缩进和折叠，支持折叠 Java record 和注解类型，并在语言服务器未启动时提供基础补全。",
+          "为 .NET 项目配置和 Groovy 版 Gradle 脚本提供语法着色。"
+        ],
+        "en": [
+          "Distinguish types, methods, fields, properties, and annotations in C# and Java, with the same highlighting in Git diffs, file history, search results, and Markdown code fences.",
+          "Improve C# indentation and folding, fold Java records and annotation types, and offer basic completions when language servers are unavailable.",
+          "Highlight .NET project configuration files and Groovy Gradle scripts."
+        ]
+      },
+      "fixed": {
+        "zh": ["修复 Windows 语言服务线程无法通过 Path 找到已安装的 csharp-ls 的问题。"],
+        "en": ["Find the installed csharp-ls on Windows when the language worker receives Path with mixed-case spelling."]
+      }
+    },
+    {
       "version": "0.4.42",
       "releasedAt": "2026-11-26",
       "title": {

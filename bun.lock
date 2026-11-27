@@ -45,6 +45,7 @@
         "@codemirror/search": "^6.7.0",
         "@codemirror/state": "^6.6.0",
         "@codemirror/view": "^6.43.0",
+        "@codincod/codemirror-lang-csharp": "0.1.1",
         "@electron/notarize": "2.5.0",
         "@electron/rebuild": "^4.0.3",
         "@eslint/js": "^9.39.4",
@@ -117,6 +118,7 @@
   },
   "patchedDependencies": {
     "@codemirror/lang-vue@0.1.3": "patches/@codemirror+lang-vue@0.1.3.patch",
+    "@lezer/highlight@1.2.3": "patches/@lezer+highlight@1.2.3.patch",
     "vscode-markdown-languageservice@0.5.0": "patches/vscode-markdown-languageservice@0.5.0.patch",
   },
   "packages": {
@@ -245,6 +247,8 @@
     "@codemirror/state": ["@codemirror/state@6.7.1", "", { "dependencies": { "@marijn/find-cluster-break": "^1.0.0" } }, "sha512-9QzNDgE4EYDnAHfrTlR2lwiPciiOymLtwKK+8yHQzCc7GXhAP9xdEbEJFy2IWB1j9UGUl9BsgMmTo/ImA02T7A=="],
 
     "@codemirror/view": ["@codemirror/view@6.43.6", "", { "dependencies": { "@codemirror/state": "^6.7.0", "crelt": "^1.0.6", "style-mod": "^4.1.0", "w3c-keyname": "^2.2.4" } }, "sha512-EVunGSYN1wz1p75WY1s3Xg7t3i8Yol0kGZGizNdX9BUFgMFILYVe8/u6EVpo7Ff5PwbZuILb4QAq7IZoKzIEQA=="],
+
+    "@codincod/codemirror-lang-csharp": ["@codincod/codemirror-lang-csharp@0.1.1", "", { "dependencies": { "@codemirror/autocomplete": "^6.0.0", "@codemirror/language": "^6.0.0", "@lezer/common": "^1.0.0", "@lezer/highlight": "^1.0.0", "@lezer/lr": "^1.0.0" } }, "sha512-zaB617O0YrXshyI0xjbyUOk+HaV2czAX5VyMNtsjj6rEE/B3Ii9mSYYSWRB1jWt/EQMSVevm3mJCaenl/omdug=="],
 
     "@date-fns/tz": ["@date-fns/tz@1.5.0", "", {}, "sha512-lwYN/vDPeNRULcepoE/LO2Pgx+7/RV+S9ARfbc9lr2DtGkOD7pAiruHvbR1RX3Qyf6ja47EWJDMsNK5vK08DJg=="],
 

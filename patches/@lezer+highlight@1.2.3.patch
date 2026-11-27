@@ -1,0 +1,26 @@
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -223,7 +223,8 @@
+     combine(a, b) {
+         let cur, root, take;
+         while (a || b) {
+-            if (!a || b && a.depth >= b.depth) {
++            // Match contextual selectors before the general fallback, as Rule.sort does.
++            if (!a || b && a.depth <= b.depth) {
+                 take = b;
+                 b = b.next;
+             }
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -225,7 +225,8 @@
+     combine(a, b) {
+         let cur, root, take;
+         while (a || b) {
+-            if (!a || b && a.depth >= b.depth) {
++            // Match contextual selectors before the general fallback, as Rule.sort does.
++            if (!a || b && a.depth <= b.depth) {
+                 take = b;
+                 b = b.next;
+             }

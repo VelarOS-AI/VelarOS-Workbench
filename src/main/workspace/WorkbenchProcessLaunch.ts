@@ -13,6 +13,7 @@ import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import { getRelativePathInsideRoot } from './PathContainmentHelper'
 import type { PathResolver } from './PathResolver'
+import { environmentValue } from './ProcessEnvironment'
 
 export interface WorkbenchCliQuery {
   readonly settled: Promise<void>
@@ -279,12 +280,6 @@ export async function resolveWorkbenchPackageBin(
     }
     if (dirname(directory) === directory) return null
   }
-}
-
-function environmentValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
-  if (process.platform !== 'win32') return env[name]
-  const key = Object.keys(env).find((candidate) => candidate.toUpperCase() === name)
-  return key === undefined ? undefined : env[key]
 }
 
 async function findProgram(program: string, context: WorkbenchProcessContext): Promise<string> {

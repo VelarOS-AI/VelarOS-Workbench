@@ -107,7 +107,10 @@ import {
   workbenchCompletionAddToOptions,
   workbenchCompletionOptionClass,
 } from '@renderer/models/editor/workbenchCodeMirrorCompletionPresentation'
-import { buildWorkbenchCodeMirrorCompletionResult } from '@renderer/models/editor/workbenchCodeMirrorCompletions'
+import {
+  buildWorkbenchCodeMirrorCompletionResult,
+  resolveWorkbenchOfflineCodeCompletion,
+} from '@renderer/models/editor/workbenchCodeMirrorCompletions'
 import {
   clearWorkbenchEditorHover,
   resumeWorkbenchEditorHover,
@@ -758,18 +761,21 @@ function createWorkbenchCompletionSource({
   getEditFormat: () => WorkbenchLanguageServiceEditFormat
   hostRuntime: WorkbenchHostRuntime
 }): CompletionSource {
-  return (context: CompletionContext) => {
+  const offlineCompletion = resolveWorkbenchOfflineCodeCompletion(path)
+  return async (context: CompletionContext) => {
     const selection = context.state.selection.main
     const content = context.state.doc.toString()
-    const localResult = buildWorkbenchCodeMirrorCompletionResult({
-      path,
-      language,
-      content,
-      selectionStart: selection.from,
-      selectionEnd: selection.to,
-      explicit: context.explicit,
-      projectContextIndex: getProjectContextIndex(),
-    })
+    const localResult = offlineCompletion
+      ? await offlineCompletion(context)
+      : buildWorkbenchCodeMirrorCompletionResult({
+          path,
+          language,
+          content,
+          selectionStart: selection.from,
+          selectionEnd: selection.to,
+          explicit: context.explicit,
+          projectContextIndex: getProjectContextIndex(),
+        })
 
     if (!path || !usesWorkbenchBuiltinLanguageService(path)) return localResult || null
     if (!shouldRequestWorkbenchLanguageServiceCompletions(context, path)) return localResult || null

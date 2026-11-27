@@ -22,6 +22,8 @@ export function fileLanguage(path: Nullable<string>): string {
   const extension = path.split('.').at(-1)?.toLowerCase()
   switch (extension) {
     case 'java': return 'Java'
+    case 'gradle':
+    case 'groovy': return 'Groovy'
     case 'cs':
     case 'csx': return 'C#'
     case 'go': return 'Go'
@@ -66,9 +68,14 @@ export function fileLanguage(path: Nullable<string>): string {
     case 'yml':
       return 'YAML'
     case 'atom':
+    case 'csproj':
     case 'plist':
+    case 'props':
+    case 'resx':
     case 'rss':
+    case 'slnx':
     case 'svg':
+    case 'targets':
     case 'xml':
     case 'xsd':
     case 'xsl':

@@ -12,6 +12,7 @@ import type { WorkbenchLanguageServiceDescriptor } from '@shared/workbenchLangua
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isPathInsideRoot } from '../PathContainmentHelper'
+import { environmentValue } from '../ProcessEnvironment'
 
 import { externalLspFileIdentity as fileIdentity } from './ExternalLspFileIdentity'
 import {
@@ -359,7 +360,7 @@ function projectNodePackageBinPath(
 }
 
 function extendPath(runtimeRoot: string, workspaceRoot?: string): string {
-  const current = process.env['PATH'] ?? ''
+  const current = environmentValue(process.env, 'PATH') ?? ''
   return [
     ...nodeBinDirectories(runtimeRoot, workspaceRoot),
     ...(current ? current.split(delimiter) : []),
@@ -377,7 +378,7 @@ function executableExists(command: string, pathValue: string): boolean {
 
   const extensions =
     process.platform === 'win32'
-      ? (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')
+      ? (environmentValue(process.env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';')
       : ['']
   return pathValue
     .split(delimiter)
@@ -390,7 +391,7 @@ function resolvedExecutablePath(command: string, pathValue: string): string {
   if (isAbsolute(command) || command.includes('/') || command.includes('\\')) return command
   const extensions =
     process.platform === 'win32'
-      ? (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')
+      ? (environmentValue(process.env, 'PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';')
       : ['']
   for (const directory of pathValue.split(delimiter)) {
     for (const extension of extensions) {
@@ -1090,6 +1091,12 @@ export class ExternalLspClient {
     }
     // 不走 Electron 运行时时一个键也不写：继承来的 ELECTRON_RUN_AS_NODE 要原样留给子进程。
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: pathValue }
+    if (process.platform === 'win32') {
+      // The child must receive the same search path we used to resolve the launcher.
+      for (const key of Object.keys(env)) {
+        if (key !== 'PATH' && key.toUpperCase() === 'PATH') delete env[key]
+      }
+    }
     if (launch.electronRunAsNode) env.ELECTRON_RUN_AS_NODE = '1'
     const opening = this.launcher.open({
       projectRoot: this.workspaceRoot ?? this.runtimeRoot,

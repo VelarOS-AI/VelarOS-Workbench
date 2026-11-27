@@ -1,7 +1,6 @@
 import { css } from '@codemirror/lang-css'
 import { go } from '@codemirror/lang-go'
 import { html } from '@codemirror/lang-html'
-import { java } from '@codemirror/lang-java'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { less } from '@codemirror/lang-less'
@@ -19,20 +18,24 @@ import {
   LanguageSupport,
   StreamLanguage,
 } from '@codemirror/language'
-import { csharp, dart, kotlin, shader } from '@codemirror/legacy-modes/mode/clike'
+import { dart, kotlin, shader } from '@codemirror/legacy-modes/mode/clike'
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
+import { groovy } from '@codemirror/legacy-modes/mode/groovy'
 import { properties } from '@codemirror/legacy-modes/mode/properties'
 import { shell } from '@codemirror/legacy-modes/mode/shell'
 import { swift } from '@codemirror/legacy-modes/mode/swift'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
 import { wast } from '@codemirror/legacy-modes/mode/wast'
 import type { Extension } from '@codemirror/state'
+import { csharpLanguage } from '@codincod/codemirror-lang-csharp'
+import { styleTags, tags } from '@lezer/highlight'
 
 import {
   getWorkbenchPathExtension,
   normalizeWorkbenchLanguage,
 } from '@shared/workbenchLanguageServices'
 
+import { workbenchJavaLanguage } from './workbenchCodeMirrorJava'
 import { resolveWorkbenchEditorLanguage } from './workbenchEditorLanguageContributions'
 import { workbenchGitIgnoreLanguage } from './workbenchGitIgnoreLanguage'
 
@@ -51,17 +54,52 @@ const CssTokens = new Set(['css'])
 const HtmlTokens = new Set(['htm', 'html'])
 const PythonTokens = new Set(['py', 'pyi', 'python'])
 const YamlTokens = new Set(['yaml', 'yml'])
-const XmlTokens = new Set(['atom', 'plist', 'rss', 'svg', 'xml', 'xsd', 'xsl', 'xslt'])
+const XmlTokens = new Set([
+  'atom',
+  'csproj',
+  'plist',
+  'props',
+  'resx',
+  'rss',
+  'slnx',
+  'svg',
+  'targets',
+  'xml',
+  'xsd',
+  'xsl',
+  'xslt',
+])
 const ShellTokens = new Set(['bash', 'sh', 'shell', 'zsh'])
 const PropertiesTokens = new Set(['cfg', 'env', 'ini', 'properties'])
 
+const WorkbenchCSharpLanguage = csharpLanguage.configure({
+  props: [
+    styleTags({
+      'Attribute/TypeName Attribute/ScopedTypeName!': tags.annotation,
+      'FieldDeclaration/VariableDeclarator/Definition EventFieldDeclaration/VariableDeclarator/Definition RecordDeclaration/ParameterList/Parameter/Definition':
+        tags.definition(tags.propertyName),
+    }),
+  ],
+})
+
 const AdditionalLanguages = [
-  { id: 'java', name: 'Java', tokens: ['java'], support: java() },
+  {
+    id: 'java',
+    name: 'Java',
+    tokens: ['java'],
+    support: new LanguageSupport(workbenchJavaLanguage),
+  },
   {
     id: 'csharp',
     name: 'C#',
     tokens: ['cs', 'csx', 'csharp', 'c#'],
-    support: new LanguageSupport(StreamLanguage.define(csharp)),
+    support: new LanguageSupport(WorkbenchCSharpLanguage),
+  },
+  {
+    id: 'groovy',
+    name: 'Groovy',
+    tokens: ['gradle', 'groovy'],
+    support: new LanguageSupport(StreamLanguage.define(groovy)),
   },
   { id: 'go', name: 'Go', tokens: ['go', 'golang'], support: go() },
   { id: 'rust', name: 'Rust', tokens: ['rs', 'rust'], support: rust() },
