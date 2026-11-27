@@ -132,7 +132,7 @@
     "vite": "^7.3.2",
     "zod": "^4.3.6",
     "npm": "12.2.0",
-    "@velaros-ai/ui": "https://github.com/VelarOS-AI/VelarOS-UI/releases/download/v1.1.12/velaros-ai-ui-1.1.12.tgz",
+    "@velaros-ai/ui": "https://github.com/VelarOS-AI/VelarOS-UI/releases/download/v1.1.13/velaros-ai-ui-1.1.13.tgz",
     "@typescript/native": "npm:typescript@7.0.2",
     "react-dom": "^19.2.5",
     "@codemirror/lang-go": "^6.0.1",

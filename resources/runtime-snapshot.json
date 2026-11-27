@@ -10,8 +10,8 @@
     "ui": {
       "kind": "github-release",
       "repository": "VelarOS-AI/VelarOS-UI",
-      "tag": "v1.1.12",
-      "sourceCommit": "df39a1468932818c46185994291e65af9a184bd6"
+      "tag": "v1.1.13",
+      "sourceCommit": "5eca20d3a2c2bf8336426a78d9a8d01dcd4e9638"
     }
   },
   "packages": [
@@ -35,12 +35,12 @@
     },
     {
       "name": "@velaros-ai/ui",
-      "version": "1.1.12",
+      "version": "1.1.13",
       "source": "ui",
-      "fileName": "velaros-ai-ui-1.1.12.tgz",
-      "sizeBytes": 951868,
-      "sha256": "7ab45dae5f745f4aa1a451da710d46814bf64d32dbc442cd84cc3e8c6d5e198f",
-      "integrity": "sha512-h7vAn7vDtSKREAGn+XGylWmmJjqHCf2sSiXePtAau83fzVUwMgjBieisDeaF1cGW7k+rTThSaTaJOaQNcR7hUg=="
+      "fileName": "velaros-ai-ui-1.1.13.tgz",
+      "sizeBytes": 951871,
+      "sha256": "203a4b50f565bfbf5c042197f51086ed3779ee72b6156cbc008329b21bf7cdf7",
+      "integrity": "sha512-mFC64PnPIEk3vsNmVH2w3WW0z6HT4HKnph0gD2+BQ9uRdF4LNINbKp41qclO5IMJwbvnF8bkfaamx6izuRegqg=="
     }
   ]
 }
