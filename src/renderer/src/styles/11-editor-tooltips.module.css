@@ -420,16 +420,16 @@
 .editorSignatureTooltip {
   box-sizing: border-box;
   max-width: min(520px, calc(100vw - 32px));
-  padding: 8px 10px;
-  border: 1px solid var(--workbench-border);
-  border-radius: 8px;
-  background-color: var(--workbench-editor-tooltip-bg, #ffffff);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  padding: 5px 8px;
+  border: 1px solid var(--workbench-tooltip-border);
+  border-radius: 3px;
+  background-color: var(--workbench-tooltip-bg);
+  box-shadow: var(--workbench-overlay-shadow);
   overflow-wrap: anywhere;
 }
 
 .editorSignatureTooltipSignature {
-  color: var(--workbench-text);
+  color: var(--workbench-tooltip-fg);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
@@ -440,6 +440,8 @@
 
 .editorSignatureTooltipParameter {
   margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--workbench-border-soft);
   color: var(--workbench-text-muted);
   font-size: 11px;
   line-height: 1.4;
@@ -471,10 +473,33 @@
 }
 
 .codeMirrorEditor :global(.cm-workbenchTokenOccurrence) {
+  position: relative;
+  isolation: isolate;
+}
+
+.codeMirrorEditor :global(.cm-workbenchTokenOccurrence)::before {
   /* 浅色包裹：背景色取自光标所在标识符的语法着色（见 token-occurrence 扩展），
-     无法解析时回退到中性浅灰。 */
+     高度随代码行，宽度贴合标识符。 */
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-block-start: 50%;
+  inset-inline: 0;
+  height: 1lh;
+  translate: 0 -50%;
   background: var(--workbench-token-occurrence-bg, rgba(120, 128, 145, 0.14));
-  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* 换行时标识符可能拆成多个行内盒，逐段绘制背景。 */
+.codeMirrorEditor :global(.cm-lineWrapping .cm-workbenchTokenOccurrence) {
+  padding-block: max(0px, calc((1lh - 1.16em) / 2));
+  background: var(--workbench-token-occurrence-bg, rgba(120, 128, 145, 0.14));
+  box-decoration-break: clone;
+}
+
+.codeMirrorEditor :global(.cm-lineWrapping .cm-workbenchTokenOccurrence)::before {
+  content: none;
 }
 
 .codeMirrorEditor :global(.cm-workbenchDeprecated),

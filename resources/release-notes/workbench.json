@@ -3,6 +3,32 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.54",
+      "releasedAt": "2026-11-28",
+      "title": {
+        "zh": "编辑器提示、启动与工具窗口",
+        "en": "Editor hints, startup, and tool windows"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "标识符高亮改为与代码行等高的直角背景，函数参数提示更紧凑。",
+          "将代理进程整合到运行面板，改进控制台滚动、光标和链接交互。",
+          "推迟模型初始化，并在退出或重启期间保留打开项目的请求。",
+          "在 Git 操作按钮上显示远程操作进度，并在独立面板中打开文件差异。"
+        ],
+        "en": [
+          "Align square identifier highlights with the code line and make function parameter hints more compact.",
+          "Move agent processes into the Run panel and improve console scrolling, cursor visibility, and link interactions.",
+          "Defer model initialization and preserve requests to open projects during shutdown or restart.",
+          "Show Git remote progress in the action buttons and open file diffs in a dedicated pane."
+        ]
+      }
+    },
+    {
       "version": "0.4.53",
       "releasedAt": "2026-11-27",
       "title": {
