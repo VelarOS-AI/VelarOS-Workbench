@@ -1,4 +1,4 @@
-import { type ReactElement, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CalendarBlankIcon,
   FileCodeIcon,
@@ -7,6 +7,7 @@ import {
   HashStraightIcon,
   StackIcon,
   UserCircleIcon,
+  XIcon,
 } from '@phosphor-icons/react'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
@@ -20,6 +21,7 @@ import {
   getWorkbenchGitStashTitle,
 } from '@renderer/models/git/workbenchGitStashModel'
 
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Result } from '@velaros-ai/velaros/core/result'
 
@@ -59,11 +61,14 @@ export function WorkbenchGitDetailsPane({
   const { locale, t } = useWorkbenchI18n()
   const [loaded, setLoaded] = useState<Nullable<{ key: string; diff: string }>>(null)
   const [selectedDiffPath, setSelectedDiffPath] = useState<Nullable<string>>(null)
-  const key = targetKey(target)
+  const selectedButton = useRef<HTMLButtonElement>(null)
+  const identity = targetKey(target)
+  const key = identity ? `${workspaceRoot}\0${identity}` : null
   const commitSha = target?.kind === 'commit' ? target.commit.sha : null
   const stashSha = target?.kind === 'stash' ? target.stash.sha : null
 
   useEffect(() => {
+    setSelectedDiffPath(null)
     if (!key) {
       setLoaded(null)
       return
@@ -94,7 +99,7 @@ export function WorkbenchGitDetailsPane({
   const diff = loaded?.key === key ? loaded.diff : ''
   const diffFiles = useMemo(() => parseWorkbenchGitCommitDiff(diff), [diff])
   const selectedDiffFile = useMemo(
-    () => diffFiles.find((file) => file.path === selectedDiffPath) ?? diffFiles[0] ?? null,
+    () => diffFiles.find((file) => file.path === selectedDiffPath) ?? null,
     [diffFiles, selectedDiffPath]
   )
   const diffStats = useMemo(
@@ -111,140 +116,172 @@ export function WorkbenchGitDetailsPane({
 
   if (!target)
     return (
-      <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
-        {t('workbench.gitCommitSelect')}
-      </Paragraph>
+      <aside className={styles.gitCommitDetailPane}>
+        <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
+          {t('workbench.gitCommitSelect')}
+        </Paragraph>
+      </aside>
     )
 
+  const date = formatWorkbenchGitCommitDate(
+    locale,
+    target.kind === 'commit' ? target.commit : { authoredAt: target.stash.createdAt }
+  )
+
   return (
-    <div className={styles.gitCommitDetail}>
-      {target.kind === 'commit' ? (
-        <>
-          <header className={styles.gitCommitHeader}>
-            <h5 className={styles.gitCommitDetailTitle}>{target.commit.subject}</h5>
-            {!!target.commit.refs.length && (
-              <div className={styles.gitCommitRefs}>
-                {sortWorkbenchGitRefs(target.commit.refs).map((ref) => (
-                  <span key={`${ref.kind}:${ref.name}`} data-kind={ref.kind}>
-                    {ref.current ? `HEAD → ${ref.name}` : ref.name}
-                  </span>
+    <>
+      <aside className={styles.gitCommitDetailPane}>
+        <div className={styles.gitCommitDetail}>
+          {target.kind === 'commit' ? (
+            <>
+              <header className={styles.gitCommitHeader}>
+                <h5 className={styles.gitCommitDetailTitle}>{target.commit.subject}</h5>
+                {!!target.commit.refs.length && (
+                  <div className={styles.gitCommitRefs}>
+                    {sortWorkbenchGitRefs(target.commit.refs).map((ref) => (
+                      <span key={`${ref.kind}:${ref.name}`} data-kind={ref.kind}>
+                        {ref.current ? `HEAD → ${ref.name}` : ref.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {actions}
+              </header>
+              <dl className={styles.gitCommitMetaGrid}>
+                <div>
+                  <dt>
+                    <HashStraightIcon size={14} aria-hidden="true" />
+                    {t('workbench.gitCommitSha')}
+                  </dt>
+                  <dd title={target.commit.shortSha}>{target.commit.shortSha}</dd>
+                </div>
+                <div>
+                  <dt>
+                    <UserCircleIcon size={14} aria-hidden="true" />
+                    {t('workbench.gitCommitAuthor')}
+                  </dt>
+                  <dd title={target.commit.authorName}>{target.commit.authorName}</dd>
+                </div>
+                <div>
+                  <dt>
+                    <CalendarBlankIcon size={14} aria-hidden="true" />
+                    {t('workbench.gitCommitDate')}
+                  </dt>
+                  <dd title={date}>{date}</dd>
+                </div>
+              </dl>
+            </>
+          ) : (
+            <>
+              <header className={styles.gitCommitHeader}>
+                <h5 className={styles.gitCommitDetailTitle}>
+                  {getWorkbenchGitStashTitle(target.stash, t)}
+                </h5>
+                <div className={styles.gitCommitRefs}>
+                  <span>{`stash@{${target.stash.index}}`}</span>
+                  {target.stash.includesUntracked && (
+                    <span>{t('workbench.gitStashIncludesUntracked')}</span>
+                  )}
+                </div>
+                {actions}
+              </header>
+              <dl className={styles.gitCommitMetaGrid} data-columns="2">
+                <div>
+                  <dt aria-label={t('workbench.gitBranches')}>
+                    {target.stash.branch ? (
+                      <GitBranchIcon size={14} aria-hidden="true" />
+                    ) : (
+                      <StackIcon size={14} aria-hidden="true" />
+                    )}
+                  </dt>
+                  <dd title={getWorkbenchGitStashSubtitle(target.stash, t)}>
+                    {getWorkbenchGitStashSubtitle(target.stash, t)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>
+                    <CalendarBlankIcon size={14} aria-hidden="true" />
+                    {t('workbench.gitCommitDate')}
+                  </dt>
+                  <dd title={date}>{date}</dd>
+                </div>
+              </dl>
+            </>
+          )}
+          <section className={styles.gitCommitChanges}>
+            <header className={styles.gitCommitChangesHeader}>
+              <span>
+                <FilesIcon size={14} />
+                {t('workbench.gitChangedFiles', { count: diffFiles.length })}
+              </span>
+              <span className={styles.gitCommitStats}>
+                <strong>+{diffStats.additions}</strong>
+                <em>-{diffStats.deletions}</em>
+              </span>
+            </header>
+            {!!diffFiles.length && (
+              <div className={styles.gitCommitFileList}>
+                {diffFiles.map((file) => (
+                  <button
+                    key={file.path}
+                    type="button"
+                    data-active={selectedDiffFile?.path === file.path}
+                    aria-pressed={selectedDiffFile?.path === file.path}
+                    title={file.path}
+                    onClick={(event) => {
+                      selectedButton.current = event.currentTarget
+                      setSelectedDiffPath(file.path)
+                    }}
+                  >
+                    <FileCodeIcon size={13} />
+                    <span>{file.path}</span>
+                    <small>
+                      <strong>+{file.additions}</strong>
+                      <em>-{file.deletions}</em>
+                    </small>
+                  </button>
                 ))}
               </div>
             )}
-            {actions}
-          </header>
-          <dl className={styles.gitCommitMetaGrid}>
-            <div>
-              <span className={styles.gitCommitMetaLabel}>
-                <HashStraightIcon size={14} />
-                <dt>{t('workbench.gitCommitSha')}</dt>
-              </span>
-              <dd>{target.commit.shortSha}</dd>
-            </div>
-            <div>
-              <span className={styles.gitCommitMetaLabel}>
-                <UserCircleIcon size={14} />
-                <dt>{t('workbench.gitCommitAuthor')}</dt>
-              </span>
-              <dd>{target.commit.authorName}</dd>
-            </div>
-            <div>
-              <span className={styles.gitCommitMetaLabel}>
-                <CalendarBlankIcon size={14} />
-                <dt>{t('workbench.gitCommitDate')}</dt>
-              </span>
-              <dd>{formatWorkbenchGitCommitDate(locale, target.commit)}</dd>
-            </div>
-          </dl>
-        </>
-      ) : (
-        <>
-          <header className={styles.gitCommitHeader}>
-            <h5 className={styles.gitCommitDetailTitle}>
-              {getWorkbenchGitStashTitle(target.stash, t)}
-            </h5>
-            <div className={styles.gitCommitRefs}>
-              <span>{`stash@{${target.stash.index}}`}</span>
-              {target.stash.includesUntracked && (
-                <span>{t('workbench.gitStashIncludesUntracked')}</span>
-              )}
-            </div>
-            {actions}
-          </header>
-          <dl className={styles.gitCommitMetaGrid} data-columns="2">
-            <div>
-              <span className={styles.gitCommitMetaLabel}>
-                {target.stash.branch ? <GitBranchIcon size={14} /> : <StackIcon size={14} />}
-              </span>
-              <dd title={getWorkbenchGitStashSubtitle(target.stash, t)}>
-                {getWorkbenchGitStashSubtitle(target.stash, t)}
-              </dd>
-            </div>
-            <div>
-              <span className={styles.gitCommitMetaLabel}>
-                <CalendarBlankIcon size={14} />
-                <dt>{t('workbench.gitCommitDate')}</dt>
-              </span>
-              <dd>
-                {formatWorkbenchGitCommitDate(locale, { authoredAt: target.stash.createdAt })}
-              </dd>
-            </div>
-          </dl>
-        </>
-      )}
-      <section className={styles.gitCommitChanges}>
-        <header className={styles.gitCommitChangesHeader}>
-          <span>
-            <FilesIcon size={14} />
-            {t('workbench.gitChangedFiles', { count: diffFiles.length })}
-          </span>
-          <span className={styles.gitCommitStats}>
-            <strong>+{diffStats.additions}</strong>
-            <em>-{diffStats.deletions}</em>
-          </span>
-        </header>
-        {!!diffFiles.length && (
-          <div className={styles.gitCommitFileList}>
-            {diffFiles.map((file) => (
-              <button
-                key={file.path}
-                type="button"
-                data-active={selectedDiffFile?.path === file.path}
-                onClick={() => setSelectedDiffPath(file.path)}
-              >
-                <FileCodeIcon size={13} />
-                <span>{file.path}</span>
-                <small>
-                  <strong>+{file.additions}</strong>
-                  <em>-{file.deletions}</em>
-                </small>
-              </button>
-            ))}
-          </div>
-        )}
-        <div className={styles.gitCommitPatch}>
-          <p className={styles.gitPaneSectionTitle}>
-            {selectedDiffFile?.path || t('workbench.gitDiffPreview')}
-          </p>
-          {selectedDiffFile ? (
-            <pre className={styles.gitToolCommitDiff}>
-              {selectedDiffFile.lines.slice(0, PatchLinesShown).map((line, index) => (
-                <span
-                  key={`${index}-${line.text}`}
-                  className={styles.gitCommitPatchLine}
-                  data-kind={line.kind}
-                >
-                  {line.text || ' '}
-                </span>
-              ))}
-            </pre>
-          ) : (
-            <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
-              {t('workbench.gitDiffEmpty')}
-            </Paragraph>
-          )}
+            {loaded?.key === key && diffFiles.length === 0 && (
+              <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
+                {t('workbench.gitDiffEmpty')}
+              </Paragraph>
+            )}
+          </section>
         </div>
-      </section>
-    </div>
+      </aside>
+      {selectedDiffFile && (
+        <aside className={styles.gitCommitPatch} aria-label={t('workbench.gitDiffPreview')}>
+          <header className={styles.gitCommitPatchHeader}>
+            <span title={selectedDiffFile.path}>{selectedDiffFile.path}</span>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              label={t('common.close')}
+              title={t('common.close')}
+              onClick={() => {
+                setSelectedDiffPath(null)
+                selectedButton.current?.focus({ preventScroll: true })
+              }}
+            >
+              <XIcon size={13} />
+            </IconButton>
+          </header>
+          <pre key={selectedDiffFile.path} className={styles.gitToolCommitDiff} tabIndex={0}>
+            {selectedDiffFile.lines.slice(0, PatchLinesShown).map((line, index) => (
+              <span
+                key={`${index}-${line.text}`}
+                className={styles.gitCommitPatchLine}
+                data-kind={line.kind}
+              >
+                {line.text || ' '}
+              </span>
+            ))}
+          </pre>
+        </aside>
+      )}
+    </>
   )
 }

@@ -37,7 +37,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
 test('initial title, project updates and renderer title protection retain one main-process authority', () => {
   assert.match(
     source,
-    /title: getWorkbenchWindowTitle\(hub\.getState\(\)\.currentProject\?\.name \?\? null\)/u
+    /title: getWorkbenchWindowTitle\(hub\.getCurrentProject\(\)\?\.name \?\? null\)/u
   )
   assert.match(
     source,

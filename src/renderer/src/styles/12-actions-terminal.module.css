@@ -779,7 +779,28 @@
 
 /* xterm 宿主：撑满面板，配色由 workbenchTerminalTheme 按主题变量算出来喂给 xterm。 */
 .terminalViewFrame {
-  @apply relative flex min-h-0 flex-1 flex-col;
+  @apply relative flex min-h-0 min-w-0 flex-1 flex-col;
+}
+
+.terminalViewViewport {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+}
+
+.terminalViewViewport[data-horizontal-scroll='true'] {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.terminalViewViewport[data-horizontal-scroll='true'] .terminalViewHost {
+  box-sizing: content-box;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+/* Keep xterm's vertical controls at the pane edge while its cells scroll horizontally. */
+.terminalViewViewport[data-horizontal-scroll='true'] :global(.xterm .scrollbar.vertical),
+.terminalViewViewport[data-horizontal-scroll='true'] :global(.xterm-decoration-overview-ruler) {
+  transform: translateX(var(--terminal-scrollbar-offset, 0px));
 }
 
 .terminalViewHost {
@@ -789,11 +810,11 @@
 }
 
 .terminalLinkExternalButton {
-  @apply absolute flex items-center justify-center;
+  @apply absolute flex cursor-pointer items-center;
   z-index: 2;
   min-width: 0;
   min-height: 0;
-  padding: 0;
+  padding: 0 0 0 2px;
   border: 0;
   border-radius: 2px;
   color: var(--workbench-editor-hover-link);
@@ -801,8 +822,7 @@
 }
 
 .terminalLinkExternalButton > svg {
-  width: 11px;
-  height: 11px;
+  flex: none;
 }
 
 /* 终端查找栏浮在右上角（避开滚动条），不占终端的行。 */
@@ -876,15 +896,18 @@
 .consoleLinkExternal {
   display: inline-flex;
   align-items: center;
-  margin-left: 3px;
+  margin-left: 4px;
   color: var(--workbench-editor-hover-link);
   vertical-align: middle;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.consoleLinkExternal:hover {
+.consoleLinkGroup:hover .consoleLinkExternal,
+.consoleLinkGroup:has(:focus-visible) .consoleLinkExternal {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .terminalInputForm {

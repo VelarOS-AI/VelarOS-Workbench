@@ -1,4 +1,5 @@
 import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
@@ -12,8 +13,7 @@ import {
 } from '@renderer/models/editor/workbenchEditorFindState'
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
-import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-
+import { WorkbenchRunConsoleColumns } from '../../models/commands/workbenchTerminalPresentation'
 import { findWorkbenchTerminalWebLinks } from '../../models/commands/workbenchTerminalWebLinks'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
@@ -26,6 +26,7 @@ import {
   findWorkbenchTerminal,
   fitWorkbenchTerminal,
   mountWorkbenchTerminal,
+  setWorkbenchRunCursorHidden,
   stepWorkbenchTerminalFind,
   unmountWorkbenchTerminal,
   type WorkbenchTerminalInstanceHandlers,
@@ -51,6 +52,7 @@ interface WorkbenchTerminalViewProps {
   /** 会话的起始目录：输出里的相对路径按它解析（shell 用 OSC 7 报了新目录就按新的）。 */
   cwd: string
   isRunning: boolean
+  isRunConsole?: boolean
   workbenchTheme: WorkbenchThemeId
   onData: (sessionId: string, data: string) => void
   onResize: (sessionId: string, cols: number, rows: number) => void
@@ -71,6 +73,7 @@ export function WorkbenchTerminalView({
   sessionId,
   cwd,
   isRunning,
+  isRunConsole = false,
   workbenchTheme,
   onData,
   onResize,
@@ -80,9 +83,17 @@ export function WorkbenchTerminalView({
 }: WorkbenchTerminalViewProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const containerRef = useRef<HTMLDivElement>(null)
-  const [externalLinks, setExternalLinks] = useState<
-    Array<{ url: string; left: number; top: number; width: number; height: number }>
-  >([])
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [externalLink, setExternalLink] = useState<
+    Nullable<{
+      element: HTMLElement
+      url: string
+      left: number
+      top: number
+      width: number
+      height: number
+    }>
+  >(null)
   const cwdLatest = useLatest(cwd)
   const onDataLatest = useLatest(onData)
   const onResizeLatest = useLatest(onResize)
@@ -94,9 +105,17 @@ export function WorkbenchTerminalView({
     EmptyWorkbenchEditorFindStatus
   )
 
+  const positionVerticalScrollbar = useCallback((): void => {
+    const viewport = viewportRef.current
+    if (!viewport || !isRunConsole) return
+    const offset = Math.max(0, viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft)
+    viewport.style.setProperty('--terminal-scrollbar-offset', `${-offset}px`)
+  }, [isRunConsole])
+
   useEffect(() => {
     const container = containerRef.current
-    if (!container) return undefined
+    const viewport = viewportRef.current
+    if (!container || !viewport) return undefined
 
     const instance = acquireWorkbenchTerminal(
       sessionId,
@@ -107,6 +126,33 @@ export function WorkbenchTerminalView({
           if (open) open(url)
           else window.open(url, '_blank', 'noopener,noreferrer')
         },
+        onHoverLink: (url, range) => {
+          const terminal = findWorkbenchTerminal(sessionId)?.terminal
+          if (!terminal) return
+          const element = terminal.element
+          const screen = element?.querySelector('.xterm-screen')
+          if (!element || !screen) return
+          // The addon's range uses 1-based buffer coordinates, even after scrolling.
+          const row = range.end.y - 1 - terminal.buffer.active.viewportY
+          const link = findWorkbenchTerminalWebLinks(terminal).find(
+            (candidate) =>
+              candidate.url === url && candidate.row === row && candidate.column === range.end.x
+          )
+          if (!link) return
+          const rect = screen.getBoundingClientRect()
+          const terminalRect = element.getBoundingClientRect()
+          const cellWidth = rect.width / terminal.cols
+          const cellHeight = rect.height / terminal.rows
+          setExternalLink({
+            element,
+            url,
+            left: rect.left - terminalRect.left + link.column * cellWidth,
+            top: rect.top - terminalRect.top + link.row * cellHeight,
+            width: cellWidth * 2,
+            height: cellHeight,
+          })
+        },
+        onLeaveLink: () => setExternalLink(null),
         resolveFileLinks: async (paths, directory) =>
           (await onResolveFileLinksLatest.current?.(paths, directory, sessionId)) ??
           paths.map(() => null),
@@ -120,9 +166,15 @@ export function WorkbenchTerminalView({
           })),
         onFindStatusChange: setFindStatus,
       },
-      { fontFamily: readWorkbenchTerminalFontFamily(container), cwd: cwdLatest.current }
+      {
+        fontFamily: readWorkbenchTerminalFontFamily(container),
+        cwd: cwdLatest.current,
+        cols: isRunConsole ? WorkbenchRunConsoleColumns : undefined,
+      }
     )
     mountWorkbenchTerminal(sessionId, container)
+    const scrolled = instance.terminal.onScroll(() => setExternalLink(null))
+    const resized = instance.terminal.onResize(() => setExternalLink(null))
 
     let lastSize = ''
     let frame: Nullable<number> = null
@@ -142,6 +194,7 @@ export function WorkbenchTerminalView({
       frame = requestAnimationFrame(() => {
         frame = null
         fitNow()
+        positionVerticalScrollbar()
         // Theme/disableStdin effects recreate WebGL's blink manager. Focusing in
         // the mount effect races its cached focus state and leaves it paused.
         if (focusPending && container.clientWidth > 0 && container.clientHeight > 0) {
@@ -152,11 +205,14 @@ export function WorkbenchTerminalView({
     }
     const observer = new ResizeObserver(scheduleFit)
     observer.observe(container)
+    observer.observe(viewport)
     window.addEventListener('pointerup', scheduleFit)
     window.addEventListener('pointercancel', scheduleFit)
     scheduleFit()
 
     return () => {
+      scrolled.dispose()
+      resized.dispose()
       observer.disconnect()
       window.removeEventListener('pointerup', scheduleFit)
       window.removeEventListener('pointercancel', scheduleFit)
@@ -165,11 +221,13 @@ export function WorkbenchTerminalView({
     }
   }, [
     cwdLatest,
+    isRunConsole,
     onDataLatest,
     onOpenFileLinkLatest,
     onOpenLinkLatest,
     onResizeLatest,
     onResolveFileLinksLatest,
+    positionVerticalScrollbar,
     sessionId,
   ])
 
@@ -181,51 +239,10 @@ export function WorkbenchTerminalView({
   }, [sessionId, workbenchTheme])
 
   useEffect(() => {
-    const container = containerRef.current
-    const instance = findWorkbenchTerminal(sessionId)
-    if (!container || !instance) return undefined
-    let frame: Nullable<number> = null
-    let previous = ''
-    const refresh = (): void => {
-      frame = null
-      const screen = instance.terminal.element?.querySelector('.xterm-screen')
-      if (!screen || !container.parentElement) return
-      const rect = screen.getBoundingClientRect()
-      const parentRect = container.parentElement.getBoundingClientRect()
-      const cellWidth = rect.width / instance.terminal.cols
-      const cellHeight = rect.height / instance.terminal.rows
-      const links = findWorkbenchTerminalWebLinks(instance.terminal).map((link) => ({
-        url: link.url,
-        left: rect.left - parentRect.left + link.column * cellWidth,
-        top: rect.top - parentRect.top + link.row * cellHeight,
-        width: cellWidth * 2,
-        height: cellHeight,
-      }))
-      const projection = JSON.stringify(links)
-      if (projection === previous) return
-      previous = projection
-      setExternalLinks(links)
-    }
-    const schedule = (): void => {
-      frame ??= requestAnimationFrame(refresh)
-    }
-    const rendered = instance.terminal.onRender(schedule)
-    const scrolled = instance.terminal.onScroll(schedule)
-    const observer = new ResizeObserver(schedule)
-    observer.observe(container)
-    schedule()
-    return () => {
-      rendered.dispose()
-      scrolled.dispose()
-      observer.disconnect()
-      if (frame !== null) cancelAnimationFrame(frame)
-    }
-  }, [sessionId])
-
-  useEffect(() => {
     const instance = findWorkbenchTerminal(sessionId)
     if (instance) instance.terminal.options.disableStdin = !isRunning
-  }, [isRunning, sessionId])
+    if (isRunConsole) setWorkbenchRunCursorHidden(sessionId, isRunning)
+  }, [isRunConsole, isRunning, sessionId])
 
   const findQuery = find?.query
   const findOptions = find?.options
@@ -267,22 +284,41 @@ export function WorkbenchTerminalView({
 
   return (
     <div className={styles.terminalViewFrame} data-terminal-session={sessionId}>
-      <div ref={containerRef} className={styles.terminalViewHost} data-running={isRunning} />
-      {externalLinks.map((link) => (
-        <IconButton
-          key={`${link.url}:${link.top}:${link.left}`}
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className={styles.terminalLinkExternalButton}
-          style={{ left: link.left, top: link.top, width: link.width, height: link.height }}
-          label={t('workbench.runOpenExternal')}
-          title={`${t('workbench.runOpenExternal')}: ${link.url}`}
-          onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-        >
-          <ArrowSquareOutIcon size={11} />
-        </IconButton>
-      ))}
+      <div
+        ref={viewportRef}
+        className={styles.terminalViewViewport}
+        data-horizontal-scroll={isRunConsole || undefined}
+        onScroll={positionVerticalScrollbar}
+      >
+        <div
+          ref={containerRef}
+          className={styles.terminalViewHost}
+          data-running={isRunning}
+          style={{
+            minWidth: isRunConsole ? `calc(${WorkbenchRunConsoleColumns}ch + 6px)` : undefined,
+          }}
+        />
+      </div>
+      {externalLink &&
+        createPortal(
+          <button
+            type="button"
+            className={`${styles.terminalLinkExternalButton} xterm-hover`}
+            style={{
+              left: externalLink.left,
+              top: externalLink.top,
+              width: externalLink.width,
+              height: externalLink.height,
+            }}
+            aria-label={t('workbench.runOpenExternal')}
+            title={`${t('workbench.runOpenExternal')}: ${externalLink.url}`}
+            onMouseDownCapture={(event) => event.stopPropagation()}
+            onClick={() => window.open(externalLink.url, '_blank', 'noopener,noreferrer')}
+          >
+            <ArrowSquareOutIcon size={10} aria-hidden="true" />
+          </button>,
+          externalLink.element
+        )}
       {find && (
         <WorkbenchTerminalFindBar
           query={find.query}

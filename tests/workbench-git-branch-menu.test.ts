@@ -317,26 +317,31 @@ void describe('Workbench Git branch menu', () => {
     assert.ok(markup.includes(english('workbench.gitNoUpstreamNote')))
   })
 
-  void test('a running operation disables actions and exposes progress and cancellation', () => {
-    const operation = { id: 'op', workspaceRoot: '/p', action: 'pull' as const, cancelling: false }
-    const running = render({ running: operation, locked: true })
-    assert.match(running, /role="status"[^>]*>[\s\S]*Pull in progress…/u)
-    const all = buttons(running)
-    const actions = all.filter((button) => /data-action=/u.test(button.tag))
-    assert.equal(actions.length, 3)
-    for (const button of actions) assert.match(button.tag, /aria-disabled="true"/u)
-    const cancel = all.find((button) => button.label === 'Cancel')
-    assert.ok(cancel)
-    assert.doesNotMatch(cancel.tag, /\sdisabled(=|\s|$)/u)
-    assert.match(all.at(-1)?.tag ?? '', /\sdisabled=""/u)
-    for (const button of all.filter((entry) => /data-git-menu-item/u.test(entry.tag))) {
-      if (button !== cancel && !/aria-expanded|data-action=/u.test(button.tag))
-        assert.match(button.tag, /\sdisabled=""/u)
+  void test('remote actions show progress and cancellation on the corresponding existing button', () => {
+    for (const [action, slot, branch] of [
+      ['pull', 'pull'], ['upload', 'upload'], ['fetch', 'fetch'], ['sync', 'fetch'],
+      ['upload', null, 'docs'],
+    ] as const) {
+      const operation = { id: 'op', workspaceRoot: '/p', action, cancelling: false, branch }
+      const running = render({ running: operation, locked: true })
+      assert.doesNotMatch(running, /role="status"/u)
+      const all = buttons(running)
+      const active = all.filter((button) => /data-running="true"/u.test(button.tag))
+      assert.equal(active.length, 1)
+      const cancel = active[0]!
+      if (slot) assert.ok(cancel.tag.includes(`data-action="${slot}"`))
+      else assert.doesNotMatch(cancel.tag, /data-action=/u)
+      assert.match(cancel.tag, /aria-label="Cancel [^"]+"/u)
+      assert.match(cancel.tag, /aria-description="[^"]+ in progress…"/u)
+      assert.doesNotMatch(cancel.tag, /\sdisabled(=|\s|$)/u)
+      assert.match(all.at(-1)?.tag ?? '', /\sdisabled=""/u)
+      for (const button of all.filter((entry) => /data-action=/u.test(entry.tag))) {
+        if (button !== cancel) assert.match(button.tag, /aria-disabled="true"/u)
+      }
+      const cancelling = buttons(render({ running: { ...operation, cancelling: true }, locked: true }))
+        .find((button) => /data-running="true"/u.test(button.tag))
+      assert.match(cancelling?.tag ?? '', /aria-label="Cancelling…"[\s\S]*\sdisabled=""/u)
     }
-    const cancelling = buttons(render({ running: { ...operation, cancelling: true }, locked: true }))
-      .find((button) => button.label === 'Cancelling…')
-    assert.ok(cancelling)
-    assert.match(cancelling.tag, /\sdisabled=""/u)
   })
 
   void test('the current branch is marked, shows what it tracks, and cannot be checked out again', () => {

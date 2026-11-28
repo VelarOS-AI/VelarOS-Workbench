@@ -16,7 +16,10 @@ import {
   PlusIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
-import { describeWorkbenchGitRemoteActionCancel } from '@renderer/hooks/useWorkbenchGitRemoteAction'
+import {
+  describeWorkbenchGitRemoteActionCancel,
+  describeWorkbenchGitRemoteActionProgress,
+} from '@renderer/hooks/useWorkbenchGitRemoteAction'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   buildWorkbenchGitBranchTree,
@@ -110,32 +113,51 @@ export function WorkbenchGitBranchMenu({
       remote: buildWorkbenchGitBranchTree(matched.filter(isWorkbenchGitRemoteBranch), 'remote'),
     }
   }, [branches, search])
-  const runningLabel = running
-    ? (remoteActions.find((item) => item.action === running.action)?.label ?? '')
-    : ''
-
   function renderRemoteAction(
     item: WorkbenchGitRemoteActionItem,
-    inline = false
+    inline = false,
+    branch?: WorkspaceGitBranch
   ): ReactElement {
     const ActionIcon = RemoteActionIcons[item.action]
-    const unavailable = item.disabled || locked || !!running
+    const matchesAction =
+      running?.action === item.action || (running?.action === 'sync' && item.action === 'fetch')
+    const active =
+      matchesAction && (item.action !== 'upload' || running?.branch === branch?.name)
+        ? running
+        : null
+    const unavailable = active ? active.cancelling : item.disabled || locked || !!running
+    const label = branch ? `${item.label} ${branch.name}` : item.label
+    const cancelLabel = active ? describeWorkbenchGitRemoteActionCancel(active, t) : undefined
+    const iconSize = inline ? 12 : 15
     return (
       <button
         key={item.action}
         type="button"
         className={inline ? undefined : styles.gitBranchMenuAction}
         data-git-menu-item={!inline || undefined}
-        data-action={item.action}
-        aria-label={item.label}
-        aria-description={`${item.label}${item.count > 0 ? ` (${item.count})` : ''} · ${item.hint}`}
+        data-action={branch ? undefined : item.action}
+        data-running={!!active || undefined}
+        aria-label={cancelLabel ?? label}
+        aria-description={
+          active
+            ? describeWorkbenchGitRemoteActionProgress(active.action, t)
+            : `${item.label}${item.count > 0 ? ` (${item.count})` : ''} · ${item.hint}`
+        }
         aria-disabled={unavailable || undefined}
-        title=""
+        disabled={unavailable && (!!active || !!branch)}
+        title={cancelLabel ?? ''}
         onClick={() => {
-          if (!unavailable) onRunRemoteAction(item.action)
+          if (unavailable) return
+          if (active) onCancelRemoteAction()
+          else if (branch) onPushBranch(branch)
+          else onRunRemoteAction(item.action)
         }}
       >
-        <ActionIcon size={inline ? 12 : 15} aria-hidden="true" />
+        {active ? (
+          <SpinnerGapIcon size={iconSize} className={styles.spinIcon} aria-hidden="true" />
+        ) : (
+          <ActionIcon size={iconSize} aria-hidden="true" />
+        )}
         {inline && <span>{item.label}</span>}
       </button>
     )
@@ -219,17 +241,18 @@ export function WorkbenchGitBranchMenu({
               <GitBranchIcon size={12} />
               <span>{checkoutLabel}</span>
             </button>
-            {!remote && (
-              <button
-                type="button"
-                disabled={branchesLocked}
-                aria-label={`${pushLabel} ${branch.name}`}
-                onClick={() => onPushBranch(branch)}
-              >
-                <ArrowUpIcon size={12} />
-                <span>{pushLabel}</span>
-              </button>
-            )}
+            {!remote &&
+              renderRemoteAction(
+                {
+                  action: 'upload',
+                  label: pushLabel,
+                  hint: branch.name,
+                  disabled: branchesLocked,
+                  count: 0,
+                },
+                true,
+                branch
+              )}
           </div>
         )}
       </div>
@@ -295,29 +318,14 @@ export function WorkbenchGitBranchMenu({
           role="group"
           aria-label={t('workbench.gitRemoteActionsMenu')}
         >
-          {remoteActions.filter((item) => item.action === 'fetch').map((item) => renderRemoteAction(item))}
+          {remoteActions
+            .filter((item) => item.action === 'fetch')
+            .map((item) => renderRemoteAction(item))}
         </div>
       </div>
-      {(running || remoteNote) && (
+      {remoteNote && (
         <div className={styles.gitBranchMenuRemote}>
-          {running ? (
-            <div className={styles.gitBranchMenuRunning} role="status">
-              <SpinnerGapIcon size={13} className={styles.spinIcon} />
-              <span>{t('workbench.gitRemoteActionRunning', { action: runningLabel })}</span>
-              <button
-                type="button"
-                className={styles.gitBranchMenuCancel}
-                data-git-menu-item
-                title={describeWorkbenchGitRemoteActionCancel(running, t)}
-                disabled={running.cancelling}
-                onClick={onCancelRemoteAction}
-              >
-                {running.cancelling ? t('workbench.gitRemoteActionCancelling') : t('common.cancel')}
-              </button>
-            </div>
-          ) : (
-            <p className={styles.gitBranchMenuNote}>{remoteNote}</p>
-          )}
+          <p className={styles.gitBranchMenuNote}>{remoteNote}</p>
         </div>
       )}
       <div className={styles.gitBranchMenuList}>

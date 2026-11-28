@@ -1,5 +1,7 @@
 import type { WorkbenchTerminalSessionView } from './workbenchCommandLines'
 
+export const WorkbenchRunConsoleColumns = 160
+
 export function buildWorkbenchTerminalSessionTitle(
   sessionIndex: number,
   labels: { local: string; localIndexed: (index: number) => string }

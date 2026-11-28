@@ -55,7 +55,8 @@ export class WorkbenchWindowCloseGuard {
   /** @param quit 继续退出应用（`app.quit()`）；某个窗口答应之后用它接着走退出流程。 */
   constructor(
     private readonly quit: () => void,
-    private readonly platform: NodeJS.Platform = process.platform
+    private readonly platform: NodeJS.Platform = process.platform,
+    private readonly onQuitCancelled?: () => void
   ) {}
 
   public install(window: WorkbenchCloseGuardedWindow): void {
@@ -105,6 +106,7 @@ export class WorkbenchWindowCloseGuard {
     if (!response.proceed) {
       // 用户取消（或有文件没存下）：这次退出作罢。别的窗口先前的同意一并收回——它们还开着，
       // 之后再关得重新问。
+      if (this.quitRequested) this.onQuitCancelled?.()
       this.quitRequested = false
       for (const other of this.records.values()) other.approved = false
       return

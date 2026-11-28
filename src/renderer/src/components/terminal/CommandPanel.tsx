@@ -1,10 +1,12 @@
+import { lazy, type ReactElement, Suspense, useState } from 'react'
 import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchBottomTool } from '@renderer/models/layout/workbenchSurfaceModel'
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
-import type { ReactElement } from 'react'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+
+import type { WorkbenchConversationSessionRequest } from '@shared/workbenchConversation'
 
 import styles from '../../styles/workbenchPageStyles'
 import type {
@@ -22,8 +24,14 @@ import {
 
 export type BottomTool = WorkbenchBottomTool
 
+const LazyWorkbenchAgentProcesses = lazy(async () => {
+  const module = await import('../../runtime/conversation/WorkbenchAgentProcesses')
+  return { default: module.WorkbenchAgentProcesses }
+})
+
 interface CommandPanelProps {
   activeTool: BottomTool
+  agentConsole: Nullable<WorkbenchConversationSessionRequest>
   workbenchRun: WorkbenchRunToolBundle
   workbenchTerminal: WorkbenchTerminalToolBundle
   workbenchTheme: WorkbenchThemeId
@@ -49,6 +57,7 @@ interface CommandPanelProps {
 }
 export function CommandPanel({
   activeTool,
+  agentConsole,
   workbenchRun: { runSessions, activeRunSessionId },
   workbenchTerminal: { terminalSessions, activeTerminalSessionId },
   workbenchTheme,
@@ -71,6 +80,11 @@ export function CommandPanel({
   onOpenTerminalFileLink,
 }: CommandPanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
+  const [runIdWhenAgentSelected, setRunIdWhenAgentSelected] = useState<
+    Nullable<string> | undefined
+  >(undefined)
+  const agentConsoleSelected =
+    !!agentConsole && (runSessions.length === 0 || runIdWhenAgentSelected === activeRunSessionId)
 
   const activeToolTitle =
     activeTool === 'problems'
@@ -96,12 +110,23 @@ export function CommandPanel({
             onCloseTerminalSessions={onCloseTerminalSessions}
             onToggleCollapsed={onToggleCollapsed}
           />
-        ) : activeTool === 'run' && runSessions.length ? (
+        ) : activeTool === 'run' && (runSessions.length > 0 || agentConsole) ? (
           <WorkbenchRunToolHeader
             runSessions={runSessions}
             activeRunSessionId={activeRunSessionId}
             isCollapsed={isCollapsed}
-            onActiveRunSessionChange={onActiveRunSessionChange}
+            agentConsole={
+              agentConsole
+                ? {
+                    selected: agentConsoleSelected,
+                    onSelect: () => setRunIdWhenAgentSelected(activeRunSessionId),
+                  }
+                : undefined
+            }
+            onActiveRunSessionChange={(sessionId) => {
+              setRunIdWhenAgentSelected(undefined)
+              onActiveRunSessionChange(sessionId)
+            }}
             onCloseRunSession={onCloseRunSession}
             onRestartRunSession={onRestartRunSession}
             onStopRunSession={onStopRunSession}
@@ -133,18 +158,27 @@ export function CommandPanel({
 
         {!isCollapsed && (
           <div className={styles.bottomToolBody}>
-            {activeTool === 'run' && (
-              <WorkbenchRunToolPane
-                runSessions={runSessions}
-                activeRunSessionId={activeRunSessionId}
-                workbenchTheme={workbenchTheme}
-                onTerminalData={onTerminalData}
-                onTerminalResize={onTerminalResize}
-                onOpenLink={onOpenConsoleLink}
-                onResolveFileLinks={onResolveTerminalFileLinks}
-                onOpenFileLink={onOpenTerminalFileLink}
-              />
-            )}
+            {activeTool === 'run' &&
+              (agentConsoleSelected && agentConsole ? (
+                <Suspense fallback={null}>
+                  <LazyWorkbenchAgentProcesses
+                    key={`${agentConsole.projectRoot}\0${agentConsole.sessionId}`}
+                    {...agentConsole}
+                    onOpenLink={onOpenConsoleLink}
+                  />
+                </Suspense>
+              ) : (
+                <WorkbenchRunToolPane
+                  runSessions={runSessions}
+                  activeRunSessionId={activeRunSessionId}
+                  workbenchTheme={workbenchTheme}
+                  onTerminalData={onTerminalData}
+                  onTerminalResize={onTerminalResize}
+                  onOpenLink={onOpenConsoleLink}
+                  onResolveFileLinks={onResolveTerminalFileLinks}
+                  onOpenFileLink={onOpenTerminalFileLink}
+                />
+              ))}
 
             {activeTool === 'problems' && (
               <div className={styles.problemsBottomPane}>{problemsPanel}</div>

@@ -12,7 +12,6 @@ import { ArrowRightIcon } from '@phosphor-icons/react'
 import {
   type WorkbenchChatCompositionAdapter,
   type WorkbenchChatProjectRuntime,
-  type WorkbenchChatSessionActionsProps,
   type WorkbenchChatSessionSnapshot,
   type WorkbenchChatSessionSurfaceProps,
 } from '@renderer/composition/WorkbenchChatProvider'
@@ -82,7 +81,6 @@ import {
 import styles from '../styles/workbenchPageStyles'
 import { useLatest } from '../support/genericHooks'
 
-import { WorkbenchAgentProcesses } from './conversation/WorkbenchAgentProcesses'
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
 import { WorkbenchConversationEngineContext } from './conversation/workbenchConversationEngineContext'
 import {
@@ -1174,15 +1172,6 @@ function buildStandaloneProjectRuntime(
 // ---------------------------------------------------------------------------------------------
 // 会话面
 // ---------------------------------------------------------------------------------------------
-
-function StandaloneWorkbenchChatSessionActions({
-  projectRoot,
-  sessionId,
-}: WorkbenchChatSessionActionsProps): Nullable<ReactElement> {
-  const chat = useStandaloneChatState(projectRoot)
-  if (chat.engine || chat.sessionId !== sessionId) return null
-  return <WorkbenchAgentProcesses projectRoot={projectRoot} sessionId={sessionId} />
-}
 
 function StandaloneWorkbenchChatSessionSurface({
   projectRoot,
@@ -2814,7 +2803,6 @@ function isStoredChatMessage(value: unknown): value is ChatMessage {
 export const standaloneWorkbenchChatAdapter: WorkbenchChatCompositionAdapter = {
   useProjectRuntime: useStandaloneProjectRuntime,
   SessionSurface: StandaloneWorkbenchChatSessionSurface,
-  SessionActions: StandaloneWorkbenchChatSessionActions,
 }
 
 if (import.meta.hot) {

@@ -48,7 +48,7 @@ import {
   terminalStatusMessage,
   toConversationInput,
 } from './WorkbenchConversationRules'
-import { WorkbenchConversationSession } from './WorkbenchConversationSession'
+import type { WorkbenchConversationSession } from './WorkbenchConversationSession'
 import { WorkbenchConversationStore } from './WorkbenchConversationStore'
 import type {
   ActiveConversationRun,
@@ -172,7 +172,7 @@ export interface WorkbenchConversationRunOutcome extends WorkbenchConversationRe
  * 装配、事件到界面通知的投影，以及回答、引导、取消与目标控制的转交。一轮一个运行时，收尾即关。
  */
 export class WorkbenchConversationRuntime implements WorkbenchConversationRuntimeApi {
-  private readonly session: WorkbenchConversationSession
+  private session?: Promise<WorkbenchConversationSession>
   private readonly storage: WorkbenchConversationStore
   private readonly active = new Map<string, ActiveConversationRun>()
   /** 每次运行的交互卡账；回答从 IPC 进来时按会话找到当前运行的这一本。 */
@@ -184,12 +184,19 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
   private closing?: Promise<void>
 
   public constructor(private readonly options: WorkbenchConversationRuntimeOptions) {
-    this.session = new WorkbenchConversationSession(
-      options.shells,
-      options.nodeExecutable,
-      options.nodePackagesDirectory
-    )
     this.storage = new WorkbenchConversationStore(options.dataDir)
+  }
+
+  private loadSession(): Promise<WorkbenchConversationSession> {
+    this.session ??= import('./WorkbenchConversationSession').then(
+      ({ WorkbenchConversationSession }) =>
+        new WorkbenchConversationSession(
+          this.options.shells,
+          this.options.nodeExecutable,
+          this.options.nodePackagesDirectory
+        )
+    )
+    return this.session
   }
 
   public submit(
@@ -427,7 +434,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       }
       let handle: ConversationControlHandle
       try {
-        handle = await (this.options.control ?? ((control) => this.session.openControl(control)))({
+        const openControl =
+          this.options.control ?? (async (control) => (await this.loadSession()).openControl(control))
+        handle = await openControl({
           sessionId: ref.sessionId,
           dataDir: this.storage.path(ref.projectRoot, ref.sessionId),
           workspace: await this.storage.workspace(ref.projectRoot),
@@ -521,7 +530,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       const memory = request.memory ? await this.options.memory?.(workspace) : undefined
       signal.throwIfAborted()
       const webPages = this.options.webPages
-      run.handle = await (this.options.open ?? ((options) => this.session.open(options)))({
+      const open =
+        this.options.open ?? (async (options) => (await this.loadSession()).open(options))
+      run.handle = await open({
         sessionId: request.sessionId,
         dataDir: this.storage.path(request.projectRoot, request.sessionId),
         workspace,

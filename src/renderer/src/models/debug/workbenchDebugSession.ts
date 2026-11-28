@@ -17,6 +17,7 @@ import type {
   WorkbenchDebuggerEvent,
   WorkbenchDebuggerFrame,
   WorkbenchDebuggerPauseReason,
+  WorkbenchDebuggerStartRequest,
   WorkbenchDebuggerStartResult,
   WorkbenchDebuggerValue,
   WorkbenchDebuggerVariablesResult,
@@ -221,14 +222,16 @@ export class WorkbenchDebugSessionController {
     this.starting = true
     this.pendingEvents = []
     try {
-      const result = await this.dependencies.debuggerBridge().start({
+      const request: WorkbenchDebuggerStartRequest = {
         projectRoot: options.projectRoot,
         target: options.target,
         cwd: options.cwd,
         env: options.env,
         breakpoints: [...breakpoints],
         pauseOnUncaughtExceptions,
-      })
+      }
+      if (options.cols !== undefined) request.cols = options.cols
+      const result = await this.dependencies.debuggerBridge().start(request)
       if (!result.ok) throw new AppError((result.code ?? 'UNKNOWN') as ErrorCode, result.message)
 
       this.sentBreakpoints = breakpoints

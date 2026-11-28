@@ -71,8 +71,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
   workbench: {
     settingsWorkspaceSandbox: '工作区沙箱',
     settingsWorkspaceSandboxDescription: '将 Agent 的文件写入限制在当前项目；修改后从下一轮生效。',
-    agentProcessesTitle: '控制台',
-    agentConsoleOpenFailed: '无法打开控制台窗口',
+    agentProcessesTitle: 'Agent 进程',
     agentProcessList: '会话进程',
     agentProcessesEmpty: '本会话还没有后台进程。',
     agentProcessExit: '退出码 {code}',

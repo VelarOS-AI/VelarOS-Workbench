@@ -11,7 +11,6 @@ import {
   PlusIcon,
   SparkleIcon,
   SpinnerGapIcon,
-  StopCircleIcon,
   TrayArrowDownIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchGitOperation } from '@renderer/hooks/useWorkbenchGitOperation'
@@ -895,7 +894,7 @@ export function WorkbenchCommitPanel({
                       disabled={remoteAction.running.cancelling}
                       onClick={() => remoteAction.cancel()}
                     >
-                      <StopCircleIcon size={15} />
+                      <SpinnerGapIcon size={15} className={styles.spinIcon} />
                     </CommitIconButton>
                   ) : (
                     <CommitIconButton

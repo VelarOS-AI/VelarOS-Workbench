@@ -1262,6 +1262,8 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     editorGroupFocusRequest,
     /** 当前会话的 Agent 浏览器此刻进的站点；没进为 null。 */
     agentBrowser: { sessionId: currentSession.id, site: agentBrowserSite },
+    agentConsoleSessionId:
+      chat.sessionList.diskSessionHydrated && !currentSession.engine ? currentSession.id : null,
     pendingBrowserElementSelections,
     pendingChatFileReferences,
     aiChanges,

@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from 'node:path'
 
-import { createProjectKernel, type ProjectKernel } from '@velaros-ai/capabilities/project'
+import type { ProjectKernel } from '@velaros-ai/capabilities/project'
 import { isFiniteNumber, optionalWhen } from '@velaros-ai/velaros/core'
 
 import {
@@ -56,8 +56,10 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   private readonly createKernel: (projectRoot: string) => Promise<ProjectKernel>
 
   public constructor(options: ProjectCapabilityProviderOptions = {}) {
-    this.createKernel =
-      options.createKernel ?? ((projectRoot) => createProjectKernel({ root: projectRoot }))
+    this.createKernel = options.createKernel ?? (async (projectRoot) => {
+      const { createProjectKernel } = await import('@velaros-ai/capabilities/project')
+      return createProjectKernel({ root: projectRoot })
+    })
   }
 
   public async invoke(request: WorkbenchWorkspaceInvokeRequest): Promise<unknown> {

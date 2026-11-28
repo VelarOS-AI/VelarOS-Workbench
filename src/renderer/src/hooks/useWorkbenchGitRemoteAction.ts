@@ -74,6 +74,13 @@ export function describeWorkbenchGitRemoteActionCancel(
     : t('workbench.gitCancelRemoteAction', { action: t(ActionLabelKeys[operation.action]) })
 }
 
+export function describeWorkbenchGitRemoteActionProgress(
+  action: WorkspaceGitRemoteAction,
+  t: WorkbenchI18nContextValue['t']
+): string {
+  return t('workbench.gitRemoteActionRunning', { action: t(ActionLabelKeys[action]) })
+}
+
 type WorkbenchGitRemoteActionMessaging = Pick<
   ReturnType<typeof useStableWorkbenchMessageTranslate>,
   'messageLatest' | 'tLatest'
@@ -141,7 +148,7 @@ export function useWorkbenchGitRemoteAction(
       action: WorkspaceGitRemoteAction,
       options: WorkbenchGitRemoteActionOptions = {}
     ): Promise<SystemWorkspaceGitActionResult> => {
-      const operation = beginWorkbenchGitRemoteOperation(workspaceRoot, action)
+      const operation = beginWorkbenchGitRemoteOperation(workspaceRoot, action, options.branch)
       // 说明由 reportWorkbenchGitRemoteActionFailure 按界面语言给。
       if (!operation) throw new AppError('CONFLICT', 'A Git remote action is already running.')
       try {

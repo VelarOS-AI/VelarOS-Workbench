@@ -260,7 +260,8 @@ void describe('Workbench Git remote actions: what the interface tracks', () => {
     }
     // 顶栏的分支菜单、提交面板的推送按钮：操作进行中换成取消；已经点过取消的不再点第二次。
     assert.match(control, /onCancelRemoteAction=\{\(\) => remoteAction\.cancel\(\)\}/u)
-    assert.match(menu, /disabled=\{running\.cancelling\}\s*onClick=\{onCancelRemoteAction\}/u)
+    assert.match(menu, /const unavailable = active \? active\.cancelling/u)
+    assert.match(menu, /if \(active\) onCancelRemoteAction\(\)/u)
     assert.match(commitPanel, /remoteAction\.cancel\(\)/u)
     // 远端操作跑着时不切分支、不新建分支。
     assert.match(control, /const locked = !!running \|\| !!pendingBranch/u)

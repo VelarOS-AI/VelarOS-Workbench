@@ -354,12 +354,11 @@ export function FilePanel({
   }
 
   function openRootContextMenu(event: MouseEvent): void {
-    // 文件树与搜索结果里的行各有各的菜单（或者没有），不弹工程根目录的菜单。
-    if (
-      event.target instanceof HTMLElement &&
-      event.target.closest('button, [data-tree-path], [data-search-row]')
-    )
-      return
+    // 顶栏下拉面板用 portal 渲染，右键事件仍会沿 React 树冒泡到这里。
+    const target = event.target
+    if (!(target instanceof Element) || !event.currentTarget.contains(target)) return
+    // 文件树与搜索结果里的行各有各的菜单。
+    if (target.closest('button, [data-tree-path], [data-search-row]')) return
 
     event.preventDefault()
     setContextMenu({

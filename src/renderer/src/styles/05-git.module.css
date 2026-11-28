@@ -624,9 +624,11 @@
 
 .gitCommitMetaGrid {
   @apply m-0 grid shrink-0 min-w-0 gap-1.5 border-b;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);
   padding: 9px 12px;
   border-color: var(--workbench-border);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .gitCommitMetaGrid > div {
@@ -634,18 +636,25 @@
   color: var(--workbench-text-muted);
 }
 
-.gitCommitMetaLabel {
-  @apply flex min-w-0 items-center gap-1.5;
+.gitCommitMetaGrid dt {
+  @apply flex shrink-0 items-center gap-1 whitespace-nowrap text-muted-foreground;
 }
 
-.gitCommitDetail dt {
-  @apply text-muted-foreground;
-  font-size: 9.5px;
-}
-
-.gitCommitDetail dd {
+.gitCommitMetaGrid dd {
   @apply m-0 min-w-0 truncate text-foreground;
-  font-size: 10.5px;
+}
+
+@container git-commit-detail (width < 310px) {
+  .gitCommitMetaGrid[data-columns],
+  .gitCommitMetaGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .gitCommitMetaGrid > div {
+    display: grid;
+    grid-template-columns: minmax(60px, max-content) minmax(0, 1fr);
+  }
 }
 
 .gitCommitChanges {
@@ -685,14 +694,12 @@
 }
 
 .gitCommitFileList {
-  @apply flex shrink-0 flex-col overflow-auto border-b;
-  max-height: 124px;
+  @apply flex min-h-0 flex-1 flex-col overflow-auto;
   padding: 3px 4px;
-  border-color: var(--workbench-border);
 }
 
 .gitCommitFileList > button {
-  @apply flex min-w-0 items-center gap-1.5 border-0 bg-transparent text-left;
+  @apply flex min-w-0 shrink-0 items-center gap-1.5 border-0 bg-transparent text-left;
   min-height: 25px;
   padding: 3px 6px;
   border-radius: var(--workbench-radius);
@@ -710,19 +717,29 @@
   font-size: 10.5px;
 }
 
-.gitCommitPatch {
-  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+.gitLogView:has(> .gitCommitPatch) {
+  grid-template-columns: clamp(120px, 14%, 230px) minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.65fr);
 }
 
-.gitCommitPatch > .gitPaneSectionTitle {
-  @apply shrink-0 truncate border-b;
-  min-height: 28px;
-  padding: 6px 9px;
+.gitCommitPatch {
+  @apply flex min-h-0 min-w-0 flex-col overflow-hidden border-l;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.gitCommitPatchHeader {
+  @apply flex min-w-0 shrink-0 items-center justify-between gap-2 border-b;
+  min-height: 34px;
+  padding: 3px 8px 3px 10px;
   border-color: var(--workbench-border);
   color: var(--workbench-text);
   background: var(--workbench-surface);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
+}
+
+.gitCommitPatchHeader > span {
+  @apply min-w-0 truncate;
 }
 
 .gitCommitPatch .gitToolCommitDiff {

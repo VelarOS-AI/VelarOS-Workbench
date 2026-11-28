@@ -42,7 +42,7 @@
   flex-direction: column;
 }
 
-/* 远端操作的进度和提示放在搜索行下方。 */
+/* 仓库状态提示放在搜索行下方。 */
 .gitBranchMenuRemote {
   display: flex;
   flex-shrink: 0;
@@ -139,58 +139,6 @@
   font-size: var(--topbar-panel-detail-font-size);
   line-height: 1.4;
   text-wrap: pretty;
-}
-
-/* 远端操作进度，右侧可以取消。 */
-.gitBranchMenuRunning {
-  display: flex;
-  min-width: 0;
-  height: var(--topbar-panel-row-height);
-  align-items: center;
-  gap: var(--topbar-panel-icon-gap);
-  padding: 0 2px 0 var(--topbar-panel-item-padding);
-  color: var(--workbench-text);
-  font-size: var(--topbar-panel-font-size);
-  font-weight: 500;
-}
-
-.gitBranchMenuRunning > svg {
-  flex: 0 0 auto;
-  color: var(--workbench-theme-color);
-}
-
-.gitBranchMenuRunning > span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gitBranchMenuCancel {
-  flex: 0 0 auto;
-  height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--workbench-border);
-  border-radius: 5px;
-  color: var(--workbench-text);
-  background: transparent;
-  font: inherit;
-  font-size: var(--topbar-panel-font-size);
-  cursor: pointer;
-}
-
-.gitBranchMenuCancel:hover:not(:disabled),
-.gitBranchMenuCancel:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--status-red) 36%, var(--workbench-border));
-  color: var(--status-red);
-  background: color-mix(in srgb, var(--status-red) 8%, transparent);
-}
-
-.gitBranchMenuCancel:disabled {
-  cursor: default;
-  opacity: 0.55;
 }
 
 .gitBranchMenuSearch {
@@ -396,7 +344,8 @@
 }
 
 .gitBranchMenuRow:hover .gitBranchMenuRowActions,
-.gitBranchMenuRow:has(:focus-visible) .gitBranchMenuRowActions {
+.gitBranchMenuRow:has(:focus-visible) .gitBranchMenuRowActions,
+.gitBranchMenuRowActions:has(> button[data-running='true']) {
   opacity: 1;
   pointer-events: auto;
 }
@@ -419,12 +368,12 @@
 
 /* 当前分支为共用的行内操作条留出空间。 */
 .gitBranchMenuRow[data-current='true']:hover .gitBranchMenuRowMain,
-.gitBranchMenuRow[data-current='true']:has(:focus-visible) .gitBranchMenuRowMain {
+.gitBranchMenuRow[data-current='true']:has(:focus-visible, button[data-running='true']) .gitBranchMenuRowMain {
   padding-right: 100px;
 }
 
 .gitBranchMenuRow[data-current='true']:hover .gitBranchMenuRowMain > small,
-.gitBranchMenuRow[data-current='true']:has(:focus-visible) .gitBranchMenuRowMain > small {
+.gitBranchMenuRow[data-current='true']:has(:focus-visible, button[data-running='true']) .gitBranchMenuRowMain > small {
   display: none;
 }
 
@@ -439,6 +388,11 @@
 .gitBranchMenuRowActions > button[aria-disabled='true'] {
   cursor: default;
   opacity: 0.42;
+}
+
+.gitBranchMenuAction[data-running='true'] > svg,
+.gitBranchMenuRowActions > button[data-running='true'] > svg {
+  color: var(--workbench-theme-color);
 }
 
 .gitBranchMenuEmpty {

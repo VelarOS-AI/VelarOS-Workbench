@@ -125,15 +125,15 @@ void describe('pre-split Workbench shell parity', () => {
       /gitBranchControlName[\s\S]*gitBranchControlCounts[\s\S]*↓\{behind\}[\s\S]*↑\{ahead\}/
     )
     assert.doesNotMatch(control, /<FolderIcon/)
-    // 搜索右侧获取远端，下方是进度、分支列表和新建分支。
+    // 搜索右侧获取远端，下方是仓库状态提示、分支列表和新建分支。
     assert.match(
       menu,
       /gitBranchMenuSearch[\s\S]*<SearchField[\s\S]*gitBranchMenuActions[\s\S]*gitBranchMenuRemote[\s\S]*gitBranchMenuList[\s\S]*gitBranchMenuFooter[\s\S]*onOpenCreateBranch/
     )
-    assert.match(menu, /running \? \([\s\S]*gitBranchMenuRunning[\s\S]*onCancelRemoteAction/)
+    assert.match(menu, /data-running=\{[^}]+\}[\s\S]*onCancelRemoteAction\(\)[\s\S]*SpinnerGapIcon/)
     assert.match(
       menu,
-      /gitBranchMenuRowActions[\s\S]*onSwitchBranch\(branch\)[\s\S]*onPushBranch\(branch\)/
+      /gitBranchMenuRowActions[\s\S]*onSwitchBranch\(branch\)[\s\S]*renderRemoteAction\(/
     )
     assert.match(menu, /FolderIcon[\s\S]*renderNode\(child, depth \+ 1\)/)
     assert.match(topStyles, /\.gitBranchMenuSearch[\s\S]*var\(--topbar-panel-row-height\)/)

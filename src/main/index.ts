@@ -16,7 +16,7 @@ import { createElectronBrowserRuntime } from '@velaros-ai/capabilities/browser/e
 import { isString, Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { createShellEnvironment } from '@velaros-ai/velaros/execution/local'
-import { createModelRuntimeComposition } from '@velaros-ai/velaros/model'
+import type { ModelRuntimeCompositionApi } from '@velaros-ai/velaros/model'
 
 import productionAppIconPath from '../../resources/icons/icon.png?asset'
 import developmentAppIconPath from '../../resources/icons/icon-dev.png?asset'
@@ -72,12 +72,8 @@ import { WorkbenchTavilySettings } from './model/WorkbenchTavilySettings'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
-import { WorkbenchAgentConsoleWindows } from './projects/WorkbenchAgentConsoleWindows'
 import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
-import {
-  installWorkbenchExternalNavigation,
-  isWorkbenchAgentConsoleRequest,
-} from './projects/WorkbenchExternalNavigation'
+import { installWorkbenchExternalNavigation } from './projects/WorkbenchExternalNavigation'
 import { WorkbenchHistoryWindows } from './projects/WorkbenchHistoryWindows'
 import { WorkbenchNativeAppearance } from './projects/WorkbenchNativeAppearance'
 import { WorkbenchProjectRegistry } from './projects/WorkbenchProjectRegistry'
@@ -165,6 +161,9 @@ if (WorkbenchIsDevelopmentRuntime) {
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
 let nativeAppearance: WorkbenchNativeAppearance | undefined
+let shutdownStarted = false
+let updateRestartPending: (() => boolean) | undefined
+let pendingRelaunch: { execPath: string; paths: Set<string> } | undefined
 
 function workbenchWindowBackground(): string {
   return (
@@ -173,8 +172,13 @@ function workbenchWindowBackground(): string {
   )
 }
 // 有未保存编辑器改动的窗口，关窗与退出前先交给 renderer 存或问；答应了才继续退出。
-const windowCloseGuard = new WorkbenchWindowCloseGuard(() => app.quit())
-const agentConsoleWindows = new WorkbenchAgentConsoleWindows()
+const windowCloseGuard = new WorkbenchWindowCloseGuard(
+  () => app.quit(),
+  process.platform,
+  () => {
+    pendingRelaunch = undefined
+  }
+)
 let productAnalytics: WorkbenchProductAnalyticsReporter | undefined
 let workbenchBrowserWebviewGate: Nullable<WorkbenchBrowserWebviewGate> = null
 const pendingExternalPaths = collectExternalPathArguments(process.argv)
@@ -195,15 +199,36 @@ if (!hasSingleInstanceLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv, workingDirectory, additionalData) => {
-    if (relaunchFromRequestedWorkbenchPackage(additionalData)) return
-
-    const paths = collectExternalPathArguments(argv, workingDirectory)
+    const requested = parseWorkbenchInstanceLaunchData(additionalData)
+    const requestedExecutable = requested && resolveRequestedExecutable(requested.executablePath)
+    const paths = requested?.externalPaths ?? collectExternalPathArguments(argv, workingDirectory)
+    if (shutdownStarted || requestedExecutable) {
+      // 清理开始后 IPC 已陆续停用，打开的窗口也会一起退出。把这次启动交给下一个实例。
+      if (updateRestartPending?.()) return
+      pendingRelaunch ??= { execPath: process.execPath, paths: new Set() }
+      for (const path of paths) pendingRelaunch.paths.add(path)
+      if (requestedExecutable) {
+        pendingRelaunch.execPath = requestedExecutable
+        for (const path of windowManager?.getOpenProjectPaths() ?? [])
+          pendingRelaunch.paths.add(path)
+        if (!shutdownStarted) app.quit()
+      }
+      return
+    }
     if (paths.length > 0) {
       dispatchExternalPaths(paths)
       return
     }
 
     windowManager?.activateOrCreateWindow()
+  })
+  app.once('will-quit', () => {
+    if (!pendingRelaunch || updateRestartPending?.()) return
+    const { execPath, paths } = pendingRelaunch
+    const args = app.isPackaged ? [] : [app.getAppPath()]
+    const userDataDir = app.commandLine.getSwitchValue('user-data-dir')
+    if (userDataDir) args.push(`--user-data-dir=${userDataDir}`)
+    app.relaunch({ execPath, args: [...args, ...paths] })
   })
 }
 
@@ -227,7 +252,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     show: false,
     autoHideMenuBar: process.platform !== 'darwin',
     backgroundColor: workbenchWindowBackground(),
-    title: getWorkbenchWindowTitle(hub.getState().currentProject?.name ?? null),
+    title: getWorkbenchWindowTitle(hub.getCurrentProject()?.name ?? null),
     ...nativeAppearance!.frameOptions(process.platform),
     webPreferences: {
       sandbox: false,
@@ -244,30 +269,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     (url) => shell.openExternal(url),
     (url, error) => {
       Log.tag('WorkbenchExternalNavigation').warn('open_external_failed', { url, error })
-    },
-    {
-      width: 720,
-      height: 540,
-      minWidth: 480,
-      minHeight: 320,
-      icon: WorkbenchApplicationIconPath,
-      autoHideMenuBar: true,
-      backgroundColor: workbenchWindowBackground(),
     }
-  )
-  const consoleOwnerId = window.webContents.id
-  window.webContents.on('did-create-window', (child, details) => {
-    if (!isWorkbenchAgentConsoleRequest(details)) return
-    agentConsoleWindows.register(consoleOwnerId, child)
-    installWorkbenchExternalNavigation(
-      (handler) => child.webContents.setWindowOpenHandler(handler),
-      (url) => shell.openExternal(url)
-    )
-    child.webContents.on('will-navigate', (event) => event.preventDefault())
-  })
-  window.once('closed', () => agentConsoleWindows.releaseOwner(consoleOwnerId))
-  window.webContents.on('render-process-gone', () =>
-    agentConsoleWindows.releaseOwner(consoleOwnerId)
   )
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     if (
@@ -377,24 +379,35 @@ if (hasSingleInstanceLock)
     )
     // 上次运行留下的删除撤销副本：撤销记录只在内存里，重启后已对不上；删掉的东西在系统废纸篓里。
     void providers.parts.files.purgePreviousDeleteUndoCopies()
-    const modelComposition = createModelRuntimeComposition({
-      environment: Object.freeze({ ...process.env }),
-      fetch: fetchThroughWorkbenchSystemProxy,
-      providerCatalog: {
-        attribution: {
-          referer: websiteOrigin,
-          title: WorkbenchProductName,
-        },
-      },
-    })
-    for (const providerId of ['velaros', 'velar-dev'] as const) {
-      modelComposition.velarCloudRuntime.registerProvider(providerId, {
-        baseURL: accountService.getManagedModelBaseUrl(providerId),
-        fetch: (input, init) => accountService.fetchManagedModel(providerId, input, init),
-      })
+    // 共享同一份模型装配，等模型列表、补全或对话实际用到时再加载。
+    const modelEnvironment = Object.freeze({ ...process.env })
+    let modelComposition: Promise<ModelRuntimeCompositionApi> | undefined
+    const getModelComposition = (): Promise<ModelRuntimeCompositionApi> => {
+      modelComposition ??= import('@velaros-ai/velaros/model').then(
+        ({ createModelRuntimeComposition }) => {
+          const composition = createModelRuntimeComposition({
+            environment: modelEnvironment,
+            fetch: fetchThroughWorkbenchSystemProxy,
+            providerCatalog: {
+              attribution: {
+                referer: websiteOrigin,
+                title: WorkbenchProductName,
+              },
+            },
+          })
+          for (const providerId of ['velaros', 'velar-dev'] as const) {
+            composition.velarCloudRuntime.registerProvider(providerId, {
+              baseURL: accountService.getManagedModelBaseUrl(providerId),
+              fetch: (input, init) => accountService.fetchManagedModel(providerId, input, init),
+            })
+          }
+          return composition
+        }
+      )
+      return modelComposition
     }
     const disposeModelIpc = registerWorkbenchModelIpc(
-      modelComposition.providerModelCatalogService,
+      async () => (await getModelComposition()).providerModelCatalogService,
       dataRootDir,
       accountService
     )
@@ -433,7 +446,9 @@ if (hasSingleInstanceLock)
       nodePackagesDirectory,
       shells: shellHosts,
       dataDir: providers.parts.storagePaths.getConversationRuntimeDir(),
-      configure: createWorkbenchConversationConfiguration(modelComposition.agentModelResolver),
+      configure: createWorkbenchConversationConfiguration({
+        resolve: async (...args) => (await getModelComposition()).agentModelResolver.resolve(...args),
+      }),
       environment: () => WorkbenchHostEnvironment,
       runChanges: providers.chatRunChanges,
       // Agent 改完的文件当场告诉语言服务，别的文件里的诊断不等文件监听。
@@ -613,7 +628,7 @@ if (hasSingleInstanceLock)
     const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace, windowManager)
     registerWorkbenchLanguageServiceIpc(
       providers.language,
-      new WorkbenchInlineCompletionGenerator(undefined, modelComposition),
+      new WorkbenchInlineCompletionGenerator(undefined, getModelComposition),
       windowManager
     )
     const sessionPeers = registerWorkbenchSessionPeersIpc({
@@ -631,7 +646,6 @@ if (hasSingleInstanceLock)
     const disposeAgentProcessesIpc = registerWorkbenchAgentProcessesIpc({
       shells: shellHosts,
       windows: windowManager,
-      focusConsole: (ownerId) => agentConsoleWindows.focus(ownerId),
     })
     const disposeMemoryIpc = registerWorkbenchMemoryIpc({ memory, windows: windowManager })
     const disposeBrowserIpc = registerWorkbenchBrowserIpc({
@@ -650,7 +664,6 @@ if (hasSingleInstanceLock)
       (sender) => !!windowManager?.getHubForWebContents(sender)
     )
     registerWorkbenchWindowCloseIpc(windowCloseGuard)
-    let shutdownStarted = false
     app.on('before-quit', (event) => {
       if (shutdownStarted) return
       // 有未保存改动的窗口先存或问过用户：都答应了才开始收拾。先收拾再关窗的话，用户在确认框里点了
@@ -723,13 +736,14 @@ if (hasSingleInstanceLock)
         })
     })
 
-    installWorkbenchUpdateRuntime()
+    updateRestartPending = installWorkbenchUpdateRuntime()
     setWorkbenchSystemLanguageSource(() => app.getPreferredSystemLanguages()[0] ?? app.getLocale())
     installProjectHubMenu(windowManager)
     installWorkbenchWindowsJumpList(windowManager)
     if (pendingExternalPaths.length > 0) {
       const paths = pendingExternalPaths.splice(0)
-      void windowManager.openExternalPaths(paths)
+      const result = windowManager.openExternalPaths(paths)
+      if (result.opened.length === 0) windowManager.createWindow()
     } else {
       windowManager.createWindow()
     }
@@ -761,27 +775,18 @@ function dispatchExternalPaths(paths: readonly string[]): void {
   void windowManager.openExternalPaths(externalPaths)
 }
 
-function relaunchFromRequestedWorkbenchPackage(additionalData: unknown): boolean {
-  const requested = parseWorkbenchInstanceLaunchData(additionalData)
-  if (!requested) return false
-
+function resolveRequestedExecutable(path: string): Nullable<string> {
   const currentExecutablePath = resolve(process.execPath)
-  const requestedExecutablePath = resolve(requested.executablePath)
-  if (requestedExecutablePath === currentExecutablePath) return false
-  if (basename(requestedExecutablePath) !== basename(currentExecutablePath)) return false
+  const requestedExecutablePath = resolve(path)
+  const normalize = (path: string): string => process.platform === 'win32' ? path.toLowerCase() : path
+  if (normalize(requestedExecutablePath) === normalize(currentExecutablePath)) return null
+  if (normalize(basename(requestedExecutablePath)) !== normalize(basename(currentExecutablePath)))
+    return null
   try {
-    if (!statSync(requestedExecutablePath).isFile()) return false
+    return statSync(requestedExecutablePath).isFile() ? requestedExecutablePath : null
   } catch {
-    return false
+    return null
   }
-
-  const paths = [
-    ...requested.externalPaths,
-    ...(windowManager?.getOpenProjectPaths() ?? []),
-  ].filter((path, index, values) => values.indexOf(path) === index)
-  app.relaunch({ execPath: requestedExecutablePath, args: paths })
-  app.quit()
-  return true
 }
 
 function parseWorkbenchInstanceLaunchData(value: unknown): Nullable<WorkbenchInstanceLaunchData> {

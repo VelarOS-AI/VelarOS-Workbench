@@ -15,17 +15,17 @@ import type { WorkbenchAccountService } from '../account/WorkbenchAccountService
 import { WorkbenchModelCredentialStore } from './WorkbenchModelCredentialStore'
 
 export function registerWorkbenchModelIpc(
-  service: ProviderModelCatalogApi,
+  getService: () => Promise<ProviderModelCatalogApi>,
   dataRootDir: string,
   accountService: WorkbenchAccountService
 ): () => void {
   const credentialStore = new WorkbenchModelCredentialStore(dataRootDir)
-  ipcMain.handle(WorkbenchModelChannels.listProviderModels, (_event, request: unknown) => {
+  ipcMain.handle(WorkbenchModelChannels.listProviderModels, async (_event, request: unknown) => {
     const parsed = readListProviderModelsRequest(request)
     const providerId = readManagedProviderId(parsed.provider)
     return providerId
       ? accountService.listManagedProviderModels(providerId)
-      : service.listProviderModels(parsed)
+      : (await getService()).listProviderModels(parsed)
   })
   ipcMain.handle(WorkbenchModelChannels.listManagedProviders, () =>
     accountService.getManagedModelAccess()

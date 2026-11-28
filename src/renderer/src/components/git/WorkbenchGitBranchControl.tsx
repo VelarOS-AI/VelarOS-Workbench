@@ -67,7 +67,7 @@ const CreatingBranch = 'create branch'
  * 某个分支）和新建分支。
  *
  * 远端操作经 {@link useWorkbenchGitRemoteAction} 跑：这个项目有一个在跑时（不管是这里还是提交面板发起
- * 的）按钮转圈，面板里换成进度和取消。
+ * 的）按钮转圈，点击转圈的操作按钮可以取消。
  */
 export function WorkbenchGitBranchControl({
   workspaceRoot,

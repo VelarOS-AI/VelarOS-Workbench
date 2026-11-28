@@ -423,35 +423,33 @@ export function WorkbenchGitToolPanel({
                 </Paragraph>
               )}
             </section>
-            <aside className={styles.gitCommitDetailPane}>
-              <WorkbenchGitDetailsPane
-                workspaceRoot={workspaceRoot}
-                target={detailsTarget}
-                actions={
-                  selectedStash && (
-                    <div className={styles.gitDetailActions}>
-                      {StashActions.map((action) => (
-                        <Button
-                          key={action}
-                          size="sm"
-                          variant={action === 'drop' ? 'destructiveOutline' : 'outline'}
-                          disabled={
-                            !!pendingStashAction || (action !== 'drop' && hasUnsavedOpenTabs)
-                          }
-                          title={t(StashActionHintKeys[action])}
-                          onClick={() => void runStashAction(selectedStash, action)}
-                        >
-                          {pendingStashAction === action && (
-                            <SpinnerGapIcon size={12} className={styles.spinIcon} />
-                          )}
-                          {t(StashActionLabelKeys[action])}
-                        </Button>
-                      ))}
-                    </div>
-                  )
-                }
-              />
-            </aside>
+            <WorkbenchGitDetailsPane
+              workspaceRoot={workspaceRoot}
+              target={detailsTarget}
+              actions={
+                selectedStash && (
+                  <div className={styles.gitDetailActions}>
+                    {StashActions.map((action) => (
+                      <Button
+                        key={action}
+                        size="sm"
+                        variant={action === 'drop' ? 'destructiveOutline' : 'outline'}
+                        disabled={
+                          !!pendingStashAction || (action !== 'drop' && hasUnsavedOpenTabs)
+                        }
+                        title={t(StashActionHintKeys[action])}
+                        onClick={() => void runStashAction(selectedStash, action)}
+                      >
+                        {pendingStashAction === action && (
+                          <SpinnerGapIcon size={12} className={styles.spinIcon} />
+                        )}
+                        {t(StashActionLabelKeys[action])}
+                      </Button>
+                    ))}
+                  </div>
+                )
+              }
+            />
           </div>
         </div>
       </div>

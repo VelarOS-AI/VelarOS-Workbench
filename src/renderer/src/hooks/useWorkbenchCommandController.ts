@@ -23,6 +23,7 @@ import {
   buildWorkbenchTerminalSessionTitle,
   closeWorkbenchTerminalSessions,
   pickWorkbenchTerminalTitle,
+  WorkbenchRunConsoleColumns,
 } from '@renderer/models/commands/workbenchTerminalPresentation'
 import { startWorkbenchDebugRunSession } from '@renderer/models/debug/workbenchDebugBridge'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
@@ -397,6 +398,7 @@ export function useWorkbenchCommandController({
         target: launch.debug.target,
         cwd: launch.cwd,
         env: launch.env,
+        cols: WorkbenchRunConsoleColumns,
       })
       return { sessionId: started.terminalSessionId, shell: started.shell, cwd: started.cwd }
     }
@@ -406,6 +408,7 @@ export function useWorkbenchCommandController({
         ...(launch?.process ? { initialProcess: launch.process } : { initialCommand: command }),
         cwd: launch?.cwd,
         env: launch?.env,
+        cols: WorkbenchRunConsoleColumns,
       })
     )
   }

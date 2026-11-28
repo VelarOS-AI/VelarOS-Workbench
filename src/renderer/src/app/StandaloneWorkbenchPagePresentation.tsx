@@ -357,7 +357,7 @@ export function StandaloneWorkbenchPagePresentation({
     icon: ReactElement
     isRunning?: boolean
   }> = [
-    ...(workbench.runSessions.length > 0
+    ...(workbench.runSessions.length > 0 || model.agentConsoleSessionId
       ? [
           {
             id: 'run' as const,
@@ -831,6 +831,10 @@ export function StandaloneWorkbenchPagePresentation({
             />
             <CommandPanel
               activeTool={surface.activeBottomTool}
+              agentConsole={model.agentConsoleSessionId ? {
+                projectRoot,
+                sessionId: model.agentConsoleSessionId,
+              } : null}
               workbenchRun={{
                 runSessions: workbench.runSessions,
                 activeRunSessionId: workbench.activeRunSessionId,

@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 
 import type { AgentModelResolverApi } from '@velaros-ai/velaros/model'
-import { createAiSdkModelDriver } from '@velaros-ai/velaros/model'
 
 import type { WorkbenchConversationSendRequest } from '../../shared/workbenchConversation'
 
@@ -23,6 +22,8 @@ export function createWorkbenchConversationConfiguration(
 ) => Promise<ConversationRunConfiguration> {
   const capacities = new Map<string, ConversationContextCapacity>()
   return async (request, signal) => {
+    signal.throwIfAborted()
+    const { createAiSdkModelDriver } = await import('@velaros-ai/velaros/model')
     signal.throwIfAborted()
     const selection = { ...request.model, reasoningLevel: request.reasoningLevel }
     const resolved = await resolver.resolve(

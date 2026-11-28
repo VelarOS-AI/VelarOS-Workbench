@@ -24,9 +24,7 @@ const ExitedTaskHistoryLimit = 64
 export function registerWorkbenchAgentProcessesIpc(options: {
   shells: WorkbenchShellHostRegistryApi
   windows: WorkbenchConversationWindows
-  focusConsole: (ownerId: number) => boolean
 }): () => void {
-  ipcMain.handle(Channels.focusConsole, (event) => options.focusConsole(event.sender.id))
   const ownedRoot = async (event: IpcMainInvokeEvent, root: string): Promise<string> => {
     const project = options.windows.getHubForWebContents(event.sender)?.getState().currentProject
     if (!project || resolve(project.path) !== resolve(root))
@@ -92,7 +90,6 @@ export function registerWorkbenchAgentProcessesIpc(options: {
   return () => {
     off()
     for (const channel of [
-      Channels.focusConsole,
       Channels.list,
       Channels.stop,
       Channels.input,

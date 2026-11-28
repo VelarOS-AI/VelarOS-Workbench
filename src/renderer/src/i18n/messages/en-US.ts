@@ -84,8 +84,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsWorkspaceSandbox: 'Workspace sandbox',
     settingsWorkspaceSandboxDescription:
       'Limit Agent file writes to the current project. Changes apply on the next run.',
-    agentProcessesTitle: 'Console',
-    agentConsoleOpenFailed: 'Could not open the console window',
+    agentProcessesTitle: 'Agent Processes',
     agentProcessList: 'Conversation processes',
     agentProcessesEmpty: 'This chat has no background processes yet.',
     agentProcessExit: 'Exit {code}',

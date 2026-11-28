@@ -1,6 +1,4 @@
-import type { BrowserWindowConstructorOptions, WindowOpenHandlerResponse } from 'electron'
-
-import { WorkbenchAgentConsoleFrameName } from '../../shared/workbenchAgentProcesses'
+import type { WindowOpenHandlerResponse } from 'electron'
 
 export interface WorkbenchWindowOpenRequest {
   readonly url: string
@@ -46,32 +44,13 @@ export function normalizeWorkbenchExternalUrl(rawUrl: string): string | null {
   }
 }
 
-export function isWorkbenchAgentConsoleRequest(request: WorkbenchWindowOpenRequest): boolean {
-  return request.url === 'about:blank' && request.frameName === WorkbenchAgentConsoleFrameName
-}
-
-/** The app may host its named console portal; validated external URLs use the system browser. */
+/** Validated external URLs use the system browser. */
 export function installWorkbenchExternalNavigation(
   setWindowOpenHandler: SetWorkbenchWindowOpenHandler,
   openExternal: OpenWorkbenchExternalUrl,
-  reportFailure: ReportWorkbenchExternalUrlFailure = () => undefined,
-  consoleOptions?: BrowserWindowConstructorOptions
+  reportFailure: ReportWorkbenchExternalUrlFailure = () => undefined
 ): void {
   setWindowOpenHandler((request) => {
-    if (consoleOptions && isWorkbenchAgentConsoleRequest(request))
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          ...consoleOptions,
-          webPreferences: {
-            preload: '',
-            nodeIntegration: false,
-            contextIsolation: true,
-            sandbox: true,
-            webviewTag: false,
-          },
-        },
-      }
     const { url } = request
     const externalUrl = normalizeWorkbenchExternalUrl(url)
     if (externalUrl) {

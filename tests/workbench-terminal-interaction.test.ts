@@ -128,7 +128,7 @@ test('terminal selection copies, output clicks do not interrupt, and input click
   }
 }, 30_000)
 
-test('a newly mounted terminal keeps a steady cursor after its initial theme and input options settle', async () => {
+test('a terminal has a steady cursor and a run console hides it until the run exits', async () => {
   const bundle = await build({
     stdin: {
       contents: `import { createElement } from 'react';
@@ -137,8 +137,11 @@ test('a newly mounted terminal keeps a steady cursor after its initial theme and
         import { findWorkbenchTerminal } from './src/renderer/src/components/terminal/workbenchTerminalInstances';
         import { WorkbenchLocalizationProvider } from './src/renderer/src/i18n/WorkbenchLocalizationProvider';
         const localization = {locale:'en-US', t:key=>key, setLocale() {}};
-        createRoot(document.querySelector('#host')).render(createElement(WorkbenchLocalizationProvider, {value:localization},
-          createElement(WorkbenchTerminalView, {sessionId:'initial-focus',cwd:'.',isRunning:true,workbenchTheme:'light-modern',onData() {},onResize() {}})));
+        const root = createRoot(document.querySelector('#host'));
+        window.renderTerminal = (isRunConsole, isRunning) => root.render(createElement(WorkbenchLocalizationProvider, {value:localization},
+          createElement(WorkbenchTerminalView, {key:String(isRunConsole),sessionId:isRunConsole?'run':'initial-focus',cwd:'.',isRunConsole,isRunning,workbenchTheme:'light-modern',onData() {},onResize() {}})));
+        window.renderTerminal(false, true);
+        window.runTerminal = () => findWorkbenchTerminal('run')?.terminal;
         window.readCursor = () => {
           const terminal = findWorkbenchTerminal('initial-focus')?.terminal;
           const blink = terminal?._core._renderService._renderer.value._cursorBlinkStateManager?.value;
@@ -187,6 +190,24 @@ test('a newly mounted terminal keeps a steady cursor after its initial theme and
         hasBlinkAnimation: false,
       })
     }
+    await page.evaluate(() => (window as any).renderTerminal(true, true))
+    await page.waitForFunction(() => (window as any).runTerminal()?._core.coreService.isCursorHidden)
+    const cursorAtRender = await page.evaluate(async () => {
+      const terminal = (window as any).runTerminal()
+      const frames: boolean[] = []
+      const render = terminal.onRender(() => frames.push(terminal._core.coreService.isCursorHidden))
+      for (let index = 0; index < 3; index += 1) {
+        // A PTY can explicitly show its cursor again as part of a redraw.
+        await new Promise<void>((done) => terminal.write(`\x1b[?25hupdate ${index}\r\n`, done))
+        await new Promise((done) => requestAnimationFrame(done))
+      }
+      render.dispose()
+      return frames
+    })
+    assert.ok(cursorAtRender.length > 0)
+    assert.ok(cursorAtRender.every(Boolean))
+    await page.evaluate(() => (window as any).renderTerminal(true, false))
+    await page.waitForFunction(() => !(window as any).runTerminal()?._core.coreService.isCursorHidden)
   } finally {
     await browser.close()
   }

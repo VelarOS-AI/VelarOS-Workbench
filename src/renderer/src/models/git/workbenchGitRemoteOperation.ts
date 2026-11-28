@@ -9,6 +9,7 @@ export interface WorkbenchGitRemoteOperation {
   id: string
   workspaceRoot: string
   action: WorkspaceGitRemoteAction
+  branch?: string
   /** 已经点了取消，在等 git 进程收场。 */
   cancelling: boolean
 }
@@ -28,13 +29,15 @@ function findById(id: string): Nullable<WorkbenchGitRemoteOperation> {
 /** 登记一个要开始的远端操作；这个项目已经有一个在跑时为 null（同一时刻只跑一个）。 */
 export function beginWorkbenchGitRemoteOperation(
   workspaceRoot: string,
-  action: WorkspaceGitRemoteAction
+  action: WorkspaceGitRemoteAction,
+  branch?: string
 ): Nullable<WorkbenchGitRemoteOperation> {
   if (operations.has(workspaceRoot)) return null
   const operation: WorkbenchGitRemoteOperation = {
     id: crypto.randomUUID(),
     workspaceRoot,
     action,
+    branch,
     cancelling: false,
   }
   operations.set(workspaceRoot, operation)

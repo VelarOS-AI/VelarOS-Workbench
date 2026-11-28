@@ -109,7 +109,7 @@ async function fixture() {
   })
   const peers = registerWorkbenchSessionPeersIpc({ runtime, recovery, windows: windows as never })
   const disposeAgent = registerWorkbenchAgentProcessesIpc({
-    shells, windows: windows as never, focusConsole: () => false,
+    shells, windows: windows as never,
   })
   const disposeBrowser = registerWorkbenchBrowserIpc({ browser, windows: windows as never })
   const ref = { projectRoot, sessionId: 'a' }

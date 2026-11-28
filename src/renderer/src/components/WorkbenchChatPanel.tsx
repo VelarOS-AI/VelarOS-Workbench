@@ -40,7 +40,6 @@ import {
   type WorkbenchChatFileChangeEntry,
   type WorkbenchChatFileReferenceDelivery,
   type WorkbenchChatRunChangesTarget,
-  WorkbenchChatSessionActions,
   type WorkbenchChatSessionGroup,
   type WorkbenchChatSessionMember,
   WorkbenchChatSessionSurface,
@@ -462,13 +461,6 @@ export function WorkbenchChatPanel({
             hidden={scrollNavigatorHidden}
             label={t('chat.toggleScrollNavigator')}
             onHiddenChange={WorkbenchChatScrollNavigatorVisibility.setHidden}
-          />
-        )}
-        {ready && (
-          <WorkbenchChatSessionActions
-            key={`${normalizedProjectRoot}\0${currentSession.id}`}
-            projectRoot={normalizedProjectRoot}
-            sessionId={currentSession.id}
           />
         )}
         <IconButton

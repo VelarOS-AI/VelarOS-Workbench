@@ -29,6 +29,7 @@ export interface WorkbenchDebugStartOptions {
   /** 工作目录：项目里的相对路径；不给是项目根。 */
   cwd?: string
   env?: Record<string, string>
+  cols?: number
 }
 
 /** 会话停下时要页面做的事。 */

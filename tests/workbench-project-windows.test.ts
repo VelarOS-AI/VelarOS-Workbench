@@ -317,7 +317,7 @@ void describe('Workbench project window ownership', () => {
     assert.match(main, /app\.on\('open-file'/u)
     assert.match(main, /app\.on\('second-instance'/u)
     assert.match(main, /collectExternalPathArguments/u)
-    assert.match(main, /app\.relaunch\(\{ execPath: requestedExecutablePath, args: paths \}\)/u)
+    assert.match(main, /app\.once\('will-quit',[\s\S]*?app\.relaunch\(\{ execPath,/u)
     assert.match(manager, /getOpenProjectPaths\(\)/u)
     assert.match(manager, /findProjectRecord\(projectPath\)/u)
     assert.match(manager, /this\.focusWindow\(existing\.window\)/u)

@@ -6,7 +6,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { type IBufferRange, type ILink, Terminal } from '@xterm/xterm'
+import { type IBufferRange, type ILink, type IViewportRange, Terminal } from '@xterm/xterm'
 
 import {
   findWorkbenchTerminalFileLinks,
@@ -35,6 +35,8 @@ import '@xterm/xterm/css/xterm.css'
 export interface WorkbenchTerminalInstanceHandlers {
   onData: (data: string) => void
   onOpenLink: (url: string) => void
+  onHoverLink?: (url: string, range: IViewportRange) => void
+  onLeaveLink?: () => void
   /**
    * 一行输出里的这些路径各是项目里的哪个文件（`cwd` 是 shell 当前所在的目录），不是项目里的文件给 null。
    * 没给就不认文件路径。
@@ -57,6 +59,7 @@ export interface WorkbenchTerminalInstance {
 interface WorkbenchTerminalEntry extends WorkbenchTerminalInstance {
   detachOutput: () => void
   inputFocused: boolean
+  runCursorHidden?: boolean
   webgl: Nullable<WebglAddon>
   /** shell 当前所在的目录：起始目录，之后跟着 shell 用 OSC 7 报的走（不报的 shell 就一直是起始目录）。 */
   cwd: string
@@ -96,6 +99,29 @@ export function findWorkbenchTerminal(sessionId: string): Nullable<WorkbenchTerm
   return entries.get(sessionId) ?? null
 }
 
+export function setWorkbenchRunCursorHidden(sessionId: string, hidden: boolean): void {
+  const entry = entries.get(sessionId)
+  if (!entry) return
+  entry.runCursorHidden = hidden
+  syncRunCursor(entry)
+}
+
+function syncRunCursor(entry: WorkbenchTerminalEntry): void {
+  if (entry.runCursorHidden === undefined) return
+  const { terminal } = entry
+  // xterm 6 has no public cursor visibility option. Both renderers read this flag.
+  const { coreService } = (
+    terminal as unknown as {
+      _core: { coreService: { isCursorHidden: boolean } }
+    }
+  )._core
+  if (coreService.isCursorHidden === entry.runCursorHidden) return
+  coreService.isCursorHidden = entry.runCursorHidden
+  const buffer = terminal.buffer.active
+  const row = buffer.baseY + buffer.cursorY - buffer.viewportY
+  if (terminal.element && row >= 0 && row < terminal.rows) terminal.refresh(row, row)
+}
+
 /** Resize without FitAddon's extra clear, which exposes a blank canvas during pane drags. */
 export function fitWorkbenchTerminal(instance: WorkbenchTerminalInstance): void {
   const dimensions = instance.fit.proposeDimensions()
@@ -107,7 +133,7 @@ export function fitWorkbenchTerminal(instance: WorkbenchTerminalInstance): void 
 export function acquireWorkbenchTerminal(
   sessionId: string,
   handlers: WorkbenchTerminalInstanceHandlers,
-  options: { fontFamily: string; cwd: string }
+  options: { fontFamily: string; cwd: string; cols?: number }
 ): WorkbenchTerminalInstance {
   installDiscardHook()
   const existing = entries.get(sessionId)
@@ -117,6 +143,7 @@ export function acquireWorkbenchTerminal(
   }
 
   const terminal = new Terminal({
+    cols: options.cols ?? 80,
     allowProposedApi: true,
     cursorBlink: false,
     cursorStyle: 'bar',
@@ -148,7 +175,12 @@ export function acquireWorkbenchTerminal(
     searchRefreshTimer: null,
     searchDecorateTimer: null,
   }
-  terminal.loadAddon(new WebLinksAddon((_event, uri) => entry.handlers.onOpenLink(uri)))
+  terminal.loadAddon(
+    new WebLinksAddon((_event, uri) => entry.handlers.onOpenLink(uri), {
+      hover: (_event, uri, range) => entry.handlers.onHoverLink?.(uri, range),
+      leave: () => entry.handlers.onLeaveLink?.(),
+    })
+  )
   terminal.registerLinkProvider({
     provideLinks: (lineNumber, callback) => provideFileLinks(entry, lineNumber, callback),
   })
@@ -179,7 +211,11 @@ export function acquireWorkbenchTerminal(
     }
     return true
   })
-  terminal.onWriteParsed(() => scheduleSearchRefresh(entry))
+  terminal.onWriteParsed(() => {
+    // PTYs can change cursor visibility while repainting the output.
+    syncRunCursor(entry)
+    scheduleSearchRefresh(entry)
+  })
   terminal.onScroll(() => scheduleSearchDecorate(entry))
   terminal.onKey(() => {
     entry.inputFocused = true

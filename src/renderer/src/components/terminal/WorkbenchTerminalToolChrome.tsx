@@ -42,13 +42,17 @@ export interface WorkbenchTerminalSurfaceHandlers {
 
 function WorkbenchTerminalSurface({
   session,
+  isRunConsole,
   workbenchTheme,
   onTerminalData,
   onTerminalResize,
   onOpenLink,
   onResolveFileLinks,
   onOpenFileLink,
-}: WorkbenchTerminalSurfaceHandlers & { session: WorkbenchTerminalSessionView }): ReactElement {
+}: WorkbenchTerminalSurfaceHandlers & {
+  session: WorkbenchTerminalSessionView
+  isRunConsole?: boolean
+}): ReactElement {
   return (
     <div className={styles.terminalToolPane}>
       <Suspense fallback={null}>
@@ -57,6 +61,7 @@ function WorkbenchTerminalSurface({
           sessionId={session.id}
           cwd={session.cwd}
           isRunning={session.isRunning}
+          isRunConsole={isRunConsole}
           workbenchTheme={workbenchTheme}
           onData={onTerminalData}
           onResize={onTerminalResize}
@@ -170,7 +175,8 @@ export function WorkbenchTerminalToolPane({
 }: WorkbenchTerminalToolPaneProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const session =
-    terminalSessions.find((candidate) => candidate.id === activeTerminalSessionId) ?? terminalSessions[0]
+    terminalSessions.find((candidate) => candidate.id === activeTerminalSessionId) ??
+    terminalSessions[0]
 
   if (!session)
     return (
@@ -185,6 +191,7 @@ export function WorkbenchTerminalToolPane({
 interface WorkbenchRunToolHeaderProps {
   runSessions: WorkbenchTerminalSessionView[]
   activeRunSessionId: Nullable<string>
+  agentConsole?: { selected: boolean; onSelect: () => void }
   isCollapsed: boolean
   onActiveRunSessionChange: (sessionId: string) => void
   onCloseRunSession: (sessionId: string) => void
@@ -196,6 +203,7 @@ interface WorkbenchRunToolHeaderProps {
 export function WorkbenchRunToolHeader({
   runSessions,
   activeRunSessionId,
+  agentConsole,
   isCollapsed,
   onActiveRunSessionChange,
   onCloseRunSession,
@@ -215,8 +223,22 @@ export function WorkbenchRunToolHeader({
       <div className={styles.terminalToolHeaderLeading}>
         <span className={styles.terminalToolHeaderLabel}>{t('workbench.commandTabRuns')}</span>
         <div className={styles.terminalSessionTabStrip} role="tablist">
+          {agentConsole && (
+            <button
+              type="button"
+              className={styles.terminalSessionTab}
+              data-active={agentConsole.selected}
+              role="tab"
+              aria-selected={agentConsole.selected}
+              onClick={agentConsole.onSelect}
+            >
+              <span className={styles.terminalSessionTabLabel}>
+                {t('workbench.agentProcessesTitle')}
+              </span>
+            </button>
+          )}
           {runSessions.map((session) => {
-            const isActive = session.id === activeRunSession?.id
+            const isActive = !agentConsole?.selected && session.id === activeRunSession?.id
 
             return (
               <button
@@ -252,31 +274,33 @@ export function WorkbenchRunToolHeader({
         </div>
       </div>
       <div className={styles.terminalToolHeaderTrailing}>
-        <div className={styles.runToolbar}>
-          <IconButton
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            title={t('workbench.runRestart')}
-            label={t('workbench.runRestart')}
-            disabled={!canRestart}
-            onClick={() => activeId && onRestartRunSession(activeId)}
-          >
-            <ArrowClockwiseIcon size={14} />
-          </IconButton>
-          <IconButton
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className={styles.runStopButton}
-            title={t('workbench.runStop')}
-            label={t('workbench.runStop')}
-            disabled={!canStop}
-            onClick={() => activeId && onStopRunSession(activeId)}
-          >
-            <StopIcon size={14} weight="fill" />
-          </IconButton>
-        </div>
+        {runSessions.length > 0 && !agentConsole?.selected && (
+          <div className={styles.runToolbar}>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title={t('workbench.runRestart')}
+              label={t('workbench.runRestart')}
+              disabled={!canRestart}
+              onClick={() => activeId && onRestartRunSession(activeId)}
+            >
+              <ArrowClockwiseIcon size={14} />
+            </IconButton>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={styles.runStopButton}
+              title={t('workbench.runStop')}
+              label={t('workbench.runStop')}
+              disabled={!canStop}
+              onClick={() => activeId && onStopRunSession(activeId)}
+            >
+              <StopIcon size={14} weight="fill" />
+            </IconButton>
+          </div>
+        )}
         <IconButton
           type="button"
           variant="ghost"
@@ -313,5 +337,5 @@ export function WorkbenchRunToolPane({
       </Paragraph>
     )
 
-  return <WorkbenchTerminalSurface session={activeRunSession} {...surface} />
+  return <WorkbenchTerminalSurface session={activeRunSession} isRunConsole {...surface} />
 }

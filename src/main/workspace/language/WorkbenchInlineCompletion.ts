@@ -1,10 +1,8 @@
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { logRuntime } from '@velaros-ai/velaros/core/logger'
-import {
-  createModelRequestClient,
-  createModelRuntimeComposition,
-  type ModelRequestClientApi,
-  type ModelRuntimeCompositionApi,
+import type {
+  ModelRequestClientApi,
+  ModelRuntimeCompositionApi,
 } from '@velaros-ai/velaros/model'
 
 import { type WorkbenchInlineCompletionResult } from '@shared/contracts/workbench'
@@ -21,11 +19,15 @@ type InlineCompletionModelRequestPort = Pick<ModelRequestClientApi, 'collectText
 /** Workbench 独立宿主的编辑器 Tab 补全生成器。 */
 export class WorkbenchInlineCompletionGenerator {
   private readonly log = logRuntime.tag('WorkbenchInlineCompletionGenerator')
+  private modelRequestService?: InlineCompletionModelRequestPort
+  private modelComposition?: Promise<ModelRuntimeCompositionApi>
 
   public constructor(
-    private readonly modelRequestService: InlineCompletionModelRequestPort = createModelRequestClient(),
-    private readonly modelComposition: ModelRuntimeCompositionApi = createModelRuntimeComposition()
-  ) {}
+    modelRequestService?: InlineCompletionModelRequestPort,
+    private readonly getModelComposition?: () => Promise<ModelRuntimeCompositionApi>
+  ) {
+    this.modelRequestService = modelRequestService
+  }
 
   public async generate(
     request: WorkbenchInlineCompletionBridgeRequest
@@ -33,9 +35,15 @@ export class WorkbenchInlineCompletionGenerator {
     if (!request.prefix.trim()) return EmptyResult
 
     try {
+      const { createModelRequestClient, createModelRuntimeComposition } =
+        await import('@velaros-ai/velaros/model')
+      this.modelRequestService ??= createModelRequestClient()
+      this.modelComposition ??=
+        this.getModelComposition?.() ?? Promise.resolve(createModelRuntimeComposition())
+      const modelComposition = await this.modelComposition
       // 补全要快：按低档思考力度跑（与 Desktop 的辅助任务一致）。
       const selection = { ...request.modelSelection, reasoningLevel: 'low' as const }
-      const runtime = await this.modelComposition.agentModelResolver.resolve(selection, {
+      const runtime = await modelComposition.agentModelResolver.resolve(selection, {
         providerRuntimeConfigs: [
           {
             provider: selection.provider,

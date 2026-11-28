@@ -72,6 +72,10 @@ export class WindowsArchiveUpdater extends AppUpdater {
     this.recovery = this.#readPreviousResult()
   }
 
+  public get installing(): boolean {
+    return this.#installing
+  }
+
   public subscribePreparationProgress(
     listener: (progress: WorkbenchUpdatePreparationProgress) => void
   ): () => void {

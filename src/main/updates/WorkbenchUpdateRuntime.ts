@@ -23,7 +23,7 @@ import { WorkbenchUpdateDownloadCache } from './WorkbenchUpdateDownloadCache'
 import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from './WorkbenchUpdateService'
 
-export function installWorkbenchUpdateRuntime(): void {
+export function installWorkbenchUpdateRuntime(): () => boolean {
   const preferences = Result.wrapSync(
     () => new WorkbenchUpdatePreferencesStore(app.getPath('userData'))
   )
@@ -39,7 +39,7 @@ export function installWorkbenchUpdateRuntime(): void {
       if (channel !== WorkbenchUpdateChannels.changed)
         ipcMain.handle(channel, () => Result.unwrap(preferences))
     app.once('will-quit', removeHandlers)
-    return
+    return () => false
   }
   const market = resolveVelarOSOfficialWebsiteMarket({
     configuredMarket: process.env.VELAROS_MARKET,
@@ -116,4 +116,5 @@ export function installWorkbenchUpdateRuntime(): void {
     Log.tag('WorkbenchUpdate').caught('Windows update startup recovery failed', error)
   })
   service.start()
+  return () => windowsUpdater?.installing === true
 }
