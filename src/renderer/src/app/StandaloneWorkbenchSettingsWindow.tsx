@@ -19,6 +19,15 @@ function SettingsSurface(): ReactElement {
   const project = projectHub.kind === 'ready' ? projectHub.state.currentProject : null
 
   useEffect(() => {
+    let firstPaint = requestAnimationFrame(() => {
+      firstPaint = requestAnimationFrame(() => {
+        void window.velarosWorkbenchSettingsWindow.ready()
+      })
+    })
+    return () => cancelAnimationFrame(firstPaint)
+  }, [])
+
+  useEffect(() => {
     window.velarosWorkbenchProjectHub.setLocale(localization.locale)
     document.title = localization.t('workbench.settingsTitle')
   }, [localization])

@@ -63,6 +63,7 @@ import {
   normalizeWorkbenchLanguage,
   resolveBuiltinWorkbenchLanguageService,
   type WorkbenchLanguageServiceDescriptor,
+  workbenchLspCompletionKind,
 } from '@shared/workbenchLanguageServices'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
@@ -193,26 +194,63 @@ function sourceIndentWidth(line: string): number {
   return line.match(/^[ \t]*/u)?.[0].replace(/\t/gu, '    ').length ?? 0
 }
 
+const SourceTypeDeclaration =
+  /\b(?:record(?:[ \t]+(?:class|struct))?|enum(?:[ \t]+class)?|class|struct|interface|union|protocol|trait|type(?:alias)?)[ \t]+((?:@|r#)?[$_\p{ID_Start}][$\p{ID_Continue}]*)/du
+const SourcePreviewMaxLines = 60
+const SourcePreviewMaxLength = 5_000
+
 function sourceDeclarationBlock(lines: readonly string[], lineIndex: number): string {
   const declaration = lines[lineIndex]?.trimEnd() ?? ''
   if (!declaration.trim()) return ''
 
-  const block = [declaration]
+  const source = lines.slice(lineIndex, lineIndex + SourcePreviewMaxLines).join('\n')
+  const structure = source
+    .slice(0, SourcePreviewMaxLength)
+    .replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`[^`]*`/gu, (text) =>
+      text.replace(/[^\n]/gu, ' ')
+    )
+    .split('\n')
   const declarationIndent = sourceIndentWidth(declaration)
-  for (let index = lineIndex + 1; index < lines.length && block.length < 10; index += 1) {
-    const line = lines[index]?.trimEnd() ?? ''
-    if (!line.trim() || sourceIndentWidth(line) <= declarationIndent) break
-    block.push(line)
+  const block: string[] = []
+  let depth = 0
+  let hasBody = false
+  for (const [offset, syntax] of structure.entries()) {
+    const line = lines[lineIndex + offset] ?? ''
+    if (
+      offset > 0 &&
+      depth === 0 &&
+      line.trim() &&
+      sourceIndentWidth(line) <= declarationIndent &&
+      !/^\s*(?:\{|;|where\b)/u.test(syntax)
+    )
+      break
+    block.push(line.trimEnd())
+    hasBody ||= syntax.includes('{')
+    for (const delimiter of syntax.matchAll(/[(){}]/gu)) {
+      depth += delimiter[0] === '(' || delimiter[0] === '{' ? 1 : -1
+    }
+    if (depth <= 0 && (hasBody || syntax.trimEnd().endsWith(';'))) break
   }
-  return block.join('\n').trim()
+  const preview = block.join('\n').trim()
+  const nextLine = lines[lineIndex + block.length]
+  const lineLimitReached =
+    block.length === SourcePreviewMaxLines &&
+    nextLine !== undefined &&
+    (depth > 0 || sourceIndentWidth(nextLine) > declarationIndent)
+  return preview.length > SourcePreviewMaxLength || lineLimitReached
+    ? `${preview.slice(0, SourcePreviewMaxLength).trimEnd()}\n…`
+    : preview
 }
 
 /** Builds a bounded source excerpt and expands a nearby simple type alias once. */
-export function buildExternalDefinitionPreview(content: string, line: number): string {
+export function buildExternalDefinitionPreview(content: string, line: number, column = 1): string {
   const lines = content.split(/\r?\n/u)
-  const lineIndex = Math.min(Math.max(0, line - 1), Math.max(0, lines.length - 1))
+  const lineIndex = line - 1
+  const declarationLine = lines[lineIndex] ?? ''
+  const name = SourceTypeDeclaration.exec(declarationLine)?.indices?.[1]
+  // Some servers locate the entire declaration. A position after the type name can be a field.
+  if (!name || column - 1 >= name[1]) return ''
   const declaration = sourceDeclarationBlock(lines, lineIndex)
-  if (!declaration) return ''
 
   const aliasTarget = declaration
     .split('\n', 1)[0]
@@ -263,37 +301,6 @@ export function buildExternalHoverResult(
     displayText: displayText || documentation,
     documentation: optionalWhen(!!displayText && !!documentation, documentation),
     documentationBlocks: optionalWhen(!!displayText && rest.length > 0, rest),
-  }
-}
-
-function mapExternalCompletionKind(kind: number | undefined): string | undefined {
-  switch (kind) {
-    case 2:
-      return 'method'
-    case 3:
-      return 'function'
-    case 6:
-      return 'variable'
-    case 7:
-      return 'class'
-    case 8:
-      return 'interface'
-    case 9:
-      return 'namespace'
-    case 10:
-      return 'property'
-    case 12:
-      return 'constant'
-    case 13:
-      return 'enum'
-    case 14:
-      return 'keyword'
-    case 17:
-      return 'file'
-    case 21:
-      return 'constant'
-    default:
-      return undefined
   }
 }
 
@@ -402,6 +409,8 @@ interface LspCompletionRange {
 interface LspCompletionItemLike {
   label: string
   detail?: string
+  deprecated?: boolean
+  tags?: readonly number[]
   documentation?: unknown
   insertText?: string
   insertTextFormat?: number
@@ -437,6 +446,7 @@ function mapLspCompletionItem(
     kind,
     detail: item.detail ?? item.labelDetails?.detail,
     returnType: item.labelDetails?.description,
+    deprecated: item.deprecated || item.tags?.includes(1) || undefined,
     documentation: plainTextFromLspContent(item.documentation),
     insertText: item.textEdit?.newText ?? item.insertText,
     range: editRange ? rangeFromLspCompletionRange(editRange) : undefined,
@@ -645,7 +655,7 @@ class WorkbenchLanguageServices {
         items: list.items
           .slice(0, MaximumExternalLspCompletionItems)
           .map((item) =>
-            mapLspCompletionItem(request.path, item, mapExternalCompletionKind(item.kind))
+            mapLspCompletionItem(request.path, item, workbenchLspCompletionKind(item.kind))
           ),
         // 截掉了一部分：继续输入时重新请求，服务端按更长的前缀再筛。
         isIncomplete: list.isIncomplete || list.items.length > MaximumExternalLspCompletionItems,
@@ -1069,25 +1079,22 @@ class WorkbenchLanguageServices {
           .find(isPresent)
         if (definition) {
           result.definition = definition
-          if (
-            /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
-              result.displayText.trim()
-            )
-          ) {
-            const definitionContent =
-              safeReadFile(
-                this.resolveAbsoluteProjectPath(resolved.projectRoot, definition.path)
-              ) ?? ''
-            const text = buildExternalDefinitionPreview(definitionContent, definition.line)
-            if (text) {
-              result.definitionPreview = {
-                kind: 'code',
-                text,
-                language: optionalWhen(
-                  !!descriptor?.documentLanguageId,
-                  descriptor?.documentLanguageId
-                ),
-              }
+          const definitionPath = resolve(resolved.projectRoot, definition.path)
+          const definitionContent =
+            normalizeTypeScriptFileName(definitionPath) === external.absolutePath
+              ? external.content
+              : this.editorContentReader(request, resolved.projectRoot)(definitionPath)
+          const text = buildExternalDefinitionPreview(
+            definitionContent ?? '',
+            definition.line,
+            definition.column
+          )
+          if (text && text !== result.displayText) {
+            result.definitionPreview = {
+              kind: 'code',
+              text,
+              language:
+                descriptor?.documentLanguageId ?? getWorkbenchPathExtension(definition.path) ?? undefined,
             }
           }
         }

@@ -560,12 +560,24 @@ if (hasSingleInstanceLock)
     }
     const settingsWindows = new WorkbenchSettingsWindows({
       windows: windowManager,
-      createWindow: (owner) => createAuxiliaryWindow(owner, 'VelarOS Workbench Settings'),
+      createWindow: (owner) => {
+        const window = createAuxiliaryWindow(owner, 'VelarOS Workbench Settings')
+        window.setMaximizable(false)
+        window.setFullScreenable(false)
+        // Windows minimizes owned windows into small desktop tiles instead of the taskbar.
+        if (process.platform === 'win32') window.setMinimizable(false)
+        return window
+      },
       loadWindow: (window) => loadAuxiliaryWindow(window, WorkbenchSettingsWindowQuery),
     })
     ipcMain.handle(WorkbenchSettingsWindowChannels.open, (event) =>
       settingsWindows.open(event.sender)
     )
+    ipcMain.handle(WorkbenchSettingsWindowChannels.ready, (event) => {
+      if (event.senderFrame !== event.sender.mainFrame)
+        throw new AppError('PERMISSION', 'Settings readiness requires the main settings frame.')
+      settingsWindows.ready(event.sender)
+    })
     ipcMain.handle(WorkbenchSettingsWindowChannels.close, (event) =>
       settingsWindows.close(event.sender)
     )
@@ -675,6 +687,7 @@ if (hasSingleInstanceLock)
 
       shutdownStarted = true
       settingsWindows.dispose()
+      ipcMain.removeHandler(WorkbenchSettingsWindowChannels.ready)
       ipcMain.removeHandler(WorkbenchSettingsWindowChannels.tavilyConfigured)
       ipcMain.removeHandler(WorkbenchSettingsWindowChannels.setTavilyApiKey)
       historyWindows.dispose()

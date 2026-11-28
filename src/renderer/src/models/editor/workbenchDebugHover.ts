@@ -9,7 +9,11 @@ import type { EditorState, Extension } from '@codemirror/state'
 import { hoverTooltip } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 
-import { isWorkbenchEditorHoverSuppressed } from './workbenchCodeMirrorDefinitionHover'
+import {
+  isWorkbenchEditorHoverSuppressed,
+  waitForWorkbenchEditorHoverDelay,
+  WorkbenchHoverPrefetchDelayMs,
+} from './workbenchCodeMirrorDefinitionHover'
 
 export interface WorkbenchDebugHoverOptions {
   /** 程序停着，而且选中的那一帧就在这个文件里：这时才去求值。 */
@@ -73,7 +77,10 @@ export function createWorkbenchDebugHoverExtension(options: WorkbenchDebugHoverO
       if (!found) return null
 
       const document = view.state.doc
-      const value = await options.evaluate(found.expression)
+      const [value] = await Promise.all([
+        options.evaluate(found.expression),
+        waitForWorkbenchEditorHoverDelay(view),
+      ])
       // 等结果的工夫文档变了、程序又跑起来了：这个值已经不算数。
       if (
         value === null ||
@@ -101,6 +108,6 @@ export function createWorkbenchDebugHoverExtension(options: WorkbenchDebugHoverO
         },
       }
     },
-    { hideOnChange: true }
+    { hideOnChange: true, hoverTime: WorkbenchHoverPrefetchDelayMs }
   )
 }

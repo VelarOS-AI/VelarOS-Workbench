@@ -1,13 +1,14 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import type { WorkbenchEditorCursorStore } from '@renderer/models/editor/workbenchEditorCursorStore'
 import type { WorkbenchEditorGroupsLayout } from '@renderer/models/editor/workbenchEditorGroups'
 import {
   type PersistedWorkbenchEditorCursor,
   saveWorkbenchProjectSessionSnapshot,
 } from '@renderer/models/project/workbenchProjectSessionModel'
 
-import { useLatest, useTimerScope } from '../support/genericHooks'
+import type { TimerLease } from '@velaros-ai/velaros/core/utils/TimerScope'
 
-import type { WorkbenchEditorCursorSnapshot } from './useWorkbenchEditorNavigationState'
+import { useLatest, useTimerScope } from '../support/genericHooks'
 
 const SAVE_DEBOUNCE_MS = 450
 
@@ -20,7 +21,7 @@ interface UseWorkbenchProjectSessionPersistenceOptions {
   editorLayout: WorkbenchEditorGroupsLayout
   /** 当前文件：光标位置记在它名下。 */
   selectedFilePath: Nullable<string>
-  cursorPosition: WorkbenchEditorCursorSnapshot
+  cursorStore: WorkbenchEditorCursorStore
   cursorByPathRef: React.MutableRefObject<Record<string, PersistedWorkbenchEditorCursor>>
 }
 
@@ -31,10 +32,11 @@ export function useWorkbenchProjectSessionPersistence({
   selectedEntryPath,
   editorLayout,
   selectedFilePath,
-  cursorPosition,
+  cursorStore,
   cursorByPathRef,
 }: UseWorkbenchProjectSessionPersistenceOptions): void {
   const timers = useTimerScope('useWorkbenchProjectSessionPersistence')
+  const pendingSave = useRef<Nullable<TimerLease>>(null)
   const snapshotRef = useLatest({
     enabled,
     projectId,
@@ -43,21 +45,15 @@ export function useWorkbenchProjectSessionPersistence({
     editorLayout,
   })
 
-  useEffect(() => {
-    if (!enabled || !selectedFilePath) return
-
-    cursorByPathRef.current[selectedFilePath] = {
-      line: cursorPosition.line,
-      column: cursorPosition.column,
-    }
-  }, [cursorByPathRef, cursorPosition.column, cursorPosition.line, enabled, selectedFilePath])
-
-  useEffect(() => {
-    if (!enabled || !projectId) return undefined
-
-    const lease = timers.after(
+  const scheduleSave = useCallback(() => {
+    pendingSave.current?.cancel()
+    pendingSave.current = null
+    const { enabled, projectId } = snapshotRef.current
+    if (!enabled || !projectId) return
+    pendingSave.current = timers.after(
       SAVE_DEBOUNCE_MS,
       () => {
+        pendingSave.current = null
         const snapshot = snapshotRef.current
         if (!snapshot.enabled || snapshot.projectId !== projectId) return
 
@@ -70,20 +66,20 @@ export function useWorkbenchProjectSessionPersistence({
       },
       { label: 'workbench.session.persist' }
     )
+  }, [cursorByPathRef, snapshotRef, timers])
 
-    return () => {
-      lease.cancel()
-    }
-  }, [
-    expandedPaths,
-    enabled,
-    editorLayout,
-    projectId,
-    selectedEntryPath,
-    cursorByPathRef,
-    cursorPosition.column,
-    cursorPosition.line,
-    snapshotRef,
-    timers,
-  ])
+  useEffect(() => {
+    scheduleSave()
+  }, [editorLayout, enabled, expandedPaths, projectId, scheduleSave, selectedEntryPath])
+
+  useEffect(() => {
+    if (!enabled || !selectedFilePath) return undefined
+    return cursorStore.subscribe(() => {
+      const { line, column } = cursorStore.getSnapshot()
+      const saved = cursorByPathRef.current[selectedFilePath]
+      if (saved?.line === line && saved.column === column) return
+      cursorByPathRef.current[selectedFilePath] = { line, column }
+      scheduleSave()
+    })
+  }, [cursorByPathRef, cursorStore, enabled, scheduleSave, selectedFilePath])
 }

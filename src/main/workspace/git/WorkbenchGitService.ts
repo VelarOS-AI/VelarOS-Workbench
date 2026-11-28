@@ -805,12 +805,15 @@ export class WorkbenchGitService {
 
   public async createBranch(
     workspaceRoot: string,
-    branch: string
+    branch: string,
+    startPoint?: string
   ): Promise<SystemWorkspaceGitCreateBranchResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const targetBranch = this.assertBranch(branch)
     const currentBranch = await this.getCurrentBranch(rootPath)
-    await this.runGit(rootPath, ['branch', targetBranch])
+    const args = ['branch', targetBranch]
+    if (startPoint !== undefined) args.push(this.assertRevision(startPoint))
+    await this.runGit(rootPath, args)
     return {
       rootPath,
       currentBranch,
@@ -1202,6 +1205,7 @@ export class WorkbenchGitService {
           line.split('\t')
         return {
           name,
+          ref: refname,
           current: head === '*',
           upstream: upstream || null,
           kind: refname.startsWith('refs/remotes/') ? ('remote' as const) : ('local' as const),

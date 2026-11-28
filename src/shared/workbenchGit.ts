@@ -134,6 +134,7 @@ export interface WorkbenchGitSwitchBranchRequest extends WorkbenchGitRootRequest
 
 export interface WorkbenchGitCreateBranchRequest extends WorkbenchGitRootRequest {
   branch: string
+  startPoint?: string
 }
 
 export interface WorkbenchGitRemoteActionRequest

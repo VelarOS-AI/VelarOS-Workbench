@@ -86,11 +86,11 @@ export function resolveWorkbenchGitRefBranch(
   return null
 }
 
-/** 分支列表里的分支：名字是 git 自己给的最短而不含糊的写法，原样交回去。 */
+/** 优先使用完整引用；轻量快照只带分支名称。 */
 export function resolveWorkbenchGitListedBranch(
-  branch: Pick<WorkspaceGitBranch, 'name'>
+  branch: Pick<WorkspaceGitBranch, 'name' | 'ref'>
 ): WorkbenchGitOperationBranch {
-  return { name: branch.name, revision: branch.name }
+  return { name: branch.name, revision: branch.ref ?? branch.name }
 }
 
 export function toWorkspaceGitOperationRequest(

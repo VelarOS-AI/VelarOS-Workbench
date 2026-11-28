@@ -8,12 +8,14 @@ import {
 import type { WorkbenchHistoryWindowState } from '@shared/workbenchHistoryWindow'
 
 import { FileHistoryView } from '../components/editor/FileHistoryView'
+import { useWorkbenchEditorZoom } from '../hooks/useWorkbenchEditorZoom'
 import { useWorkbenchPreferences } from '../hooks/useWorkbenchPreferences'
 import { WorkbenchMessageHost } from '../runtime/workbenchMessageHost'
 import styles from '../styles/workbenchPageStyles'
 
 function HistorySurface(): ReactElement {
   const preferences = useWorkbenchPreferences()
+  useWorkbenchEditorZoom(preferences)
   const { t } = useWorkbenchI18n()
   const [state, setState] = useState<WorkbenchHistoryWindowState | null>(null)
   const [failed, setFailed] = useState(false)

@@ -259,7 +259,7 @@ function displayPartsToText(parts: readonly ts.SymbolDisplayPart[] | undefined):
   return parts?.map((part) => part.text).join('') ?? ''
 }
 
-function mapDisplayParts(
+export function mapDisplayParts(
   parts: readonly ts.SymbolDisplayPart[] | undefined
 ): readonly WorkbenchLanguageServiceDisplayPart[] {
   return (

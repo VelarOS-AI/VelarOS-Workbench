@@ -1,15 +1,19 @@
-import { type Extension, StateEffect, Text } from '@codemirror/state'
+import { type Extension, type Range, StateEffect, Text } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 
 import { type WorkbenchLanguageServiceSemanticToken } from '@shared/contracts/workbench'
 
 import type { WorkbenchThemeId } from '../workbenchPreferences'
 
+import {
+  readWorkbenchHighlightRanges,
+  workbenchHighlightViewportChanged,
+} from './workbenchCodeMirrorHighlightViewport'
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 import { getWorkbenchCodeTokenPalette } from './workbenchCodeMirrorTheme'
 
 const semanticTokensRefreshEffect = StateEffect.define<void>()
-const SemanticTokenDelayMs = 450
+const SemanticTokenDelayMs = 650
 const SemanticTokenRetryDelaysMs = [250, 500, 1_000, 2_000, 4_000] as const
 const markCache = new Map<string, Decoration>()
 const SemanticBuiltinTypeNames = new Set([
@@ -194,6 +198,9 @@ export function createWorkbenchSemanticTokensExtension(runtime: WorkbenchSemanti
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet = Decoration.none
+      private tokens: DecorationSet = Decoration.none
+      private renderedTokens: DecorationSet = Decoration.none
+      private ranges: ReturnType<typeof readWorkbenchHighlightRanges> | null = null
       private generation = 0
       private timer: Nullable<ReturnType<typeof setTimeout>> = null
       private retryAttempt = 0
@@ -205,13 +212,16 @@ export function createWorkbenchSemanticTokensExtension(runtime: WorkbenchSemanti
 
       public update(update: ViewUpdate): void {
         if (update.docChanged) {
-          this.decorations = this.decorations.map(update.changes)
+          const previous = this.tokens
+          this.tokens = previous.map(update.changes)
+          this.decorations = this.decorations === previous ? this.tokens : this.decorations.map(update.changes)
           this.retryAttempt = 0
           this.schedule()
           return
         }
+        if (workbenchHighlightViewportChanged(update) && this.tokens.size > 0) this.showVisibleTokens()
         if ((update.focusChanged && update.view.hasFocus) || update.viewportChanged) {
-          if (this.decorations === Decoration.none) this.schedule(0)
+          if (this.decorations === Decoration.none && this.timer === null) this.schedule()
         }
       }
 
@@ -241,9 +251,10 @@ export function createWorkbenchSemanticTokensExtension(runtime: WorkbenchSemanti
       private async sync(): Promise<void> {
         const generation = ++this.generation
         const doc = this.view.state.doc
+        const content = doc.toString()
         let tokens: Nullable<readonly WorkbenchLanguageServiceSemanticToken[]>
         try {
-          tokens = await runtime.request(doc.toString())
+          tokens = await runtime.request(content)
         } catch {
           if (generation === this.generation) this.retry()
           return
@@ -254,8 +265,27 @@ export function createWorkbenchSemanticTokensExtension(runtime: WorkbenchSemanti
           return
         }
         this.retryAttempt = 0
-        this.decorations = buildWorkbenchSemanticTokenDecorations(doc.toString(), tokens)
-        this.view.dispatch({ effects: semanticTokensRefreshEffect.of() })
+        this.tokens = buildWorkbenchSemanticTokenDecorations(content, tokens)
+        const previous = this.decorations
+        this.showVisibleTokens()
+        if (this.decorations !== previous)
+          this.view.dispatch({ effects: semanticTokensRefreshEffect.of() })
+      }
+
+      private showVisibleTokens(): void {
+        const ranges = readWorkbenchHighlightRanges(this.view)
+        if (this.renderedTokens === this.tokens && ranges === this.ranges) return
+        const visible: Array<Range<Decoration>> = []
+        for (const range of ranges) {
+          this.tokens.between(range.from, range.to, (from, to, mark) => {
+            const start = Math.max(from, range.from)
+            const end = Math.min(to, range.to)
+            if (start < end) visible.push(mark.range(start, end))
+          })
+        }
+        this.decorations = Decoration.set(visible, true)
+        this.renderedTokens = this.tokens
+        this.ranges = ranges
       }
     },
     { decorations: (plugin) => plugin.decorations }

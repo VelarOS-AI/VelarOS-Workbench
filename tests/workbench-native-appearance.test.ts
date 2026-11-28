@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 
 import { WorkbenchNativeAppearance } from '../src/main/projects/WorkbenchNativeAppearance'
-import { getWorkbenchNativeAppearance } from '../src/shared/workbenchAppearance'
+import { getWorkbenchColorTokens, getWorkbenchNativeAppearance } from '../src/shared/workbenchAppearance'
 
 test('native chrome follows the app theme across windows and the next launch', () => {
   const directory = mkdtempSync(join(tmpdir(), 'wb-native-appearance-'))
@@ -32,6 +32,9 @@ test('native chrome follows the app theme across windows and the next launch', (
       windows: () => [window, window, destroyed],
     })
     appearance.registerCaptionWindow(window)
+    expect(appearance.titleBarOverlay.color).toBe(
+      getWorkbenchColorTokens('light-modern', 'blue')['--workbench-toolbar']!
+    )
     expect(appearance.frameOptions('win32')).toEqual({
       frame: true,
       titleBarStyle: 'hidden',
@@ -48,8 +51,9 @@ test('native chrome follows the app theme across windows and the next launch', (
     expect(nativeTheme.themeSource).toBe('dark')
     expect(backgrounds).toEqual([appearance.backgroundColor, appearance.backgroundColor])
     expect(captions.at(-1)).toEqual(appearance.titleBarOverlay)
-    expect(captions.at(-1)?.color).toBe(appearance.backgroundColor)
-    expect(captions.at(-1)?.symbolColor).not.toBe(appearance.backgroundColor)
+    const tokens = getWorkbenchColorTokens('midnight-blue', 'blue')
+    expect(captions.at(-1)?.color).toBe(tokens['--workbench-toolbar']!)
+    expect(captions.at(-1)?.symbolColor).toBe(tokens['--workbench-text']!)
     expect(appearance.backgroundColor).toBe(
       getWorkbenchNativeAppearance('midnight-blue').backgroundColor
     )

@@ -24,13 +24,12 @@ import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 shareHostReactWithLinkedUi()
 
 // 翻译表那个模块会连带加载 UI 包：和组件一样，要等上面把 React 对齐之后再加载。
-const { translateWorkbenchAppMessage } = await import(
-  '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
-)
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
-const { WorkbenchGitBranchMenu } = await import(
-  '../src/renderer/src/components/git/WorkbenchGitBranchMenu'
-)
+const { translateWorkbenchAppMessage } =
+  await import('../src/renderer/src/i18n/useStandaloneWorkbenchLocalization')
+const { WorkbenchLocalizationProvider } =
+  await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
+const { WorkbenchGitBranchMenu } =
+  await import('../src/renderer/src/components/git/WorkbenchGitBranchMenu')
 
 type MenuProps = Parameters<typeof WorkbenchGitBranchMenu>[0]
 
@@ -112,9 +111,10 @@ void describe('Workbench Git branch menu model', () => {
   })
 
   void test('before the branch list is read, the menu lists the current branch', () => {
-    assert.deepEqual(listWorkbenchGitMenuBranches([], { branch: 'main', upstream: 'origin/main' }), [
-      { name: 'main', current: true, upstream: 'origin/main', kind: 'local' },
-    ])
+    assert.deepEqual(
+      listWorkbenchGitMenuBranches([], { branch: 'main', upstream: 'origin/main' }),
+      [{ name: 'main', current: true, upstream: 'origin/main', kind: 'local' }]
+    )
     assert.deepEqual(listWorkbenchGitMenuBranches([], { branch: null, upstream: null }), [])
     assert.equal(
       listWorkbenchGitMenuBranches(branches, { branch: 'main', upstream: null }).length,
@@ -156,7 +156,10 @@ void describe('Workbench Git branch menu model', () => {
     )
     assert.equal(fresh[0]?.hint, english('workbench.gitNoUpstreamHint'))
     assert.equal(fresh[1]?.hint, english('workbench.gitPublishHint'))
-    assert.equal(describeWorkbenchGitRemoteNote(unpublished, english), english('workbench.gitNoUpstreamNote'))
+    assert.equal(
+      describeWorkbenchGitRemoteNote(unpublished, english),
+      english('workbench.gitNoUpstreamNote')
+    )
 
     // 分离的 HEAD：只有获取远端还能用，其余说明原因（带着停在的提交）。
     const headless = describeWorkbenchGitRemoteActions(detached, chinese)
@@ -172,8 +175,14 @@ void describe('Workbench Git branch menu model', () => {
     const rebasing = { kind: 'rebase' as const, step: 1, total: 2, detail: 'feature' }
     assert.equal(describeWorkbenchGitOperationBlock(null, english), null)
     const block = describeWorkbenchGitOperationBlock(rebasing, english)
-    assert.match(block ?? '', /^A rebase is in progress\. Continue or abort it in the commit panel/u)
-    assert.match(describeWorkbenchGitOperationBlock({ kind: 'merge' }, chinese) ?? '', /^正在合并。/u)
+    assert.match(
+      block ?? '',
+      /^A rebase is in progress\. Continue or abort it in the commit panel/u
+    )
+    assert.match(
+      describeWorkbenchGitOperationBlock({ kind: 'merge' }, chinese) ?? '',
+      /^正在合并。/u
+    )
 
     // 变基时 HEAD 是分离的：原因说的是变基，不是「先切到一个分支」。
     const actions = describeWorkbenchGitRemoteActions(detached, english, block)
@@ -197,17 +206,27 @@ void describe('Workbench Git branch menu model', () => {
       describeWorkbenchGitBranchControlHead(detached, rebasing, english),
       'feature/login (rebasing)'
     )
-    assert.equal(describeWorkbenchGitBranchControlHead(detached, rebasing, chinese), 'feature/login（变基中）')
+    assert.equal(
+      describeWorkbenchGitBranchControlHead(detached, rebasing, chinese),
+      'feature/login（变基中）'
+    )
     // 读不出是哪个分支、或者不是变基：照旧。
     assert.equal(
       describeWorkbenchGitBranchControlHead(detached, { kind: 'rebase', detail: null }, english),
       'Detached HEAD · 1a2b3c4'
     )
     assert.equal(
-      describeWorkbenchGitBranchControlHead(detached, { kind: 'cherry-pick', detail: 'abc1234' }, english),
+      describeWorkbenchGitBranchControlHead(
+        detached,
+        { kind: 'cherry-pick', detail: 'abc1234' },
+        english
+      ),
       'Detached HEAD · 1a2b3c4'
     )
-    assert.equal(describeWorkbenchGitBranchControlHead(detached, null, english), 'Detached HEAD · 1a2b3c4')
+    assert.equal(
+      describeWorkbenchGitBranchControlHead(detached, null, english),
+      'Detached HEAD · 1a2b3c4'
+    )
     assert.equal(
       describeWorkbenchGitBranchControlHead(
         { branch: 'main', detachedHead: null },
@@ -247,6 +266,7 @@ void describe('Workbench Git branch menu', () => {
     const menu = createElement(WorkbenchGitBranchMenu, {
       branches,
       currentBranch: 'main',
+      selectedBranch: null,
       search: '',
       searchRef: createRef<HTMLInputElement>(),
       remoteActions: describeWorkbenchGitRemoteActions(onBranch, english),
@@ -255,11 +275,14 @@ void describe('Workbench Git branch menu', () => {
       switchingBranch: null,
       locked: false,
       branchesBlocked: null,
+      canIntegrate: true,
       onSearchChange: noop,
+      onSelectBranch: noop,
       onRunRemoteAction: noop,
       onCancelRemoteAction: noop,
       onSwitchBranch: noop,
       onPushBranch: noop,
+      onRunBranchOperation: noop,
       onOpenCreateBranch: noop,
       ...props,
     })
@@ -274,36 +297,49 @@ void describe('Workbench Git branch menu', () => {
   /** 菜单里每个按钮：文字，和它的那一段开标签。 */
   function buttons(markup: string): Array<{ label: string; tag: string }> {
     return [...markup.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gu)].map((match) => ({
-      label: (match[2] ?? '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim(),
+      label: (match[2] ?? '')
+        .replace(/<[^>]+>/gu, ' ')
+        .replace(/\s+/gu, ' ')
+        .trim(),
       tag: match[1] ?? '',
     }))
   }
 
-  void test('fetch is beside search and pull and push belong to the current branch', () => {
-    const markup = render()
+  void test('fetch stays beside search and current branch actions appear in the selected details', () => {
+    assert.doesNotMatch(render(), /data-action="(?:pull|upload)"/u)
+    const markup = render({ selectedBranch: local('main') })
     const all = buttons(markup)
     const actions = all.filter((button) => /data-action=/u.test(button.tag))
     assert.equal(actions.length, 3)
     assert.ok(markup.indexOf('<input') < markup.indexOf('data-action='))
-    assert.deepEqual(actions.map((button) => button.label), ['', 'Pull', 'Push'])
-    assert.deepEqual(actions.map((button) => /aria-label="([^"]+)"/u.exec(button.tag)?.[1]), [
-      'Fetch Remotes', 'Pull', 'Push',
-    ])
-    const searchActions = buttons(markup.slice(0, markup.indexOf('Local branches')))
-      .filter((button) => /data-action=/u.test(button.tag))
+    assert.deepEqual(
+      actions.map((button) => button.label),
+      ['', 'Pull', 'Push']
+    )
+    assert.deepEqual(
+      actions.map((button) => /aria-label="([^"]+)"/u.exec(button.tag)?.[1]),
+      ['Fetch Remotes', 'Pull', 'Push']
+    )
+    const searchActions = buttons(markup.slice(0, markup.indexOf('Local branches'))).filter(
+      (button) => /data-action=/u.test(button.tag)
+    )
     assert.equal(searchActions.length, 1)
     assert.match(searchActions[0]?.tag ?? '', /data-action="fetch"/u)
-    const current = /<div[^>]*data-current="true"[^>]*>([\s\S]*?)<\/div>/u.exec(markup)
-    assert.match(current?.[1] ?? '', /data-action="pull"[\s\S]*data-action="upload"/u)
+    const details = markup.slice(markup.lastIndexOf('<section'))
+    assert.deepEqual(
+      buttons(details).map((button) => button.label),
+      ['New branch from here', 'Pull', 'Push']
+    )
     for (const button of actions) {
       assert.doesNotMatch(button.tag, /aria-disabled|\bdisabled\b/u)
       assert.match(button.tag, /aria-description="[^"]+"/u)
     }
-    assert.equal(all.at(-1)?.label, 'New branch')
+    assert.ok(all.some((button) => button.label === 'New branch'))
   })
 
   void test('an unavailable action remains focusable and explains its state to assistive technology', () => {
     const markup = render({
+      selectedBranch: local('main'),
       remoteActions: describeWorkbenchGitRemoteActions(unpublished, english),
       remoteNote: describeWorkbenchGitRemoteNote(unpublished, english),
     })
@@ -318,45 +354,48 @@ void describe('Workbench Git branch menu', () => {
   })
 
   void test('remote actions show progress and cancellation on the corresponding existing button', () => {
-    for (const [action, slot, branch] of [
-      ['pull', 'pull'], ['upload', 'upload'], ['fetch', 'fetch'], ['sync', 'fetch'],
-      ['upload', null, 'docs'],
+    for (const [action, slot, branch, selectedBranch] of [
+      ['pull', 'pull', undefined, local('main')],
+      ['upload', 'upload', undefined, local('main')],
+      ['fetch', 'fetch', undefined, local('main')],
+      ['sync', 'fetch', undefined, local('main')],
+      ['upload', 'upload', 'docs', local('docs')],
+      ['upload', 'fetch', 'docs', local('main')],
+      ['pull', 'fetch', undefined, null],
     ] as const) {
       const operation = { id: 'op', workspaceRoot: '/p', action, cancelling: false, branch }
-      const running = render({ running: operation, locked: true })
+      const running = render({ running: operation, locked: true, selectedBranch })
       assert.doesNotMatch(running, /role="status"/u)
       const all = buttons(running)
       const active = all.filter((button) => /data-running="true"/u.test(button.tag))
       assert.equal(active.length, 1)
       const cancel = active[0]!
-      if (slot) assert.ok(cancel.tag.includes(`data-action="${slot}"`))
-      else assert.doesNotMatch(cancel.tag, /data-action=/u)
+      assert.ok(cancel.tag.includes(`data-action="${slot}"`))
       assert.match(cancel.tag, /aria-label="Cancel [^"]+"/u)
       assert.match(cancel.tag, /aria-description="[^"]+ in progress…"/u)
       assert.doesNotMatch(cancel.tag, /\sdisabled(=|\s|$)/u)
-      assert.match(all.at(-1)?.tag ?? '', /\sdisabled=""/u)
+      assert.match(all.find((button) => button.label === 'New branch')?.tag ?? '', /\sdisabled=""/u)
       for (const button of all.filter((entry) => /data-action=/u.test(entry.tag))) {
         if (button !== cancel) assert.match(button.tag, /aria-disabled="true"/u)
       }
-      const cancelling = buttons(render({ running: { ...operation, cancelling: true }, locked: true }))
-        .find((button) => /data-running="true"/u.test(button.tag))
+      const cancelling = buttons(
+        render({ running: { ...operation, cancelling: true }, locked: true, selectedBranch })
+      ).find((button) => /data-running="true"/u.test(button.tag))
       assert.match(cancelling?.tag ?? '', /aria-label="Cancelling…"[\s\S]*\sdisabled=""/u)
     }
   })
 
-  void test('the current branch is marked, shows what it tracks, and cannot be checked out again', () => {
-    const markup = render()
+  void test('the current branch remains selectable and shows what it tracks', () => {
+    const markup = render({ selectedBranch: local('main') })
     const current = /<div[^>]*data-current="true"[^>]*title="main">([\s\S]*?)<\/div>/u.exec(markup)
     assert.ok(current, 'no current row')
-    assert.match(current[1] ?? '', /<button[^>]*aria-current="true"[^>]*disabled=""/u)
+    assert.match(
+      current[1] ?? '',
+      /<button[^>]*aria-current="true"[^>]*aria-expanded="true"[^>]*aria-controls="[^"]+"/u
+    )
+    assert.doesNotMatch(current[1] ?? '', /\sdisabled=""/u)
     assert.match(current[1] ?? '', /<small>origin\/main<\/small>/u)
     assert.equal(markup.match(/data-current="true"/gu)?.length, 1)
-    // 别的本地分支：悬停出「签出」「推送」；远端分支只有「签出」。
-    assert.match(markup, /aria-label="Check out docs"/u)
-    assert.match(markup, /aria-label="Push docs"/u)
-    assert.match(markup, /aria-label="Check out origin\/main"/u)
-    assert.doesNotMatch(markup, /aria-label="Push origin\/main"/u)
-    assert.doesNotMatch(markup, /aria-label="(?:Check out|Push) main"/u)
     // 分离的 HEAD 上没有哪一行算当前的。
     assert.doesNotMatch(
       render({
@@ -367,33 +406,60 @@ void describe('Workbench Git branch menu', () => {
     )
   })
 
+  void test('other local and remote branches expose the actions applicable to each', () => {
+    for (const selectedBranch of [local('docs'), remote('origin/main')]) {
+      const markup = render({ selectedBranch })
+      const details = markup.slice(markup.lastIndexOf('<section'))
+      const actions = buttons(details).map((button) => button.label)
+      assert.deepEqual(actions, [
+        english('workbench.gitBranchCheckoutCreated'),
+        english('workbench.gitBranchCreateFromSelected'),
+        ...(selectedBranch.kind === 'local' ? [english('workbench.gitUpload')] : []),
+        english('workbench.gitMergeIntoCurrent'),
+        english('workbench.gitRebaseCurrentOnto'),
+      ])
+    }
+  })
+
+  void test('a named local branch can be pushed from detached HEAD', () => {
+    const all = buttons(
+      render({
+        currentBranch: null,
+        selectedBranch: local('docs'),
+        canIntegrate: false,
+        remoteActions: describeWorkbenchGitRemoteActions(detached, english),
+      })
+    )
+    const push = all.find((button) => /data-action="upload"/u.test(button.tag))
+    assert.match(push?.tag ?? '', /aria-label="Push docs"/u)
+    assert.doesNotMatch(push?.tag ?? '', /aria-disabled/u)
+  })
+
   void test('with an operation in progress branches cannot be switched or created, fetch still works', () => {
     const block = describeWorkbenchGitOperationBlock({ kind: 'merge' }, english)
     const markup = render({
       remoteActions: describeWorkbenchGitRemoteActions(onBranch, english, block),
+      selectedBranch: local('main'),
       remoteNote: block,
       branchesBlocked: block,
     })
     const all = buttons(markup)
     // 获取远端可用，当前分支的拉取与推送说明阻塞原因。
     assert.deepEqual(
-      all.filter((button) => /data-action=/u.test(button.tag))
+      all
+        .filter((button) => /data-action=/u.test(button.tag))
         .map((button) => /aria-disabled="true"/u.test(button.tag)),
       [false, true, true]
     )
     assert.ok(markup.includes('A merge is in progress.'))
-    // 别的分支点不了，原因写在那一行的悬停说明里；新建分支也点不了。
-    const docs = /<div[^>]*title="([^"]*)"[^>]*>\s*<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[\s\S])*docs/u.exec(
-      markup
-    )
-    assert.ok(docs, 'the docs row should be disabled')
-    assert.match(docs[1] ?? '', /^A merge is in progress\./u)
-    assert.match(all.at(-1)?.tag ?? '', /\sdisabled=""/u)
-    assert.equal(all.at(-1)?.label, 'New branch')
+    for (const button of all.filter((button) => button.label.startsWith('New branch'))) {
+      assert.match(button.tag, /\sdisabled=""/u)
+      assert.match(button.tag, /title="A merge is in progress\./u)
+    }
   })
 
   void test('a search that matches nothing says so instead of showing an empty list', () => {
-    const markup = render({ search: 'nothing-like-this' })
+    const markup = render({ search: 'nothing-like-this', selectedBranch: local('main') })
     assert.ok(markup.includes(english('workbench.gitBranchNoMatch')))
     assert.doesNotMatch(markup, /title="main"/u)
     // 搜到的分支不藏在目录里：目录一律展开。

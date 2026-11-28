@@ -20,6 +20,7 @@ import {
   closeCompletion,
   type CompletionContext,
   type CompletionSource,
+  completionStatus,
   startCompletion,
 } from '@codemirror/autocomplete'
 import { history, standardKeymap } from '@codemirror/commands'
@@ -102,10 +103,15 @@ import {
 import { getWorkbenchCodeMirrorAutocompleteTheme } from '@renderer/models/editor/workbenchCodeMirrorAutocompleteTheme'
 import { createWorkbenchBasicSyntaxExtension } from '@renderer/models/editor/workbenchCodeMirrorBasicSyntax'
 import {
+  hideUnchangedWorkbenchCompletions,
+  isWorkbenchJavaScriptMemberCompletion,
+  positionWorkbenchCompletionInfo,
   WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS,
   WORKBENCH_COMPLETION_UPDATE_SYNC_TIME_MS,
   workbenchCompletionAddToOptions,
+  workbenchCompletionKeys,
   workbenchCompletionOptionClass,
+  workbenchHideCompletionWhileTyping,
 } from '@renderer/models/editor/workbenchCodeMirrorCompletionPresentation'
 import {
   buildWorkbenchCodeMirrorCompletionResult,
@@ -113,12 +119,12 @@ import {
 } from '@renderer/models/editor/workbenchCodeMirrorCompletions'
 import {
   clearWorkbenchEditorHover,
-  resumeWorkbenchEditorHover,
   setWorkbenchDefinitionHoverRange,
   workbenchDefinitionHoverExtension,
   type WorkbenchDefinitionHoverRange,
 } from '@renderer/models/editor/workbenchCodeMirrorDefinitionHover'
 import { createWorkbenchDiagnosticForegroundExtension } from '@renderer/models/editor/workbenchCodeMirrorDiagnostics'
+import { workbenchCodeMirrorDirectInput } from '@renderer/models/editor/workbenchCodeMirrorDirectInput'
 import {
   type WorkbenchEditorHostCommands,
   workbenchEditorKeymap,
@@ -138,8 +144,6 @@ import {
   resolveWorkbenchCodeMirrorLanguage,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguage'
 import {
-  buildWorkbenchEditorHoverDom,
-  collectDiagnosticsAtPosition,
   createWorkbenchLanguageServiceHoverTooltip,
   createWorkbenchSignatureHelpExtension,
   findWorkbenchLanguageServiceReferences,
@@ -151,6 +155,7 @@ import {
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchInlayHintLanguageService,
   usesWorkbenchSemanticLanguageService,
+  usesWorkbenchTypeScriptLanguageService,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import {
   requestWorkbenchLanguageServiceCompletions,
@@ -174,6 +179,7 @@ import {
   type WorkbenchEditorCommandId,
 } from '@renderer/models/editor/workbenchEditorCommands'
 import { workbenchEditorCoveredScrollMargins } from '@renderer/models/editor/workbenchEditorCoveredScrollMargins'
+import type { WorkbenchEditorCursorSnapshot } from '@renderer/models/editor/workbenchEditorCursorStore'
 import { rebuildWorkbenchEditorFileState } from '@renderer/models/editor/workbenchEditorFileStateRebuild'
 import {
   type WorkbenchEditorFileState,
@@ -218,7 +224,10 @@ import {
   type WorkbenchIndentationRequest,
   workbenchIndentUnit,
 } from '@renderer/models/editor/workbenchIndentation'
-import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@renderer/models/editor/workbenchIndentGuides'
+import {
+  buildWorkbenchIdeaIndentGuideColumnsForLineRange,
+  workbenchIndentGuidesChanged,
+} from '@renderer/models/editor/workbenchIndentGuides'
 import {
   getWorkbenchInlineCompletion,
   getWorkbenchLanguageServiceCompletions,
@@ -329,6 +338,7 @@ interface CodeMirrorEditorProps {
   path: Nullable<string>
   language: string
   value: string
+  readEditorContent?: (path: Nullable<string>) => string | undefined
   readOnly: boolean
   disabled: boolean
   projectContextIndex: WorkbenchProjectContextIndex
@@ -351,19 +361,10 @@ interface CodeMirrorEditorProps {
    * 不传时只在这个编辑器实例里记着。
    */
   fileStates?: WorkbenchEditorFileStates
-  onChange: (content: string) => void
+  onChange: (content: string, defer?: boolean) => void
   /** 本文件的view已建立并装入状态；之前未被接纳的导航现在可以重试。 */
   onReady?: () => void
-  onCursorPositionChange?: (position: {
-    line: number
-    column: number
-    selection?: {
-      startLine: number
-      endLine: number
-      startColumn: number
-      endColumn: number
-    }
-  }) => void
+  onCursorPositionChange?: (position: WorkbenchEditorCursorSnapshot) => void
   /**
    * 打开查找栏。`seed` 是预填的查找词（选中的文字或光标处的词），`withReplace` 表示连替换行一起展开
    * （⌥⌘F / Ctrl+H）。
@@ -436,6 +437,7 @@ const FullSyntaxActivationDelayMs = 90
 /** 查找计数合并这么久再报：连续打字、连按下一处只重数一次。 */
 const FindStatusDelayMs = 30
 const SemanticFeaturesActivationDelayMs = 220
+const PendingLanguageServiceExtensions: Extension = []
 const EditorIdleActivationTimeoutMs = 800
 
 function requestWorkbenchEditorIdleTask(callback: () => void): () => void {
@@ -532,18 +534,21 @@ const workbenchTripleClickLineSelectionExtension = EditorView.mouseSelectionStyl
 const workbenchCodeMirrorBaseExtensions: Extension[] = [
   workbenchLineNumbersExtension,
   workbenchGitChangeGutterExtension,
-  workbenchActiveLineExtension,
   highlightSpecialChars(),
   history(),
   workbenchFoldGutter,
   workbenchImportFoldExtension,
   workbenchTripleClickLineSelectionExtension,
   drawSelection(),
+  workbenchActiveLineExtension,
   dropCursor(),
   EditorState.allowMultipleSelections.of(true),
   indentOnInput(),
   bracketMatching(),
   closeBrackets(),
+  workbenchHideCompletionWhileTyping,
+  workbenchCompletionKeys,
+  workbenchCodeMirrorDirectInput,
   autocompletion({
     activateOnTyping: true,
     activateOnTypingDelay: WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS,
@@ -555,6 +560,7 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
     interactionDelay: 0,
     optionClass: workbenchCompletionOptionClass,
     addToOptions: workbenchCompletionAddToOptions,
+    positionInfo: positionWorkbenchCompletionInfo,
   }),
   rectangularSelection(),
   crosshairCursor(),
@@ -736,11 +742,7 @@ function emitCursorPosition(
     }
   }
 
-  callback?.({
-    line: headInfo.line,
-    column: headInfo.column,
-    selection: selection || undefined,
-  })
+  callback?.({ line: headInfo.line, column: headInfo.column, selection: selection || undefined })
 }
 
 function createWorkbenchCompletionSource({
@@ -763,9 +765,13 @@ function createWorkbenchCompletionSource({
 }): CompletionSource {
   const offlineCompletion = resolveWorkbenchOfflineCodeCompletion(path)
   return async (context: CompletionContext) => {
+    // Once the buffer changes, a fresh typing pause must precede another popup.
+    context.addEventListener('abort', () => undefined, { onDocChange: true })
     const selection = context.state.selection.main
     const content = context.state.doc.toString()
-    const localResult = offlineCompletion
+    const useMemberService = path && usesWorkbenchTypeScriptLanguageService(path) &&
+      isWorkbenchJavaScriptMemberCompletion(context)
+    const localResult = useMemberService ? null : offlineCompletion
       ? await offlineCompletion(context)
       : buildWorkbenchCodeMirrorCompletionResult({
           path,
@@ -780,7 +786,6 @@ function createWorkbenchCompletionSource({
     if (!path || !usesWorkbenchBuiltinLanguageService(path)) return localResult || null
     if (!shouldRequestWorkbenchLanguageServiceCompletions(context, path)) return localResult || null
 
-    // 交给 CodeMirror 的异步补全：结果回来之前接着打的字由它记着，回来时前缀仍对得上就直接用，不必重新请求。
     const requestBase = buildWorkbenchLanguageServiceRequestBase({
       projectRoot,
       path,
@@ -828,7 +833,7 @@ function createWorkbenchLanguageServiceLinter({
       requestDiagnostics: (request) => getWorkbenchLanguageServiceDiagnostics(request, hostRuntime),
     }),
     {
-      delay: 300,
+      delay: 700,
       // Dependencies changed on disk; refresh even when this document did not change.
       needsRefresh: (update) =>
         update.transactions.some((transaction) =>
@@ -903,11 +908,14 @@ const workbenchIndentGuideExtension = ViewPlugin.fromClass(
 
     public update(update: ViewUpdate): void {
       if (
-        update.docChanged ||
-        update.viewportChanged ||
-        update.startState.tabSize !== update.state.tabSize
+        update.viewportMoved ||
+        update.startState.tabSize !== update.state.tabSize ||
+        (update.docChanged &&
+          workbenchIndentGuidesChanged(update.startState.doc, update.state.doc, update.changes))
       ) {
         this.decorations = this.buildDecorations(update.view)
+      } else if (update.docChanged) {
+        this.decorations = this.decorations.map(update.changes)
       }
     }
 
@@ -1172,6 +1180,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       path,
       language,
       value,
+      readEditorContent,
       readOnly,
       disabled,
       projectContextIndex,
@@ -1217,6 +1226,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const containerRef = useRef<HTMLDivElement>(null)
     const contextMenuRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
+    const lastEmittedContentRef = useRef<Nullable<{ doc: EditorState['doc']; content: string }>>(null)
     const definitionRequestGenerationRef = useRef(0)
     const fileOwnerTokenRef = useRef<Nullable<object>>(null)
     const renameActionRef = useRef<Nullable<WorkbenchRenameAction>>(null)
@@ -1388,17 +1398,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       [hostRuntime, language, openTabsLatest, path, pathRef, projectRoot]
     )
     const packageScriptRunContent = shouldShowWorkbenchPackageScriptRunGutter(path) ? value : ''
+    const canRunPackageScript = !!onRunPackageScript
     const packageScriptRunExtension = useMemo(
       () =>
         createWorkbenchPackageScriptRunGutterExtension({
           content: packageScriptRunContent,
-          disabled: disabled || !callbacksRef.current.onRunPackageScript,
+          disabled: disabled || !canRunPackageScript,
           onRunScript: (command, launch) =>
             callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
-          path: onRunPackageScript ? path : null,
+          path: canRunPackageScript ? path : null,
         }),
-      [disabled, onRunPackageScript, packageManager, packageScriptRunContent, path]
+      [canRunPackageScript, disabled, packageManager, packageScriptRunContent, path]
     )
     const velarTestRunContent = shouldShowWorkbenchVelarTestRunGutter(path) ? value : ''
     const velarMainRunContent = shouldShowWorkbenchVelarMainRunGutter(path) ? value : ''
@@ -1406,25 +1417,25 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       () =>
         createWorkbenchVelarMainRunGutterExtension({
           content: velarMainRunContent,
-          disabled: disabled || !callbacksRef.current.onRunPackageScript,
+          disabled: disabled || !canRunPackageScript,
           onRunMain: (command, launch) =>
             callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
-          path: onRunPackageScript ? path : null,
+          path: canRunPackageScript ? path : null,
         }),
-      [disabled, onRunPackageScript, packageManager, path, velarMainRunContent]
+      [canRunPackageScript, disabled, packageManager, path, velarMainRunContent]
     )
     const velarTestRunExtension = useMemo(
       () =>
         createWorkbenchVelarTestRunGutterExtension({
           content: velarTestRunContent,
-          disabled: disabled || !callbacksRef.current.onRunPackageScript,
+          disabled: disabled || !canRunPackageScript,
           onRunTest: (command, launch) =>
             callbacksRef.current.onRunPackageScript?.(command, launch),
           packageManager,
-          path: onRunPackageScript ? path : null,
+          path: canRunPackageScript ? path : null,
         }),
-      [disabled, onRunPackageScript, packageManager, path, velarTestRunContent]
+      [canRunPackageScript, disabled, packageManager, path, velarTestRunContent]
     )
     // 测试文件的 ▶、JS / TS 文件行号上的断点、调试停下时的那一行与悬停看值（都在这个 hook 里）。
     const runDebugExtension = useWorkbenchEditorRunDebugExtension({
@@ -1450,15 +1461,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       () => createWorkbenchCodeMirrorMetricsExtension(editorMetrics),
       [editorMetrics]
     )
-    const syntaxThemeExtension = getWorkbenchCodeMirrorTheme(workbenchTheme)
+    const syntaxThemeExtension = getWorkbenchCodeMirrorTheme(
+      workbenchTheme,
+      usesWorkbenchTypeScriptLanguageService(path)
+    )
     const readOnlyExtension = useMemo(
       () => buildWorkbenchReadOnlyExtensions(readOnly, disabled),
       [disabled, readOnly]
     )
-    const completionExtension = useMemo(
-      () => EditorState.languageData.of(() => [{ autocomplete: completionSource }]),
-      [completionSource]
-    )
+    const completionExtension = useMemo(() => {
+      const autocomplete = hideUnchangedWorkbenchCompletions(completionSource)
+      return EditorState.languageData.of(() => [{ autocomplete }])
+    }, [completionSource])
     const lintExtension = useMemo(
       // linter 自身已有请求防抖，挂载扩展不会同步启动语言服务。这里必须立即挂载，
       // 否则繁忙项目拿不到 idle 时隙时，错误下划线和悬浮提示会永久缺席。
@@ -1724,7 +1738,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         hostRuntime,
         hoverDefinitionLabel: t('workbench.editorHoverDefinition'),
         hoverDefinitionPreviewLabel: t('workbench.editorHoverDefinitionPreview'),
-        hoverLoadingLabel: t('workbench.editorHoverLoading'),
         codeActions: codeActions.hover,
       }),
       [codeActions.hover, hostRuntime, language, openTabsLatest, path, projectRoot, t]
@@ -1736,46 +1749,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       () =>
         createWorkbenchLanguageServiceHoverTooltip(
           languageServiceContext,
-          workbenchEditorLanguageFeatureClasses,
-          semanticLanguageService
-            ? undefined
-            : (view, position) => {
-                const diagnosticRange = collectDiagnosticsAtPosition(view, position)
-                const word = getIdentifierAt(view.state, position)
-                const target = !word
-                  ? null
-                  : findWorkbenchDefinitionTarget({
-                      word: word.text,
-                      path: pathRef.current,
-                      projectContextIndex: projectContextIndexRef.current,
-                    })
-                if (!diagnosticRange && (!word || !target)) return null
-
-                return {
-                  pos: diagnosticRange?.from ?? word!.from,
-                  end: diagnosticRange?.to ?? word!.to,
-                  above: true,
-                  create: () => ({
-                    dom: buildWorkbenchEditorHoverDom(
-                      {
-                        diagnostics: diagnosticRange?.diagnostics,
-                        symbolFallback:
-                          word && target
-                            ? {
-                                word: word.text,
-                                path: target.path,
-                                line: target.line,
-                                column: target.column,
-                              }
-                            : null,
-                      },
-                      workbenchEditorLanguageFeatureClasses
-                    ),
-                  }),
-                }
-              }
+          workbenchEditorLanguageFeatureClasses
         ),
-      [languageServiceContext, pathRef, projectContextIndexRef, semanticLanguageService]
+      [languageServiceContext]
     )
     const languageServiceExtensions = useMemo(() => {
       let syncedInlayHintOpenFiles: Nullable<Map<string, string>> = null
@@ -2544,6 +2520,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       velarTestRun: velarTestRunExtension,
       runDebug: runDebugExtension,
       basicLanguage: basicLanguageExtension,
+      fullLanguage: languageExtension,
+      languageService: languageServiceExtensions,
       readOnly: readOnlyExtension,
       completion: completionExtension,
       lint: lintExtension,
@@ -2556,6 +2534,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       container: HTMLDivElement
     ): WorkbenchEditorInstanceExtensions => {
       const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {
+        const typing = update.docChanged && update.transactions.some((transaction) =>
+          transaction.isUserEvent('input.type') || transaction.isUserEvent('delete')
+        )
         if (update.docChanged) {
           const draft = commentDraftRef.current
           if (draft) {
@@ -2593,7 +2574,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             transaction.annotation(externalValueSync)
           )
           if (!isExternalSync) {
-            callbacksRef.current.onChange(update.state.doc.toString())
+            const doc = update.state.doc
+            const content = doc.toString()
+            lastEmittedContentRef.current = { doc, content }
+            callbacksRef.current.onChange(content, typing)
           }
         }
 
@@ -2713,7 +2697,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       const mouseHandlers = EditorView.domEventHandlers({
         mousemove: (event, view) => {
-          resumeWorkbenchEditorHover(view)
           lastDefinitionHoverCoords = { x: event.clientX, y: event.clientY }
           updateDefinitionHoverFromCoords(
             view,
@@ -2809,6 +2792,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }),
         tooltips: tooltips({
           parent: toOptional(container),
+          position: 'absolute',
           // The container clips with overflow:hidden, but CodeMirror defaults its
           // available space to the whole window and lets tooltips grow rightward off
           // the pane. Constrain the space to the editor rect so tooltips near the
@@ -2853,7 +2837,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         instance.comments,
         instance.mouseHandlers,
         languageHoverCompartment.of(current.languageHover),
-        languageServiceCompartment.of([]),
+        languageServiceCompartment.of(PendingLanguageServiceExtensions),
         packageScriptRunCompartment.of(current.packageScriptRun),
         velarMainRunCompartment.of(current.velarMainRun),
         velarTestRunCompartment.of(current.velarTestRun),
@@ -2869,9 +2853,17 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       ]
     }
 
-    /** 换回来的文件，状态里还是切走那会儿的配置（主题、只读、补全源……），换成现在的。语言归渐进加载管。 */
-    const syncFileCompartments = (view: EditorView): void => {
+    /** 先更新缓存状态，再把它交给视图。视图只挂载目标文件当前的扩展一次。 */
+    const prepareSavedFileState = (state: EditorState): EditorState => {
       const current = compartmentValuesRef.current
+      const language = findWorkbenchCodeMirrorLanguage(current.fullLanguage)
+      const previousFeatures = languageServiceCompartment.get(state)
+      const syntax = language && state.facet(languageFacet) === language
+        ? current.fullLanguage
+        : current.basicLanguage
+      const features = previousFeatures && previousFeatures !== PendingLanguageServiceExtensions
+        ? current.languageService
+        : PendingLanguageServiceExtensions
       const wanted: Array<[Compartment, Extension]> = [
         [vimCompartment, current.vim],
         [editorMetricsCompartment, current.editorMetrics],
@@ -2888,11 +2880,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         [indentationCompartment, current.indentation],
         [wordWrapCompartment, current.wordWrap],
         [gitBlameCompartment, current.gitBlame],
+        [languageCompartment, syntax],
+        [languageServiceCompartment, features],
       ]
       const effects = wanted.flatMap(([compartment, extension]) =>
-        compartment.get(view.state) === extension ? [] : [compartment.reconfigure(extension)]
+        compartment.get(state) === extension ? [] : [compartment.reconfigure(extension)]
       )
-      if (!isEmpty(effects)) view.dispatch({ effects })
+      return isEmpty(effects) ? state : state.update({ effects }).state
     }
 
     /** 视图里此刻的文件状态，连同滚动位置。 */
@@ -2912,7 +2906,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const instance = instanceExtensionsRef.current
       if (!key || !instance) return
 
-      closeCompletion(view)
+      if (completionStatus(view.state) !== null) closeCompletion(view)
       closeWorkbenchEditorFind(view)
       instance.resetHover(view)
       fileStatesRef.current.save(key, snapshotFileState(view, instance))
@@ -2932,7 +2926,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           })
         : undefined
       if (saved) {
-        if (saved.owner === instance) return { state: saved.state, saved }
+        if (saved.owner === instance) return { state: prepareSavedFileState(saved.state), saved }
         try {
           return {
             state: rebuildWorkbenchEditorFileState(saved.state, buildFileExtensions(instance)),
@@ -2958,7 +2952,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       content: string
     ): void => {
       if (saved) {
-        syncFileCompartments(view)
         view.dispatch({ effects: saved.scroll })
         if (saved.activeLineSuppressed) suppressWorkbenchActiveLine(view)
         else revealWorkbenchActiveLine(view)
@@ -2986,11 +2979,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (instance?.module !== EditorModule)
         instance = instanceExtensionsRef.current = createInstanceExtensions(container)
       const key = path ? workbenchEditorFileStateKey(projectRoot, path) : null
-      const { state, saved } = loadFileState(key, value, instance)
+      const content = readEditorContent?.(path) ?? value
+      const { state, saved } = loadFileState(key, content, instance)
       const view = new EditorView({ state, parent: container })
       viewRef.current = view
       activeFileKeyRef.current = key
-      settleFileState(view, saved, value)
+      settleFileState(view, saved, content)
 
       return () => {
         // 编辑器要卸载了（切到预览、对比视图）：当前文件的状态也存起来，挂回来时接着用。
@@ -3007,29 +3001,32 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (!view || !instance) return
 
       const key = path ? workbenchEditorFileStateKey(projectRoot, path) : null
+      const content = readEditorContent?.(path) ?? value
       if (key !== activeFileKeyRef.current) {
         // 换了文件：离开的存起来，要显示的取回来——撤销历史、光标、折叠、滚动位置各归各的文件，
         // ⌘Z 不会把别的文件的内容撤进来。
         saveActiveFileState(view)
-        const { state, saved } = loadFileState(key, value, instance)
+        const { state, saved } = loadFileState(key, content, instance)
         view.setState(state)
         activeFileKeyRef.current = key
         setContextMenu(null)
         setRenamePopup(null)
         acceptCommentDraft(null)
-        settleFileState(view, saved, value)
+        settleFileState(view, saved, content)
         return
       }
+      const emitted = lastEmittedContentRef.current
+      if (emitted?.doc === view.state.doc && emitted.content === content) return
       const sync = buildWorkbenchExternalValueSyncTransaction(
         view.state,
-        value,
+        content,
         externalValueSync.of(true)
       )
       if (!sync) return
 
       view.dispatch(sync)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
-    }, [acceptCommentDraft, path, projectRoot, value])
+    }, [acceptCommentDraft, path, projectRoot, readEditorContent, value])
 
     // 查找栏的查找词与开关项交给 CodeMirror 的搜索状态（高亮全部匹配、下一处、替换都靠它）；查找栏关了就收起。
     const appliedFindRef = useRef<Nullable<WorkbenchEditorFindRequest>>(null)
@@ -3244,53 +3241,45 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const view = viewRef.current
       if (!view) return
 
-      // 换回来的文件已经是完整语法（语法树还在）：直接接上，不必先退回基础着色再重新解析一遍。
-      const fullLanguage = findWorkbenchCodeMirrorLanguage(languageExtension)
-      const fullSyntaxReady = !!fullLanguage && view.state.facet(languageFacet) === fullLanguage
-      view.dispatch({
-        effects: [
-          languageCompartment.reconfigure(
-            fullSyntaxReady ? languageExtension : basicLanguageExtension
-          ),
-          languageServiceCompartment.reconfigure([]),
-        ],
-      })
-
+      const file = activeFileKeyRef.current
+      const ownsView = (): boolean => viewRef.current === view && activeFileKeyRef.current === file
+      const fullSyntaxReady = languageCompartment.get(view.state) === languageExtension
+      const featuresReady =
+        languageServiceCompartment.get(view.state) !== PendingLanguageServiceExtensions
+      if (featuresReady)
+        reconfigureCompartment(view, languageServiceCompartment, languageServiceExtensions)
       let cancelSyntaxIdle = (): void => undefined
       let cancelSemanticIdle = (): void => undefined
-      const syntaxLease = progressiveLoadTimers.after(
+      const syntaxLease = fullSyntaxReady ? null : progressiveLoadTimers.after(
         FullSyntaxActivationDelayMs,
         () => {
-          if (viewRef.current !== view || fullSyntaxReady) return
+          if (!ownsView()) return
           cancelSyntaxIdle = requestWorkbenchEditorIdleTask(() => {
-            if (viewRef.current !== view) return
-            view.dispatch({ effects: languageCompartment.reconfigure(languageExtension) })
+            if (!ownsView()) return
+            reconfigureCompartment(view, languageCompartment, languageExtension)
           })
         },
         { label: 'workbench.editor.activateFullSyntax' }
       )
-      const semanticLease = progressiveLoadTimers.after(
+      const semanticLease = featuresReady ? null : progressiveLoadTimers.after(
         SemanticFeaturesActivationDelayMs,
         () => {
-          if (viewRef.current !== view) return
+          if (!ownsView()) return
           cancelSemanticIdle = requestWorkbenchEditorIdleTask(() => {
-            if (viewRef.current !== view) return
-            view.dispatch({
-              effects: [languageServiceCompartment.reconfigure(languageServiceExtensions)],
-            })
+            if (!ownsView()) return
+            reconfigureCompartment(view, languageServiceCompartment, languageServiceExtensions)
           })
         },
         { label: 'workbench.editor.activateSemanticFeatures' }
       )
 
       return () => {
-        syntaxLease.cancel()
-        semanticLease.cancel()
+        syntaxLease?.cancel()
+        semanticLease?.cancel()
         cancelSyntaxIdle()
         cancelSemanticIdle()
       }
     }, [
-      basicLanguageExtension,
       languageCompartment,
       languageExtension,
       languageServiceCompartment,

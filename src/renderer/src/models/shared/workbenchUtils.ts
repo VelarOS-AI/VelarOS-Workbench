@@ -1,6 +1,7 @@
 import { isEmpty } from '@velaros-ai/velaros/core'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
+import { getWorkbenchPathExtension, WorkbenchCppFileExtensions } from '@shared/workbenchLanguageServices'
 
 export const ROOT_PATH = '.'
 
@@ -19,8 +20,11 @@ export function fileLanguage(path: Nullable<string>): string {
   if (fileName === '.env' || fileName.startsWith('.env.')) return 'Environment'
   if (fileName === '.gitignore') return 'Git Ignore'
 
-  const extension = path.split('.').at(-1)?.toLowerCase()
+  const extension = getWorkbenchPathExtension(path)
+  if (extension === 'h') return 'C / C++'
+  if (WorkbenchCppFileExtensions.includes(extension)) return 'C++'
   switch (extension) {
+    case 'c': return 'C'
     case 'java': return 'Java'
     case 'gradle':
     case 'groovy': return 'Groovy'

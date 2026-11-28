@@ -41,6 +41,8 @@ export interface WorkspaceGitStatusResult {
 
 export interface WorkspaceGitBranch {
   name: string
+  /** 完整引用名，例如 refs/heads/main。 */
+  ref?: string
   current: boolean
   upstream: Nullable<string>
   /** 本地分支或远程跟踪引用；没给时按本地分支处理。 */

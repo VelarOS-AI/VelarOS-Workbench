@@ -416,7 +416,7 @@ void describe('preview tab wiring', () => {
     // 正文一改就留下（输入、格式化、跨文件改名、项目替换都经过这里）。
     assert.match(
       controller,
-      /function updateOpenTabContent\(file: WorkbenchReadFileResult, content: string\): void \{\s*keepOpenFile\(file\.path\)/u
+      /function updateOpenTabContent\(\s*file: WorkbenchReadFileResult,\s*content: string,\s*defer = false\s*\): void \{\s*keepOpenFile\(file\.path\)/u
     )
     // 明确保存：没有改动也留下。
     assert.match(
@@ -925,7 +925,7 @@ void describe('split editor wiring', () => {
       adapter,
       /if \(activePath\) void workbench\.saveSelectedFile\(content, activePath\)/u
     )
-    assert.match(adapter, /if \(activePath\) workbench\.setEditorContent\(content, activePath\)/u)
+    assert.match(adapter, /if \(activePath\) workbench\.setEditorContent\(content, activePath, defer\)/u)
     assert.match(adapter, /if \(activePath\) workbench\.toggleSelectedFileEditMode\(activePath\)/u)
     assert.match(
       adapter,
@@ -942,7 +942,7 @@ void describe('split editor wiring', () => {
     )
     assert.match(
       controller,
-      /const updateEditorContent = useMemoizedFn\(\(content: string, path\?: string\): void => \{\s*const targetPath = path \?\? selectedFilePathRef\.current\s*const file = targetPath \? openTabsByPathLatest\.current\.get\(targetPath\)\?\.file : undefined/u
+      /const updateEditorContent = useMemoizedFn\(\s*\(content: string, path\?: string, defer = false\): void => \{\s*const targetPath = path \?\? selectedFilePathRef\.current\s*const file = targetPath \? openTabsByPathLatest\.current\.get\(targetPath\)\?\.file : undefined/u
     )
   })
 

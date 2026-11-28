@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { EditorSelection, EditorState } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { type EditorView, gutterLineClass } from '@codemirror/view'
 import { describe, test } from 'bun:test'
 
 import {
@@ -56,30 +56,13 @@ void describe('Workbench active-line visibility', () => {
 
     suppressWorkbenchActiveLine(view)
     assert.equal(isWorkbenchActiveLineSuppressed(view), true)
-    // The class belongs to editor state, so focus/selection updates preserve it.
+    // Selection updates preserve the idle state and leave the gutter marker hidden.
     view.dispatch({ selection: { anchor: 2 } })
     assert.equal(isWorkbenchActiveLineSuppressed(view), true)
-    assert.ok(
-      state
-        .facet(EditorView.editorAttributes)
-        .some(
-          (attributes) =>
-            typeof attributes === 'object' &&
-            attributes.class === 'cm-workbenchActiveLineSuppressed'
-        )
-    )
+    assert.equal(state.facet(gutterLineClass).some((markers) => markers.size > 0), false)
 
     revealWorkbenchActiveLine(view)
     assert.equal(isWorkbenchActiveLineSuppressed(view), false)
-    assert.equal(
-      state
-        .facet(EditorView.editorAttributes)
-        .some(
-          (attributes) =>
-            typeof attributes === 'object' &&
-            attributes.class === 'cm-workbenchActiveLineSuppressed'
-        ),
-      false
-    )
+    assert.equal(state.facet(gutterLineClass).some((markers) => markers.size > 0), true)
   })
 })

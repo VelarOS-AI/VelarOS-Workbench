@@ -1,4 +1,4 @@
-import type { ChangeDesc, Extension } from '@codemirror/state'
+import type { ChangeDesc, Extension, Text } from '@codemirror/state'
 import { StateEffect, StateField } from '@codemirror/state'
 import {
   Decoration,
@@ -18,10 +18,11 @@ import {
 } from '@shared/contracts/workbench'
 
 const InitialInlayHintDelayMs = 180
-const ChangedDocumentInlayHintDelayMs = 450
+const ChangedDocumentInlayHintDelayMs = 320
 const ScrolledViewportInlayHintDelayMs = 80
 const InlayHintViewportBufferLines = 30
 const MaxCachedInlayHintDocuments = 50
+const MaxCachedDocumentLength = 256 * 1024
 const MaxRenderedInlayHints = 1500
 const log = Log.tag('workbench-codemirror-inlay-hints')
 
@@ -34,21 +35,12 @@ export interface WorkbenchInlayHintRuntime {
 }
 
 interface WorkbenchInlayHintCacheEntry {
-  fingerprint: string
+  content: string
   ranges: readonly WorkbenchLanguageServiceOffsetRange[]
   hints: readonly WorkbenchLanguageServiceInlayHint[]
 }
 
 const inlayHintCache = new Map<string, WorkbenchInlayHintCacheEntry>()
-
-function fingerprintWorkbenchInlayHintContent(content: string): string {
-  let hash = content.length | 0
-  const stride = Math.max(1, Math.floor(content.length / 64))
-  for (let index = 0; index < content.length; index += stride) {
-    hash = Math.imul(hash ^ content.charCodeAt(index), 16_777_619)
-  }
-  return `${content.length}:${hash >>> 0}`
-}
 
 function cacheCoversRanges(
   cached: readonly WorkbenchLanguageServiceOffsetRange[],
@@ -61,11 +53,11 @@ function cacheCoversRanges(
 
 function readCachedWorkbenchInlayHints(
   cacheKey: string,
-  fingerprint: string,
+  content: string,
   ranges: readonly WorkbenchLanguageServiceOffsetRange[]
 ): Nullable<readonly WorkbenchLanguageServiceInlayHint[]> {
   const entry = inlayHintCache.get(cacheKey)
-  if (!entry || entry.fingerprint !== fingerprint || !cacheCoversRanges(entry.ranges, ranges))
+  if (!entry || entry.content !== content || !cacheCoversRanges(entry.ranges, ranges))
     return null
 
   inlayHintCache.delete(cacheKey)
@@ -75,6 +67,7 @@ function readCachedWorkbenchInlayHints(
 
 function cacheWorkbenchInlayHints(cacheKey: string, entry: WorkbenchInlayHintCacheEntry): void {
   inlayHintCache.delete(cacheKey)
+  if (entry.content.length > MaxCachedDocumentLength) return
   inlayHintCache.set(cacheKey, entry)
   while (inlayHintCache.size > MaxCachedInlayHintDocuments) {
     const oldestKey = inlayHintCache.keys().next().value
@@ -175,9 +168,22 @@ const setWorkbenchInlayHintsEffect =
 
 export function mapWorkbenchInlayHintDecorationsThroughChanges(
   decorations: DecorationSet,
+  previousDoc: Text,
   changes: ChangeDesc
 ): DecorationSet {
-  return decorations.map(changes)
+  let retained = decorations
+  changes.iterChangedRanges((from, to, nextFrom, nextTo) => {
+    const lineStart = previousDoc.lineAt(from).from
+    const lastLine = previousDoc.lineAt(to)
+    const removesWholeLines = from < to && lineStart === from && lastLine.from === to && nextFrom === nextTo
+    const lineEnd = removesWholeLines ? to - 1 : lastLine.to
+    retained = retained.update({
+      filterFrom: lineStart,
+      filterTo: lineEnd,
+      filter: (position) => position < lineStart || position > lineEnd,
+    })
+  })
+  return retained.map(changes)
 }
 
 const workbenchInlayHintsField = StateField.define<DecorationSet>({
@@ -188,8 +194,12 @@ const workbenchInlayHintsField = StateField.define<DecorationSet>({
         return buildWorkbenchInlayHintDecorations(transaction.state.doc.length, effect.value)
     }
 
-    return transaction.docChanged
-      ? mapWorkbenchInlayHintDecorationsThroughChanges(decorations, transaction.changes)
+    return transaction.docChanged && decorations.size > 0
+      ? mapWorkbenchInlayHintDecorationsThroughChanges(
+          decorations,
+          transaction.startState.doc,
+          transaction.changes
+        )
       : decorations
   },
   provide: (field) => EditorView.decorations.from(field),
@@ -201,19 +211,27 @@ function buildWorkbenchInlayHintLoader(runtime: WorkbenchInlayHintRuntime): Exte
       private readonly timers = new TimerScope({ name: 'WorkbenchInlayHintLoader' })
       private timer: Nullable<TimerLease> = null
       private generation = 0
+      private documentRefreshNotBefore = 0
 
       constructor(private readonly view: EditorView) {
-        this.timers.after(0, () => this.restoreCached(), {
+        this.timer = this.timers.after(0, () => {
+          this.timer = null
+          if (!this.restoreCached()) this.schedule(InitialInlayHintDelayMs)
+        }, {
           label: 'workbench.inlayHints.restoreCached',
         })
-        this.schedule(InitialInlayHintDelayMs)
       }
 
       public update(update: ViewUpdate): void {
         if (update.docChanged) {
+          this.documentRefreshNotBefore = performance.now() + ChangedDocumentInlayHintDelayMs
           this.schedule(ChangedDocumentInlayHintDelayMs)
-        } else if (update.viewportChanged) {
-          this.schedule(ScrolledViewportInlayHintDelayMs)
+        } else if (update.viewportMoved) {
+          // Caret/layout changes can change the viewport on the frame after typing.
+          // They must not replace the post-edit pause with the shorter scroll delay.
+          this.schedule(
+            Math.max(ScrolledViewportInlayHintDelayMs, this.documentRefreshNotBefore - performance.now())
+          )
         }
       }
 
@@ -232,16 +250,15 @@ function buildWorkbenchInlayHintLoader(runtime: WorkbenchInlayHintRuntime): Exte
 
       private async load(generation: number): Promise<void> {
         const content = this.view.state.doc.toString()
-        const fingerprint = fingerprintWorkbenchInlayHintContent(content)
         const ranges = buildWorkbenchInlayHintViewportRanges(this.view)
-        const cached = readCachedWorkbenchInlayHints(runtime.cacheKey, fingerprint, ranges)
+        const cached = readCachedWorkbenchInlayHints(runtime.cacheKey, content, ranges)
 
         try {
           const hints = cached ?? (await runtime.request(content, ranges))
           if (generation !== this.generation) return
 
           if (!cached) {
-            cacheWorkbenchInlayHints(runtime.cacheKey, { fingerprint, ranges, hints })
+            cacheWorkbenchInlayHints(runtime.cacheKey, { content, ranges, hints })
           }
           this.view.dispatch({ effects: setWorkbenchInlayHintsEffect.of(hints) })
         } catch (error) {
@@ -249,15 +266,16 @@ function buildWorkbenchInlayHintLoader(runtime: WorkbenchInlayHintRuntime): Exte
         }
       }
 
-      private restoreCached(): void {
+      private restoreCached(): boolean {
         const content = this.view.state.doc.toString()
         const ranges = buildWorkbenchInlayHintViewportRanges(this.view)
         const hints = readCachedWorkbenchInlayHints(
           runtime.cacheKey,
-          fingerprintWorkbenchInlayHintContent(content),
+          content,
           ranges
         )
         if (hints) this.view.dispatch({ effects: setWorkbenchInlayHintsEffect.of(hints) })
+        return hints !== null
       }
 
       public destroy(): void {

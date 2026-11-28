@@ -3,6 +3,10 @@ import type {
   WorkbenchEditorCommandId,
   WorkbenchEditorCommandRequest,
 } from '@renderer/models/editor/workbenchEditorCommands'
+import {
+  createWorkbenchEditorCursorStore,
+  createWorkbenchEditorFrameStore,
+} from '@renderer/models/editor/workbenchEditorCursorStore'
 import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import type {
   WorkbenchIndentation,
@@ -23,17 +27,6 @@ import { isFalse, isPositiveNumber, optionalWhen, toNullable } from '@velaros-ai
 
 import type { EditorNavigationRequest } from '../components/editor/CodeInsightPanel'
 import { useLatest } from '../support/genericHooks'
-
-export interface WorkbenchEditorCursorSnapshot {
-  line: number
-  column: number
-  selection?: {
-    startLine: number
-    endLine: number
-    startColumn: number
-    endColumn: number
-  }
-}
 
 /** 打开文件时带给编辑器控制器的：标签怎么开、没开着时开在哪一组。 */
 export interface WorkbenchEditorOpenTabRequest extends WorkbenchEditorOpenTabIntent {
@@ -93,10 +86,8 @@ export function useWorkbenchEditorNavigationState({
   const onPrimaryGroupTabShownLatest = useLatest(onPrimaryGroupTabShown)
   const resolveFileGroupIndexLatest = useLatest(resolveFileGroupIndex)
   const focusedGroupIndexLatest = useLatest(focusedGroupIndex)
-  const [cursorPosition, setCursorPosition] = useState<WorkbenchEditorCursorSnapshot>({
-    line: 1,
-    column: 1,
-  })
+  const [cursorStore] = useState(createWorkbenchEditorCursorStore)
+  const { getSnapshot: readCursorPosition, set: setCursorPosition } = cursorStore
   const [diffItem, setDiffItem] = useState<Nullable<WorkbenchGitChangeItem>>(null)
   const [diffFocusFirstChangeRequestId, setDiffFocusFirstChangeRequestId] = useState(0)
   const [lightTab, setLightTab] = useState<Nullable<WorkbenchLightEditorTab>>(null)
@@ -120,10 +111,8 @@ export function useWorkbenchEditorNavigationState({
   const requestEditorCommand = useCallback((command: WorkbenchEditorCommandId): void => {
     setEditorCommandRequest((current) => ({ id: (current?.id ?? 0) + 1, command }))
   }, [])
-  const [activeProblemId, setActiveProblemIdState] = useState<Nullable<string>>(null)
-  const setActiveProblemId = useCallback((problemId: Nullable<string>) => {
-    setActiveProblemIdState((current) => (current === problemId ? current : problemId))
-  }, [])
+  const [activeProblemStore] = useState(() => createWorkbenchEditorFrameStore<Nullable<string>>(null))
+  const { set: setActiveProblemId } = activeProblemStore
 
   useEffect(() => {
     setActiveProblemId(null)
@@ -132,24 +121,23 @@ export function useWorkbenchEditorNavigationState({
   // 后退 / 前进：切文件、跳到定义或某一行之前记下当前的文件和光标。
   const navigationHistoryRef = useRef(new WorkbenchNavigationHistory())
   const selectedFilePathLatest = useLatest(selectedFilePath)
-  const cursorPositionLatest = useLatest(cursorPosition)
   const currentNavigationPoint = (): Nullable<WorkbenchNavigationPoint> => {
     const path = selectedFilePathLatest.current
     if (!path) return null
-    const { line, column } = cursorPositionLatest.current
+    const { line, column } = readCursorPosition()
     return { path, line, column, group: focusedGroupIndexLatest.current }
   }
   const recordNavigationPoint = useCallback((): void => {
     const path = selectedFilePathLatest.current
     if (!path) return
-    const { line, column } = cursorPositionLatest.current
+    const { line, column } = readCursorPosition()
     navigationHistoryRef.current.record({
       path,
       line,
       column,
       group: focusedGroupIndexLatest.current,
     })
-  }, [cursorPositionLatest, focusedGroupIndexLatest, selectedFilePathLatest])
+  }, [focusedGroupIndexLatest, readCursorPosition, selectedFilePathLatest])
 
   /** 左边那组要显示文件了：把盖在那组编辑器上的 Git 对比、只读预览收掉，网页调试标签放到后面。 */
   const uncoverPrimaryGroup = useCallback((): void => {
@@ -370,8 +358,8 @@ export function useWorkbenchEditorNavigationState({
   }
 
   return {
-    activeProblemId,
-    cursorPosition,
+    activeProblemStore,
+    cursorStore,
     diffItem,
     diffFocusFirstChangeRequestId,
     goToLocation,
@@ -393,6 +381,7 @@ export function useWorkbenchEditorNavigationState({
     selectFile,
     setActiveProblemId,
     setCursorPosition,
+    readCursorPosition,
     debug,
     closeDiff: () => {
       setDiffItem(null)

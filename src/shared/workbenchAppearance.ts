@@ -135,12 +135,15 @@ export function getWorkbenchNativeAppearance(theme: WorkbenchThemeId): {
   colorScheme: 'light' | 'dark'
   backgroundColor: string
   foregroundColor: string
+  toolbarColor: string
 } {
+  const dark = isWorkbenchDarkTheme(theme)
+  const neutral = neutralScale(theme)
   return {
-    colorScheme: isWorkbenchDarkTheme(theme) ? 'dark' : 'light',
-    backgroundColor:
-      neutralScale(theme)[isWorkbenchDarkTheme(theme) || theme === 'warm-paper' ? 1 : 0]!,
-    foregroundColor: neutralScale(theme)[11]!,
+    colorScheme: dark ? 'dark' : 'light',
+    backgroundColor: neutral[dark || theme === 'warm-paper' ? 1 : 0]!,
+    foregroundColor: neutral[11]!,
+    toolbarColor: neutral[theme === 'warm-paper' ? 2 : dark ? 0 : 1]!,
   }
 }
 
@@ -152,11 +155,10 @@ export function getWorkbenchColorTokens(
   const mode = dark ? 1 : 0
   const neutral = neutralScale(theme)
   const color = palettes[accent][mode]
-  const background = getWorkbenchNativeAppearance(theme).backgroundColor
-  const panel = neutral[theme === 'warm-paper' ? 2 : dark ? 0 : 1]!
+  const { backgroundColor: background, toolbarColor: panel, foregroundColor: ink } =
+    getWorkbenchNativeAppearance(theme)
   const hover = neutral[theme === 'warm-paper' ? 3 : 2]!
   const elevated = dark ? neutral[2]! : '#ffffff'
-  const ink = neutral[11]!
   const secondary = neutral[10]!
   const muted = readable(
     [...Array.from({ length: 11 }, (_, index) => mix(neutral[9]!, secondary, index / 10)), ink],

@@ -13,10 +13,28 @@ import {
   resolveWorkbenchIndentation,
   workbenchIndentUnit,
 } from '../src/renderer/src/models/editor/workbenchIndentation'
+import { workbenchIndentGuidesChanged } from '../src/renderer/src/models/editor/workbenchIndentGuides'
 
 function at(directory: string, text: string): WorkbenchEditorConfigLocation {
   return { directory, file: parseWorkbenchEditorConfig(text) }
 }
+
+test('indent guides stay mapped through text edits and update when the line structure changes', () => {
+  const state = EditorState.create({ doc: 'function run() {\n  return 42\n  * heading\n}' })
+  const line = state.doc.line(2)
+  const changed = (from: number, to: number, insert = '') => {
+    const edit = state.update({ changes: { from, to, insert } })
+    return workbenchIndentGuidesChanged(state.doc, edit.newDoc, edit.changes)
+  }
+  expect(changed(line.to, line.to, '0')).toBe(false)
+  expect(changed(line.to - 1, line.to)).toBe(false)
+  expect(changed(line.from, line.from, '  ')).toBe(true)
+  expect(changed(line.from + 2, line.from + 4, '//')).toBe(true)
+  expect(changed(line.from + 2, line.to)).toBe(true)
+  expect(changed(line.to, line.to, '\n  next()')).toBe(true)
+  const comment = state.doc.line(3)
+  expect(changed(comment.from + 3, comment.from + 4)).toBe(true)
+})
 
 describe('.editorconfig', () => {
   test('is looked up from the file’s folder up to the project root', () => {

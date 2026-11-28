@@ -50,7 +50,7 @@ export class WorkbenchNativeAppearance {
   public get titleBarOverlay(): { color: string; symbolColor: string; height: number } {
     const appearance = getWorkbenchNativeAppearance(this.theme)
     return {
-      color: appearance.backgroundColor,
+      color: appearance.toolbarColor,
       symbolColor: appearance.foregroundColor,
       height: 32,
     }

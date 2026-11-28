@@ -1,6 +1,7 @@
 import { type ReactElement, useState, useSyncExternalStore } from 'react'
 import { CaretRightIcon, CheckIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import type { WorkbenchEditorCursorStore } from '@renderer/models/editor/workbenchEditorCursorStore'
 import type { WorkbenchStatusBarTextFormat } from '@renderer/models/editor/workbenchEditorTextFormat'
 import {
   formatWorkbenchEditorVimMode,
@@ -15,6 +16,7 @@ import type {
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { AnchoredPopover } from '@velaros-ai/ui/primitives/overlays/AnchoredPopover'
 
+import type { WorkbenchProjectIndexProgress } from '@shared/contracts/workbench'
 import {
   formatWorkbenchTextEncoding,
   formatWorkbenchTextEol,
@@ -28,16 +30,15 @@ import { WorkbenchUpdateProgress } from '../WorkbenchUpdateProgress'
 interface StatusBarProps {
   projectName: string
   selectedFilePath: Nullable<string>
-  cursorPosition: {
-    line: number
-    column: number
-  }
+  cursorStore: WorkbenchEditorCursorStore
   hasUnsavedChanges: boolean
   /** 当前文件处于只读模式（或无法在编辑器里修改）。 */
   readOnly?: boolean
   isSavingFile: boolean
   openFileCount: number
   commandStatusLabel: string
+  isIndexingProject?: boolean
+  projectIndexProgress?: Nullable<WorkbenchProjectIndexProgress>
   /** 当前文本文件的编码与换行符；图片、差异、预览等标签不显示。 */
   textFormat?: Nullable<WorkbenchStatusBarTextFormat>
   /** 在状态栏选了换行符：转换、标记为未保存并立即保存。 */
@@ -60,21 +61,40 @@ const StatusBarIndentationOptions: ReadonlyArray<{ style: 'space' | 'tab'; size:
   { style: 'tab', size: 8 },
 ]
 
+function StatusBarCursor({ store }: { store: WorkbenchEditorCursorStore }): ReactElement {
+  const { t } = useWorkbenchI18n()
+  const { line, column } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
+  return (
+    <Text truncate tone="caption" className={styles.statusBarItem}>
+      {t('workbench.cursorPosition', { line, column })}
+    </Text>
+  )
+}
+
 export function StatusBar({
   projectName,
   selectedFilePath,
-  cursorPosition,
+  cursorStore,
   hasUnsavedChanges,
   readOnly = false,
   isSavingFile,
   openFileCount,
   commandStatusLabel,
+  isIndexingProject = false,
+  projectIndexProgress = null,
   textFormat = null,
   onChangeEol,
   indentation = null,
   onChangeIndentation,
 }: StatusBarProps): ReactElement {
   const { t } = useWorkbenchI18n()
+  const indexingLabel = t('workbench.indexingProject')
+  const indexProgressLabel = projectIndexProgress
+    ? t('workbench.indexingProjectProgress', {
+        scanned: projectIndexProgress.scannedFiles,
+        total: projectIndexProgress.totalFiles,
+      })
+    : indexingLabel
   // Vim 键位方案下眼前那个编辑器的模式；没有编辑器开着 Vim 就不显示。
   const vimMode = useSyncExternalStore(
     subscribeWorkbenchEditorVimMode,
@@ -125,9 +145,7 @@ export function StatusBar({
           {formatWorkbenchEditorVimMode(vimMode)}
         </Text>
       )}
-      <Text truncate tone="caption" className={styles.statusBarItem}>
-        {t('workbench.cursorPosition', cursorPosition)}
-      </Text>
+      <StatusBarCursor store={cursorStore} />
       {!!indentation && (
         <StatusBarIndentation
           indentation={indentation}
@@ -151,6 +169,18 @@ export function StatusBar({
         </Text>
       )}
       <span className={styles.statusBarSpacer} />
+      {isIndexingProject && (
+        <div className={styles.statusBarProjectIndex} title={indexProgressLabel}>
+          <Text tone="caption">{indexProgressLabel}</Text>
+          <progress
+            className={styles.statusBarProjectIndexTrack}
+            max={projectIndexProgress?.totalFiles ?? 1}
+            value={projectIndexProgress?.scannedFiles}
+            aria-label={indexingLabel}
+            aria-valuetext={projectIndexProgress ? indexProgressLabel : undefined}
+          />
+        </div>
+      )}
       <WorkbenchUpdateProgress />
       <Text truncate tone="caption" className={styles.statusBarItem}>
         {t('workbench.openFileCount', { count: openFileCount })}

@@ -1,5 +1,5 @@
 import type { EditorState, Extension } from '@codemirror/state'
-import { RangeSet, StateEffect, StateField } from '@codemirror/state'
+import { Prec, RangeSet, StateEffect, StateField } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -20,12 +20,6 @@ const activeLineSuppressed = StateField.define<boolean>({
       if (effect.is(setActiveLineSuppressed)) suppressed = effect.value
     return suppressed
   },
-  // CodeMirror rewrites editor classes on focus and transactions. Keep this in
-  // its attribute facet so those updates cannot drop the file's idle state.
-  provide: (field) =>
-    EditorView.editorAttributes.from(field, (suppressed) => ({
-      class: suppressed ? workbenchActiveLineSuppressedClass : '',
-    })),
 })
 
 /** 文件刚切换时暂隐合成光标产生的当前行，首次真实编辑交互后恢复。 */
@@ -55,7 +49,8 @@ export function hasWorkbenchMultilineTextSelection(state: EditorState): boolean 
 const activeLineDecoration = Decoration.line({ class: 'cm-activeLine' })
 
 function buildActiveLineDecorations(view: EditorView): DecorationSet {
-  if (hasWorkbenchMultilineTextSelection(view.state)) return Decoration.none
+  if (isWorkbenchActiveLineSuppressed(view) || hasWorkbenchMultilineTextSelection(view.state))
+    return Decoration.none
 
   const lineStarts = new Set<number>()
   for (const range of view.state.selection.ranges) {
@@ -75,11 +70,26 @@ const activeLineContentExtension = ViewPlugin.fromClass(
 
     constructor(view: EditorView) {
       this.decorations = buildActiveLineDecorations(view)
+      this.updateSelectionVisibility(view)
     }
 
     public update(update: ViewUpdate): void {
-      if (update.docChanged || update.selectionSet) {
+      const visibilityChanged =
+        update.startState.field(activeLineSuppressed) !== update.state.field(activeLineSuppressed)
+      if (visibilityChanged) this.updateSelectionVisibility(update.view)
+      if (visibilityChanged || update.docChanged || update.selectionSet) {
         this.decorations = buildActiveLineDecorations(update.view)
+      }
+    }
+
+    private updateSelectionVisibility(view: EditorView): void {
+      const suppressed = isWorkbenchActiveLineSuppressed(view)
+      // The drawSelection layers are siblings of the content. Updating those elements avoids
+      // invalidating CSS selectors against every syntax span when the user first types.
+      for (const layer of view.scrollDOM.querySelectorAll(
+        ':scope > .cm-cursorLayer, :scope > .cm-selectionLayer'
+      )) {
+        layer.classList.toggle(workbenchActiveLineSuppressedClass, suppressed)
       }
     }
   },
@@ -91,8 +101,9 @@ class WorkbenchActiveLineGutterMarker extends GutterMarker {
 }
 
 const activeLineGutterMarker = new WorkbenchActiveLineGutterMarker()
-const activeLineGutterExtension = gutterLineClass.compute(['selection'], (state) => {
-  if (hasWorkbenchMultilineTextSelection(state)) return RangeSet.empty
+const activeLineGutterExtension = gutterLineClass.compute(['selection', activeLineSuppressed], (state) => {
+  if (state.field(activeLineSuppressed) || hasWorkbenchMultilineTextSelection(state))
+    return RangeSet.empty
 
   const lineStarts = new Set<number>()
   for (const range of state.selection.ranges) {
@@ -130,5 +141,6 @@ export const workbenchActiveLineExtension: Extension = [
   activeLineSuppressed,
   activeLineContentExtension,
   activeLineGutterExtension,
-  activeLineInteractionExtension,
+  // Movement and deletion may be consumed by a keymap before lower-priority DOM handlers run.
+  Prec.highest(activeLineInteractionExtension),
 ]

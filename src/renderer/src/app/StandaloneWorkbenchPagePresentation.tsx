@@ -18,7 +18,6 @@ import {
   WarningCircleIcon,
 } from '@phosphor-icons/react'
 import { WorkbenchAgentRail } from '@renderer/components/WorkbenchAgentRail'
-import { WorkbenchChatPanel } from '@renderer/components/WorkbenchChatPanel'
 import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
@@ -85,6 +84,9 @@ const LazyWorkbenchRunConfigurationsDialog = lazyWithPreload(
 const LazyWorkbenchDebugPanel = lazyWithPreload(
   async () => (await import('../components/WorkbenchDebugPanel')).WorkbenchDebugPanel
 )
+const LazyWorkbenchChatPanel = lazyWithPreload(
+  async () => (await import('../components/WorkbenchChatPanel')).WorkbenchChatPanel
+)
 
 interface StandaloneWorkbenchPagePresentationProps {
   projectHubState: WorkbenchProjectHubState
@@ -146,6 +148,8 @@ export function StandaloneWorkbenchPagePresentation({
   // 「编辑运行配置」对话框同样：打开过才挂着。
   const [runConfigurationsMounted, setRunConfigurationsMounted] = useState(false)
   if (dialogs.runConfigurationsOpen && !runConfigurationsMounted) setRunConfigurationsMounted(true)
+  const [chatMounted, setChatMounted] = useState(false)
+  if (surface.isRightToolOpen && !chatMounted) setChatMounted(true)
   /** 全项目扫出来的 VelarScript 源文件；结构树的完整性靠它，不靠「你打开过什么」。 */
   const [velarSourcePaths, setVelarSourcePaths] = useState<readonly string[]>([])
   const [velarStructureScopeTabs, setVelarStructureScopeTabs] = useState<
@@ -788,20 +792,24 @@ export function StandaloneWorkbenchPagePresentation({
             aria-label="Workbench Agent"
           >
             <div className={styles.rightToolContent}>
-              <WorkbenchChatPanel
-                projectRoot={workbench.activeProject.rootPath}
-                currentFilePath={workbench.selectedFilePath}
-                pendingBrowserElementSelections={model.pendingBrowserElementSelections}
-                onBrowserElementSelectionsConsumed={
-                  model.actions.consumeWorkbenchBrowserElementSelections
-                }
-                pendingFileReferences={model.pendingChatFileReferences}
-                onFileReferencesConsumed={model.actions.consumeWorkbenchChatFileReferences}
-                onOpenFileChange={model.actions.handleWorkbenchChatFileChangeOpen}
-                onOpenWorkspacePath={model.actions.handleWorkbenchChatWorkspacePathOpen}
-                onReviewFileChanges={model.actions.handleWorkbenchChatFileChangesReview}
-                onReviewRunChanges={model.actions.handleWorkbenchChatRunChangesReview}
-              />
+              {chatMounted && (
+                <Suspense fallback={null}>
+                  <LazyWorkbenchChatPanel
+                    projectRoot={workbench.activeProject.rootPath}
+                    currentFilePath={workbench.selectedFilePath}
+                    pendingBrowserElementSelections={model.pendingBrowserElementSelections}
+                    onBrowserElementSelectionsConsumed={
+                      model.actions.consumeWorkbenchBrowserElementSelections
+                    }
+                    pendingFileReferences={model.pendingChatFileReferences}
+                    onFileReferencesConsumed={model.actions.consumeWorkbenchChatFileReferences}
+                    onOpenFileChange={model.actions.handleWorkbenchChatFileChangeOpen}
+                    onOpenWorkspacePath={model.actions.handleWorkbenchChatWorkspacePathOpen}
+                    onReviewFileChanges={model.actions.handleWorkbenchChatFileChangesReview}
+                    onReviewRunChanges={model.actions.handleWorkbenchChatRunChangesReview}
+                  />
+                </Suspense>
+              )}
             </div>
           </aside>
           <aside className={styles.rightToolRail} aria-label={t('workbench.rightToolWindows')}>
@@ -872,7 +880,7 @@ export function StandaloneWorkbenchPagePresentation({
                 <CodeInsightPanel
                   hideHeader
                   projectRoot={workbench.activeProject.rootPath}
-                  activeProblemId={editorNavigation.activeProblemId}
+                  activeProblemStore={editorNavigation.activeProblemStore}
                   onActiveProblemChange={(problem) =>
                     editorNavigation.setActiveProblemId(problem.id)
                   }
@@ -915,7 +923,7 @@ export function StandaloneWorkbenchPagePresentation({
           selectedFilePath={
             coveringDiffItem?.path ?? coveringLightTab?.path ?? workbench.selectedFilePath
           }
-          cursorPosition={editorNavigation.cursorPosition}
+          cursorStore={editorNavigation.cursorStore}
           hasUnsavedChanges={
             coveringDiffItem || coveringLightTab ? false : workbench.hasUnsavedChanges
           }
@@ -928,6 +936,8 @@ export function StandaloneWorkbenchPagePresentation({
           isSavingFile={workbench.isSavingFile}
           openFileCount={workbench.openTabs.length}
           commandStatusLabel={commandStatusLabel}
+          isIndexingProject={workbench.isIndexingProject}
+          projectIndexProgress={workbench.projectIndexProgress}
           textFormat={selectedTextFormat}
           indentation={coveringDiffItem || coveringLightTab ? null : editorNavigation.indentation}
           onChangeIndentation={editorNavigation.requestIndentationChange}
@@ -967,8 +977,8 @@ export function StandaloneWorkbenchPagePresentation({
             activeProject={workbench.activeProject}
             openTabs={workbench.openTabs}
             activeFilePath={workbench.selectedFilePath}
-            activeFileContent={workbench.editorContent}
-            activeFileCursor={editorNavigation.cursorPosition}
+            activeFileContent={workbench.readEditorContent(workbench.selectedFilePath) ?? workbench.editorContent}
+            activeFileCursor={editorNavigation.readCursorPosition()}
             recentFilePaths={model.recentFilePaths}
             projectFiles={model.projectFiles}
             commandPalette={model.commandPalette}

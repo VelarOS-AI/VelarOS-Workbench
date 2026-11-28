@@ -5,7 +5,11 @@ import { AppError, isFiniteNumber, isObject, isString, Log, Result } from '@vela
 import type { Result as ResultType } from '@velaros-ai/velaros/core/result'
 import { isRecord } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
-import { type WorkbenchAccent, type WorkbenchThemeId } from '@shared/workbenchAppearance'
+import {
+  isWorkbenchTheme,
+  type WorkbenchAccent,
+  type WorkbenchThemeId,
+} from '@shared/workbenchAppearance'
 import {
   type WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
   type WorkbenchWebSearchEngine,
@@ -141,12 +145,6 @@ export const DEFAULT_WORKBENCH_PROJECT_RUN_SETTINGS: WorkbenchProjectRunSettings
   configurationId: '',
 }
 
-const WorkbenchThemes = new Set<WorkbenchThemeId>([
-  'light-modern',
-  'dark-modern',
-  'warm-paper',
-  'midnight-blue',
-])
 export const WORKBENCH_PERMISSION_CONFIRMATION_MODES = Object.freeze([
   'standard-open',
   'ask-every-time',
@@ -237,29 +235,10 @@ function normalizeChoice<T extends string>(value: any, allowed: ReadonlySet<T>, 
   return isString(value) && allowed.has(value as T) ? (value as T) : fallback
 }
 
-function normalizeWorkbenchThemeChoice(value: any): WorkbenchThemeId {
-  switch (value) {
-    // Legacy tinted/neutral light themes collapse onto the neutral VSCode light preset.
-    case 'light-plus':
-    case 'warm':
-    case 'cool':
-    case 'light':
-    case 'classic':
-    case 'graphite':
-      return 'light-modern'
-    // Legacy dark themes map onto the neutral VSCode dark preset.
-    case 'dark-plus':
-    case 'dark':
-    case 'darcula':
-      return 'dark-modern'
-  }
-
-  return normalizeChoice(value, WorkbenchThemes, DEFAULT_WORKBENCH_PREFERENCES.theme)
-}
-
 export function normalizeWorkbenchPreferences(
   preferences: Partial<WorkbenchPreferences> | undefined
 ): WorkbenchPreferences {
+  const theme = preferences?.theme
   return {
     accent: normalizeChoice(
       preferences?.accent,
@@ -308,7 +287,7 @@ export function normalizeWorkbenchPreferences(
       WorkbenchDiffLayouts,
       DEFAULT_WORKBENCH_PREFERENCES.diffLayout
     ),
-    theme: normalizeWorkbenchThemeChoice(preferences?.theme),
+    theme: isWorkbenchTheme(theme) ? theme : DEFAULT_WORKBENCH_PREFERENCES.theme,
     localHistoryThrottleSeconds: clampNumber(
       preferences?.localHistoryThrottleSeconds,
       0,

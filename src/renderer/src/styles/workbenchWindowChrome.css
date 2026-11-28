@@ -19,7 +19,7 @@
   height: 32px;
   padding: 0 148px 0 12px;
   overflow: hidden;
-  background: var(--workbench-bg);
+  background: var(--workbench-toolbar);
   color: var(--workbench-text);
   font:
     12px 'Segoe UI',

@@ -235,7 +235,8 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   /** 用户明确选的格式转换（转换为 UTF-8、换换行符）：记为未保存并立即保存。 */
   onConvertSelectedFileTextFormat?: (format: WorkbenchTextFormat) => void
   onResolveExternalFileConflict: (resolution: 'external' | 'local') => void
-  onEditorContentChange: (content: string) => void
+  onEditorContentChange: (content: string, defer?: boolean) => void
+  readEditorContent?: (path: Nullable<string>) => string | undefined
   onOpenDirectory: (path: string) => void
   onRevealSelectedFile: () => void
   onGoToDefinition: (path: string, line: number, column?: number) => void
@@ -352,6 +353,7 @@ export function EditorPanel({
     onConvertSelectedFileTextFormat,
     onResolveExternalFileConflict,
     onEditorContentChange,
+    readEditorContent,
     onGoToDefinition,
     onApplyLanguageServiceRename,
     onApplyLanguageServiceEdit,
@@ -428,9 +430,9 @@ export function EditorPanel({
       y: number
     }>
   >(null)
-  const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 })
+  const cursorPosition = useRef({ line: 1, column: 1 })
   const { symbolLocations } = group
-  const [activeDiagnosticIndex, setActiveDiagnosticIndex] = useState(-1)
+  const activeDiagnosticIndex = useRef(-1)
   const onActiveProblemIdChangeLatest = useLatest(onActiveProblemIdChange)
   const lastSyncedProblemIdRef = useRef<Nullable<string>>(null)
 
@@ -478,7 +480,7 @@ export function EditorPanel({
   )
   const applyDiagnosticSelection = useCallback(
     (index: number, problemId: Nullable<string>) => {
-      setActiveDiagnosticIndex((current) => (current === index ? current : index))
+      activeDiagnosticIndex.current = index
       if (lastSyncedProblemIdRef.current === problemId) return
 
       lastSyncedProblemIdRef.current = problemId
@@ -512,21 +514,19 @@ export function EditorPanel({
   )
   useEffect(() => {
     lastSyncedProblemIdRef.current = null
-    setActiveDiagnosticIndex((current) => (current === -1 ? current : -1))
+    activeDiagnosticIndex.current = -1
     onActiveProblemIdChangeLatest.current?.(null)
   }, [onActiveProblemIdChangeLatest, selectedFilePath])
   const handleCursorPositionChange = useCallback<
     NonNullable<WorkbenchEditorPanelWorkspaceProps['onCursorPositionChange']>
   >(
     (position) => {
-      setCursorPosition((current) =>
-        current.line === position.line && current.column === position.column
-          ? current
-          : { line: position.line, column: position.column }
-      )
+      cursorPosition.current = position
+      if (sortedFileDiagnostics.length)
+        syncDiagnosticSelectionFromCursor(position.line, position.column)
       onCursorPositionChange?.(position)
     },
-    [onCursorPositionChange]
+    [onCursorPositionChange, sortedFileDiagnostics.length, syncDiagnosticSelectionFromCursor]
   )
   const navigateSymbolLocation = useCallback(
     (location: WorkbenchLanguageServiceLocation) => {
@@ -536,22 +536,17 @@ export function EditorPanel({
     [onGoToDefinition, symbolLocations]
   )
   useEffect(() => {
-    syncDiagnosticSelectionFromCursor(cursorPosition.line, cursorPosition.column)
-  }, [
-    cursorPosition.column,
-    cursorPosition.line,
-    sortedFileDiagnostics,
-    syncDiagnosticSelectionFromCursor,
-  ])
+    syncDiagnosticSelectionFromCursor(cursorPosition.current.line, cursorPosition.current.column)
+  }, [syncDiagnosticSelectionFromCursor])
   const navigateToDiagnostic = useCallback(
     (direction: 'next' | 'previous') => {
       if (!sortedFileDiagnostics.length) return
 
       const nextIndex = resolveWorkbenchDiagnosticNavigationIndex({
         diagnostics: sortedFileDiagnostics,
-        activeIndex: activeDiagnosticIndex,
-        line: cursorPosition.line,
-        column: cursorPosition.column,
+        activeIndex: activeDiagnosticIndex.current,
+        line: cursorPosition.current.line,
+        column: cursorPosition.current.column,
         direction,
       })
       if (nextIndex < 0) return
@@ -568,10 +563,7 @@ export function EditorPanel({
       })
     },
     [
-      activeDiagnosticIndex,
       applyDiagnosticSelection,
-      cursorPosition.column,
-      cursorPosition.line,
       onCursorPositionLatest,
       selectedFilePath,
       sortedFileDiagnostics,
@@ -825,9 +817,7 @@ export function EditorPanel({
   useEffect(() => {
     // 代码编辑器换文件时自己报光标（换回来的文件回到上次的位置）；图片、Markdown 预览没有光标，从头算。
     if (!selectedFile || selectedImagePreview || markdownPreviewActive) {
-      setCursorPosition((current) =>
-        current.line === 1 && current.column === 1 ? current : { line: 1, column: 1 }
-      )
+      cursorPosition.current = { line: 1, column: 1 }
       onCursorPositionLatest.current?.({ line: 1, column: 1 })
     }
     // 查找栏跟着换过去的文件接着找（与 VS Code 一样不关）；「在选区中查找」的范围属于上一个文件，关掉。
@@ -1254,6 +1244,7 @@ export function EditorPanel({
                         path={selectedFile.path}
                         language={selectedLanguage}
                         value={editorContent}
+                        readEditorContent={readEditorContent}
                         readOnly={!canEditSelectedFile || selectedFile.truncated}
                         disabled={false}
                         projectContextIndex={projectContextIndex}

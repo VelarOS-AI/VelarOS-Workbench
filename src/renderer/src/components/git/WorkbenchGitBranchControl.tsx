@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactElement, useMemo, useRef, useState } from 'react'
 import { CaretDownIcon, GitBranchIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import { useWorkbenchGitOperation } from '@renderer/hooks/useWorkbenchGitOperation'
 import {
   reportWorkbenchGitRemoteActionFailure,
   reportWorkbenchGitRemoteActionSuccess,
@@ -16,6 +17,10 @@ import {
   resolveWorkbenchGitBranchSwitch,
   type WorkbenchGitRemoteActionItem,
 } from '@renderer/models/git/workbenchGitBranchMenuModel'
+import {
+  resolveWorkbenchGitListedBranch,
+  type WorkbenchGitOperationBranch,
+} from '@renderer/models/git/workbenchGitOperationModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -49,6 +54,7 @@ interface WorkbenchGitBranchControlProps {
   gitSshKeyPath?: string
   hasUnsavedOpenTabs: boolean
   onRefresh: () => Promise<void>
+  onWorkingTreeChanged: () => Promise<void>
   /** 切了分支：工作区里的文件跟着变了。 */
   onRepositoryChanged: () => void | Promise<void>
   /** 拉取出了冲突：打开提交面板，冲突文件列在「合并冲突」里。 */
@@ -61,29 +67,34 @@ const ConflictNoticeDurationMs = 12_000
 /** 新建分支在跑时 `pendingBranch` 里记的值（分支名里不会有空格，和签出的分支名撞不上）。 */
 const CreatingBranch = 'create branch'
 
-/**
- * 顶栏上唯一的 Git 控件。按钮上是当前分支（分离的 HEAD 写「分离的 HEAD · 1a2b3c4」）和它落后（↓）、领先
- * （↑）上游几个提交；点开是一块面板：当前分支的拉取、推送、同步、获取远端，下面是分支列表（签出、推送
- * 某个分支）和新建分支。
- *
- * 远端操作经 {@link useWorkbenchGitRemoteAction} 跑：这个项目有一个在跑时（不管是这里还是提交面板发起
- * 的）按钮转圈，点击转圈的操作按钮可以取消。
- */
 export function WorkbenchGitBranchControl({
   workspaceRoot,
   summary,
   gitSshKeyPath,
   hasUnsavedOpenTabs,
   onRefresh,
+  onWorkingTreeChanged,
   onRepositoryChanged,
   onOpenCommitTool,
 }: WorkbenchGitBranchControlProps): Nullable<ReactElement> {
   const { messageLatest, t, tLatest } = useStableWorkbenchMessageTranslate()
   const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
+  const gitOperation = useWorkbenchGitOperation({
+    workspaceRoot,
+    summary,
+    hasUnsavedOpenTabs,
+    onRefresh: onWorkingTreeChanged,
+    onOpenCommitTool: () => {
+      handleMenuOpenChange(false)
+      onOpenCommitTool()
+    },
+  })
   const [menuOpen, setMenuOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [selectedBranch, setSelectedBranch] = useState<Nullable<WorkspaceGitBranch>>(null)
   const [pendingBranch, setPendingBranch] = useState<Nullable<string>>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createSource, setCreateSource] = useState<Nullable<WorkbenchGitOperationBranch>>(null)
   const [newBranchName, setNewBranchName] = useState('')
   const [checkoutCreatedBranch, setCheckoutCreatedBranch] = useState(true)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -95,8 +106,7 @@ export function WorkbenchGitBranchControl({
     () => listWorkbenchGitMenuBranches(summary.branches, { branch: branchName, upstream }),
     [branchName, summary.branches, upstream]
   )
-  // 分离的 HEAD 上控件照样在：按钮上写「分离的 HEAD · 1a2b3c4」（变基到一半是「feature（变基中）」），列表里
-  // 没有哪个分支算当前的，点哪个都能切过去。
+  // 分离的 HEAD 仍可打开分支菜单；变基期间保留正在变基的分支名称。
   const headLabel = status
     ? describeWorkbenchGitBranchControlHead(status, summary.operation, t)
     : null
@@ -105,9 +115,10 @@ export function WorkbenchGitBranchControl({
   const running = remoteAction.running
   const creating = pendingBranch === CreatingBranch
   // 同一时刻只做一件事：远端操作跑着时不切分支，切分支时不起远端操作。
-  const locked = !!running || !!pendingBranch
+  const locked = !!running || !!pendingBranch || !!gitOperation.pending
   // 合并、变基、拣选、撤销进行到一半：先去提交面板继续或放弃。这时只有获取远端还能用。
   const operationBlock = describeWorkbenchGitOperationBlock(summary.operation, t)
+  const canIntegrate = !!branchName && !status.conflictedFiles
   const detachedHead = status.detachedHead
   const { ahead, behind } = status
   const tooltip = describeWorkbenchGitBranchControl(status, t)
@@ -136,6 +147,7 @@ export function WorkbenchGitBranchControl({
     setMenuOpen(open)
     if (!open) {
       setSearch('')
+      setSelectedBranch(null)
       return
     }
     // 打开时重读一次：分支可能是在终端里建的、删的。
@@ -173,8 +185,10 @@ export function WorkbenchGitBranchControl({
     }
   }
 
-  function openCreateBranchDialog(): void {
+  function openCreateBranchDialog(branch?: WorkspaceGitBranch): void {
+    if (locked || operationBlock) return
     handleMenuOpenChange(false)
+    setCreateSource(branch ? resolveWorkbenchGitListedBranch(branch) : null)
     setNewBranchName('')
     setCheckoutCreatedBranch(true)
     setCreateDialogOpen(true)
@@ -193,18 +207,23 @@ export function WorkbenchGitBranchControl({
     if (checkoutCreatedBranch && warnUnsavedOpenTabs()) return
     setPendingBranch(CreatingBranch)
     try {
+      const startPoint = createSource?.revision
       const created = checkoutCreatedBranch
         ? Result.unwrap(
-            await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(
-              workspaceRoot,
-              name,
-              { create: true }
-            )
+            await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(workspaceRoot, name, {
+              create: true,
+              startPoint,
+            })
           ).branch
         : Result.unwrap(
-            await workbenchHost.kernel.workspace.createWorkspaceGitBranch(workspaceRoot, name)
+            await workbenchHost.kernel.workspace.createWorkspaceGitBranch(
+              workspaceRoot,
+              name,
+              startPoint
+            )
           ).branch
-      await onRefresh()
+      if (checkoutCreatedBranch) await onRepositoryChanged()
+      else await onRefresh()
       messageLatest.current.success({
         title: tLatest.current('workbench.gitBranchCreateSuccessTitle'),
         description: tLatest.current(
@@ -221,6 +240,11 @@ export function WorkbenchGitBranchControl({
     } finally {
       setPendingBranch(null)
     }
+  }
+
+  function runBranchOperation(action: 'merge' | 'rebase', branch: WorkspaceGitBranch): void {
+    if (locked || operationBlock || !canIntegrate) return
+    void gitOperation.run({ action, branch: resolveWorkbenchGitListedBranch(branch) })
   }
 
   /**
@@ -282,6 +306,9 @@ export function WorkbenchGitBranchControl({
         open={menuOpen}
         onOpenChange={handleMenuOpenChange}
         onOpenAutoFocus={() => searchRef.current?.focus({ preventScroll: true })}
+        onCloseAutoFocus={(event) => {
+          if (createDialogOpen) event.preventDefault()
+        }}
         anchorClassName={`${styles.filePanelPickerAnchor} ${styles.gitBranchControlAnchor}`}
         className={getTopBarControlPanelClassName(styles.gitBranchMenuPanel)}
         data-topbar-panel="picker"
@@ -317,6 +344,7 @@ export function WorkbenchGitBranchControl({
         <WorkbenchGitBranchMenu
           branches={branches}
           currentBranch={branchName}
+          selectedBranch={selectedBranch}
           search={search}
           searchRef={searchRef}
           remoteActions={describeWorkbenchGitRemoteActions(status, t, operationBlock)}
@@ -325,11 +353,14 @@ export function WorkbenchGitBranchControl({
           switchingBranch={creating ? null : pendingBranch}
           locked={locked}
           branchesBlocked={operationBlock}
+          canIntegrate={canIntegrate}
           onSearchChange={setSearch}
+          onSelectBranch={setSelectedBranch}
           onRunRemoteAction={(action) => void runRemoteAction(action)}
           onCancelRemoteAction={() => remoteAction.cancel()}
           onSwitchBranch={(branch) => void switchBranch(branch)}
           onPushBranch={(branch) => void runRemoteAction('upload', branch.name)}
+          onRunBranchOperation={runBranchOperation}
           onOpenCreateBranch={openCreateBranchDialog}
         />
       </AnchoredPopover>
@@ -338,11 +369,15 @@ export function WorkbenchGitBranchControl({
           <DialogHeader>
             <DialogTitle>{t('workbench.gitBranchCreateDialogTitle')}</DialogTitle>
             <DialogDescription>
-              {detachedHead
-                ? t('workbench.gitBranchCreateFromDetachedDescription', {
-                    sha: detachedHead.shortSha,
+              {createSource
+                ? t('workbench.gitBranchCreateFromSelectedDescription', {
+                    branch: createSource.name,
                   })
-                : t('workbench.gitBranchCreateDialogDescription', { branch: headLabel })}
+                : detachedHead
+                  ? t('workbench.gitBranchCreateFromDetachedDescription', {
+                      sha: detachedHead.shortSha,
+                    })
+                  : t('workbench.gitBranchCreateDialogDescription', { branch: headLabel })}
             </DialogDescription>
           </DialogHeader>
           <form

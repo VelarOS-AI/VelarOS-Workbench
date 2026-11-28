@@ -1,215 +1,231 @@
 import { EditorView } from '@codemirror/view'
 
-import {
-  isWorkbenchDarkTheme,
-  type WorkbenchThemeId,
-} from '../workbenchPreferences'
+import { getWorkbenchJetBrainsIcon } from '../workbenchJetBrainsIcons'
+import { isWorkbenchDarkTheme, type WorkbenchThemeId } from '../workbenchPreferences'
 
-import { WorkbenchSymbolKindGlyphMasks } from './workbenchSymbolKindGlyphs'
+import { getWorkbenchCodeTokenPalette } from './workbenchCodeMirrorTheme'
 
-function iconGlyphStyle(color: string, maskImage: string) {
-  return {
-    border: '0',
-    borderRadius: '2px',
-    backgroundColor: color,
-    color,
-    WebkitMaskImage: maskImage,
-    WebkitMaskPosition: 'center',
-    WebkitMaskRepeat: 'no-repeat',
-    WebkitMaskSize: '1em 1em',
-    maskImage,
-    maskPosition: 'center',
-    maskRepeat: 'no-repeat',
-    maskSize: '1em 1em',
-  }
+const Popup = '.cm-tooltip.cm-tooltip-autocomplete'
+const Row = `${Popup} > ul > li[role="option"]`
+const Selected = `${Row}[aria-selected="true"]`
+const Icon = `${Row} .cm-completionIcon`
+const Preview = '.cm-tooltip.cm-completionInfo'
+const Mono = 'var(--font-mono, ui-monospace, monospace)'
+const Muted = 'var(--workbench-text-muted)'
+const Ink = 'var(--workbench-text)'
+const Surface = 'var(--workbench-editor-tooltip-bg, var(--workbench-bg))'
+const Accent = 'var(--workbench-theme-color)'
+const EditorFontSize = 'var(--workbench-editor-font-size, 12.5px)'
+const EditorLineHeight = 'var(--workbench-editor-line-height, 20.25px)'
+
+const CompletionIcons: Record<string, string> = {
+  class: 'node-class',
+  color: 'node-property',
+  constant: 'node-constant',
+  constructor: 'node-constructor',
+  enum: 'node-enum',
+  'enum-member': 'node-field',
+  event: 'node-method',
+  file: 'file-text',
+  folder: 'node-folder',
+  function: 'node-function',
+  interface: 'node-interface',
+  keyword: 'node-word',
+  method: 'node-method',
+  namespace: 'node-module',
+  operator: 'node-word',
+  parameter: 'node-parameter',
+  property: 'node-property',
+  snippet: 'node-template',
+  tag: 'node-tag',
+  text: 'node-word',
+  type: 'node-type',
+  value: 'node-constant',
+  variable: 'node-variable',
 }
 
-function createWorkbenchAutocompleteTheme(isDark: boolean) {
-  const popupBg = 'var(--workbench-editor-tooltip-bg, var(--workbench-bg))'
-  const popupBorder = 'var(--workbench-border)'
-  const popupFg = 'var(--workbench-text)'
-  const selectedBg = `color-mix(
-    in oklab,
-    var(--workbench-theme-color) ${isDark ? '22%' : '14%'},
-    var(--workbench-editor-tooltip-bg, var(--workbench-bg))
-  )`
-  const selectedFg = 'var(--workbench-text)'
-  const selectedAccent = 'var(--workbench-theme-color)'
-  const detailColor = 'var(--workbench-text-muted)'
-  const selectedMetadataColor = `color-mix(
-    in oklab,
-    var(--workbench-text-muted) 70%,
-    var(--workbench-theme-color)
-  )`
-  const matchedColor = 'var(--workbench-active-fg, var(--workbench-theme-color))'
-
-  const iconFunction = isDark ? '#f48771' : '#c44b42'
-  const iconMethod = isDark ? '#dcdcaa' : '#795e26'
-  const iconClass = isDark ? '#4ec9b0' : '#267f99'
-  const iconInterface = isDark ? '#4ec9b0' : '#267f99'
-  const iconVariable = isDark ? '#9cdcfe' : '#001080'
-  const iconProperty = isDark ? '#9cdcfe' : '#871094'
-  const iconKeyword = isDark ? '#c586c0' : '#0000ff'
-  const iconType = isDark ? '#4ec9b0' : '#267f99'
-  const iconConstant = isDark ? '#4fc1ff' : '#0070c1'
-  const iconEnum = isDark ? '#b8d7a3' : '#2b91af'
-  const iconNamespace = isDark ? '#c8c8c8' : '#444444'
-  const iconTag = isDark ? '#569cd6' : '#800000'
-  const iconText = isDark ? '#a8a8a8' : '#616161'
-
-  const iconBase = {
-    width: '1.25em',
-    minWidth: '1.25em',
-    height: '1.25em',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '0',
-    backgroundImage: 'none',
-    fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
-    fontSize: '0.78em',
-    fontWeight: '650',
-    fontStyle: 'normal',
-    lineHeight: '1',
-    opacity: '1',
-    padding: '0',
-    boxSizing: 'border-box',
-    flexShrink: '0',
-  } as const
+function createWorkbenchAutocompleteTheme(theme: WorkbenchThemeId) {
+  const dark = isWorkbenchDarkTheme(theme)
+  const palette = getWorkbenchCodeTokenPalette(theme)
+  const border = '1px solid var(--workbench-border)'
+  const shadow = dark ? '0 8px 22px #0008, 0 1px 3px #0008' : '0 8px 22px #17213826, 0 1px 3px #1721381c'
+  const selected = `color-mix(in oklab, ${Accent} ${dark ? 22 : 14}%, ${Surface})`
+  const match = `color-mix(in oklab, ${Accent} ${dark ? 65 : 62}%, ${Ink})`
+  const iconUrl = (name: string) => `url("${getWorkbenchJetBrainsIcon(name, dark)}")`
+  const kindStyles = Object.fromEntries(
+    Object.entries(CompletionIcons).map(([kind, asset]) => [
+      `${Icon}.cm-completionIcon-${kind}`,
+      { backgroundImage: iconUrl(asset) },
+    ])
+  )
+  const syntaxColors = {
+    keyword: palette.keyword, builtinType: palette.type, type: palette.type,
+    name: palette.property, function: palette.function, number: palette.number, string: palette.string,
+    operator: palette.operator, link: palette.link,
+  }
+  const syntaxStyles = Object.fromEntries(Object.entries(syntaxColors).map(([role, color]) => [
+    `${Preview} .cm-workbenchCompletionToken-${role}`, { color },
+  ]))
+  const ellipsis = { minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }
+  const metadata = { ...ellipsis, fontSize: '0.88em', color: Muted, fontStyle: 'normal' }
 
   return EditorView.theme(
     {
-      '.cm-tooltip.cm-tooltip-autocomplete': {
-        border: `1px solid ${popupBorder}`,
-        borderRadius: '6px',
-        backgroundColor: popupBg,
-        color: popupFg,
-        boxShadow: isDark
-          ? '0 10px 28px rgba(0, 0, 0, 0.48)'
-          : '0 10px 28px rgba(15, 23, 42, 0.16)',
-        overflow: 'hidden',
+      [Popup]: {
         padding: '0',
+        border,
+        borderRadius: '7px',
+        color: Ink,
+        backgroundColor: Surface,
+        boxShadow: shadow,
+        overflow: 'visible',
       },
-      '.cm-tooltip.cm-tooltip-autocomplete > ul': {
-        fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
-        fontSize: 'var(--workbench-editor-font-size, 12.5px)',
-        lineHeight: 'var(--workbench-editor-line-height, 20.25px)',
+      [`${Popup} > ul`]: {
+        boxSizing: 'border-box',
+        width: 'min(clamp(19em, 33vw, 36em), calc(100vw - 24px))',
+        maxWidth: 'none',
+        maxHeight: `min(calc((${EditorLineHeight} + 4px) * 10 + 8px), 44vh)`,
+        margin: '0',
+        padding: '4px',
+        borderRadius: 'inherit',
+        fontFamily: Mono,
+        fontSize: EditorFontSize,
+        lineHeight: EditorLineHeight,
         fontVariantLigatures: 'none',
-        maxHeight: 'min(calc(var(--workbench-editor-line-height, 20.25px) * 12), 48vh)',
-        minWidth: 'min(34em, calc(100vw - 24px))',
-        maxWidth: 'min(760px, calc(100vw - 24px))',
-        padding: '3px',
-        margin: '0',
         scrollbarWidth: 'thin',
-        scrollbarColor: 'color-mix(in oklab, var(--workbench-text-muted) 42%, transparent) transparent',
+        scrollbarColor: `color-mix(in oklab, ${Muted} 45%, transparent) transparent`,
+        scrollbarGutter: 'stable',
       },
-      '.cm-tooltip.cm-tooltip-autocomplete ul li': {
-        display: 'flex',
+      [Row]: {
+        boxSizing: 'border-box',
+        display: 'grid',
+        gridTemplateColumns: '1.7em auto minmax(0, 1fr) minmax(0, max-content)',
         alignItems: 'center',
-        gap: '0.48em',
-        minHeight: 'max(1.8em, var(--workbench-editor-line-height, 20.25px))',
+        columnGap: '0.58em',
+        minHeight: `calc(${EditorLineHeight} + 4px)`,
+        padding: '2px 8px 2px 5px',
         margin: '0',
-        padding: '0.12em 0.62em 0.12em 0.42em',
         border: '0',
-        borderRadius: '3px',
-        color: popupFg,
+        borderRadius: '4px',
+        backgroundColor: 'transparent',
+        color: Ink,
         cursor: 'default',
       },
-      '.cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected]': {
-        backgroundColor: selectedBg,
-        color: selectedFg,
-        boxShadow: `inset 2px 0 0 ${selectedAccent}`,
+      [`${Row}:not([aria-selected="true"]):hover`]: {
+        backgroundColor: `color-mix(in oklab, ${Ink} 5%, ${Surface})`,
       },
-      '.cm-completionLabel': {
-        flex: '0 1 auto',
-        minWidth: '4em',
-        maxWidth: '44%',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        color: popupFg,
-        fontWeight: '450',
+      [Selected]: {
+        backgroundColor: selected,
+        color: Ink,
       },
-      '.cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionLabel': {
-        color: selectedFg,
+      [`${Row} .cm-completionLabel`]: {
+        ...ellipsis,
+        gridColumn: '2',
+        maxWidth: 'min(24ch, 43vw)',
+        color: Ink,
+        fontWeight: '520',
       },
-      '.cm-completionDetail': {
-        flex: '1 1 auto',
-        minWidth: '0',
-        marginLeft: '0.2em',
-        overflow: 'hidden',
-        color: detailColor,
-        fontSize: '0.88em',
-        fontStyle: 'normal',
-        opacity: '1',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
+      [`${Row}.cm-workbenchCompletionDeprecated .cm-completionLabel`]: {
+        color: Muted,
+        textDecoration: 'line-through',
       },
-      '.cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail': {
-        color: selectedMetadataColor,
-      },
-      '.cm-workbenchCompletionType': {
-        flex: '0 1 auto',
-        maxWidth: '38%',
-        minWidth: '0',
-        marginLeft: 'auto',
-        paddingLeft: '0.8em',
-        overflow: 'hidden',
-        color: detailColor,
-        fontSize: '0.88em',
-        fontStyle: 'normal',
-        textAlign: 'right',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      },
-      '.cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected] .cm-workbenchCompletionType': {
-        color: selectedMetadataColor,
-      },
-      '.cm-completionMatchedText': {
-        color: matchedColor,
+      [`${Row} .cm-completionMatchedText`]: {
+        color: match,
         fontWeight: '700',
         textDecoration: 'none',
       },
-      '.cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionMatchedText': {
-        color: selectedAccent,
+      [`${Row} .cm-completionDetail`]: { ...metadata, gridColumn: '3', margin: '0', opacity: '1' },
+      [`${Row} .cm-workbenchCompletionType, ${Row} .cm-workbenchCompletionSource`]: {
+        ...metadata,
+        gridColumn: '4',
+        justifySelf: 'end',
+        maxWidth: 'min(19ch, 25vw)',
+        textAlign: 'end',
       },
-      '.cm-completionIcon': iconBase,
-      '.cm-completionIcon-function': iconGlyphStyle(iconFunction, WorkbenchSymbolKindGlyphMasks.function),
-      '.cm-completionIcon-method': iconGlyphStyle(iconMethod, WorkbenchSymbolKindGlyphMasks.method),
-      '.cm-completionIcon-class': iconGlyphStyle(iconClass, WorkbenchSymbolKindGlyphMasks.class),
-      '.cm-completionIcon-interface': iconGlyphStyle(iconInterface, WorkbenchSymbolKindGlyphMasks.interface),
-      '.cm-completionIcon-variable': iconGlyphStyle(iconVariable, WorkbenchSymbolKindGlyphMasks.variable),
-      '.cm-completionIcon-property': iconGlyphStyle(iconProperty, WorkbenchSymbolKindGlyphMasks.property),
-      '.cm-completionIcon-keyword': iconGlyphStyle(iconKeyword, WorkbenchSymbolKindGlyphMasks.keyword),
-      '.cm-completionIcon-type': iconGlyphStyle(iconType, WorkbenchSymbolKindGlyphMasks.type),
-      '.cm-completionIcon-constant': iconGlyphStyle(iconConstant, WorkbenchSymbolKindGlyphMasks.constant),
-      '.cm-completionIcon-enum': iconGlyphStyle(iconEnum, WorkbenchSymbolKindGlyphMasks.enum),
-      '.cm-completionIcon-namespace': iconGlyphStyle(iconNamespace, WorkbenchSymbolKindGlyphMasks.namespace),
-      '.cm-completionIcon-tag': iconGlyphStyle(iconTag, WorkbenchSymbolKindGlyphMasks.tag),
-      '.cm-completionIcon-text': iconGlyphStyle(iconText, WorkbenchSymbolKindGlyphMasks.text),
-      '.cm-tooltip.cm-completionInfo': {
+      [`${Row} .cm-workbenchCompletionSource`]: {
+        fontFamily: 'var(--font-ui, system-ui, sans-serif)',
+        unicodeBidi: 'plaintext',
+      },
+      [Icon]: {
+        gridColumn: '1',
+        display: 'grid',
+        placeItems: 'center',
         boxSizing: 'border-box',
-        maxWidth: 'min(620px, calc(100vw - 24px))',
-        maxHeight: 'min(360px, 45vh)',
-        padding: '0.65em 0.8em',
-        border: `1px solid ${popupBorder}`,
-        borderRadius: '6px',
-        backgroundColor: popupBg,
-        color: popupFg,
-        boxShadow: isDark
-          ? '0 10px 26px rgba(0, 0, 0, 0.42)'
-          : '0 10px 26px rgba(15, 23, 42, 0.14)',
-        fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
-        fontSize: 'var(--workbench-editor-font-size, 12.5px)',
+        inlineSize: '1.55em',
+        blockSize: '1.55em',
+        minWidth: '0',
+        padding: '0',
+        border: '0',
+        borderRadius: '4px',
+        backgroundImage: iconUrl('node-word'),
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: '1.28em 1.28em',
+        fontSize: 'inherit',
+        opacity: '1',
+      },
+      [`${Icon}::after`]: { content: 'none' },
+      ...kindStyles,
+      [Preview]: {
+        boxSizing: 'border-box',
+        padding: '0',
+        border,
+        borderRadius: '7px',
+        color: Ink,
+        backgroundColor: Surface,
+        boxShadow: shadow,
+        fontSize: EditorFontSize,
         lineHeight: '1.5',
         overflow: 'auto',
         scrollbarWidth: 'thin',
       },
+      [`${Preview}:has(> .cm-workbenchCompletionPreview[hidden])`]: {
+        visibility: 'hidden',
+        pointerEvents: 'none',
+      },
+      '.cm-workbenchCompletionSignature': {
+        display: 'block',
+        padding: '8px 10px',
+        backgroundColor: `color-mix(in oklab, ${Ink} 4%, ${Surface})`,
+        fontFamily: Mono,
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+      },
+      '.cm-workbenchCompletionDocumentation': {
+        padding: '8px 10px',
+        fontFamily: 'var(--font-ui, system-ui, sans-serif)',
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+      },
+      '.cm-workbenchCompletionDocumentation code': {
+        fontFamily: Mono,
+        backgroundColor: `color-mix(in oklab, ${Ink} 6%, ${Surface})`,
+      },
+      '.cm-workbenchCompletionCodeBlock': {
+        display: 'block',
+        padding: '6px 8px',
+        margin: '5px 0',
+        borderRadius: '4px',
+      },
+      '.cm-workbenchCompletionDocumentation a': {
+        color: palette.link,
+        textDecoration: 'underline',
+        textUnderlineOffset: '2px',
+      },
+      ...syntaxStyles,
+      '.cm-workbenchCompletionOrigin': {
+        padding: '6px 10px',
+        borderTop: border,
+        color: Muted,
+        fontFamily: Mono,
+        fontSize: '0.86em',
+        overflowWrap: 'anywhere',
+      },
     },
-    { dark: isDark }
+    { dark }
   )
 }
 
 export function getWorkbenchCodeMirrorAutocompleteTheme(theme: WorkbenchThemeId) {
-  return createWorkbenchAutocompleteTheme(isWorkbenchDarkTheme(theme))
+  return createWorkbenchAutocompleteTheme(theme)
 }

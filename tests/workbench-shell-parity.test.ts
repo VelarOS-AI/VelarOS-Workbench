@@ -99,7 +99,10 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(adapter, /onOpenGitCommitTool:[\s\S]*setActiveLeftTool\('commit'\)/)
     assert.match(control, /switchWorkspaceGitBranch/)
     assert.match(control, /createWorkspaceGitBranch/)
-    assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)
+    assert.match(
+      control,
+      /switchWorkspaceGitBranch\([\s\S]*\{\s*create: true,\s*startPoint,?\s*\}/
+    )
     // 远端操作走统一入口（别处发起的这里也看得到、能取消）；列表里点的分支连名字一起交过去。
     assert.match(control, /useWorkbenchGitRemoteAction\(workspaceRoot\)/)
     assert.match(
@@ -133,7 +136,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(menu, /data-running=\{[^}]+\}[\s\S]*onCancelRemoteAction\(\)[\s\S]*SpinnerGapIcon/)
     assert.match(
       menu,
-      /gitBranchMenuRowActions[\s\S]*onSwitchBranch\(branch\)[\s\S]*renderRemoteAction\(/
+      /gitBranchMenuDetails[\s\S]*onSwitchBranch\(branch\)[\s\S]*onOpenCreateBranch\(branch\)/
     )
     assert.match(menu, /FolderIcon[\s\S]*renderNode\(child, depth \+ 1\)/)
     assert.match(topStyles, /\.gitBranchMenuSearch[\s\S]*var\(--topbar-panel-row-height\)/)

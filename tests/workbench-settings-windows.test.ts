@@ -84,6 +84,12 @@ test('settings reuse one native window, restore it and route project exit to the
   controller.open(owner.sender())
   assert.equal(created.length, 1)
   const first = created[0]!
+  assert.equal(first.visible, false)
+  controller.open(owner.sender())
+  assert.equal(created.length, 1)
+  assert.equal(first.visible, false)
+  assert.throws(() => controller.ready(owner.sender()), /Not a settings window/u)
+  controller.ready(first.sender())
   assert.equal(first.visible, true)
   first.minimized = true
   first.focused = false

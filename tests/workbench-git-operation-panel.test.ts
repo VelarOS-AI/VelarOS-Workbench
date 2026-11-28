@@ -80,7 +80,11 @@ void describe('Workbench Git operation requests', () => {
     })
     assert.equal(resolveWorkbenchGitRefBranch({ kind: 'tag', name: 'v1.0' }), null)
     assert.equal(resolveWorkbenchGitRefBranch({ kind: 'head', name: 'HEAD' }), null)
-    // 分支列表里的名字是 git 自己给的最短而不含糊的写法。
+    assert.deepEqual(
+      resolveWorkbenchGitListedBranch({ name: 'feature/login', ref: feature.revision }),
+      feature
+    )
+    // 旧快照只带 git 给出的短名。
     assert.deepEqual(resolveWorkbenchGitListedBranch({ name: 'heads/feature' }), {
       name: 'heads/feature',
       revision: 'heads/feature',

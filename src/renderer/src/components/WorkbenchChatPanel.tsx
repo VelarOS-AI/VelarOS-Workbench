@@ -1,5 +1,6 @@
 import {
   type HTMLAttributes,
+  memo,
   type ReactElement,
   useCallback,
   useEffect,
@@ -251,7 +252,7 @@ function WorkbenchChatSessionMenu({
   )
 }
 
-export function WorkbenchChatPanel({
+export const WorkbenchChatPanel = memo(function WorkbenchChatPanel({
   projectRoot,
   currentFilePath,
   pendingBrowserElementSelections = EmptyWorkbenchBrowserElementSelections,
@@ -542,4 +543,4 @@ export function WorkbenchChatPanel({
       </Dialog>
     </section>
   )
-}
+})

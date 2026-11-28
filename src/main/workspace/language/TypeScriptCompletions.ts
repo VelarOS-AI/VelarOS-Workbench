@@ -1,9 +1,16 @@
 import * as ts from 'typescript'
 
-import { type WorkbenchLanguageServiceCompletionItem, type WorkbenchLanguageServiceCompletionResolveData, type WorkbenchLanguageServiceCompletionTextEdit, type WorkbenchLanguageServiceEditFormat } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCompletionItem,
+  type WorkbenchLanguageServiceCompletionResolveData,
+  type WorkbenchLanguageServiceCompletionResolveResult,
+  type WorkbenchLanguageServiceCompletionTextEdit,
+  type WorkbenchLanguageServiceEditFormat,
+} from '@shared/contracts/workbench'
 
 import {
   buildWorkbenchTypeScriptFormatCodeSettings,
+  mapDisplayParts,
   rangeFromTextSpanInContent,
 } from './TypeScriptLanguageFeatures'
 
@@ -24,8 +31,9 @@ export function mapTypeScriptCompletionKind(kind: ts.ScriptElementKind): string 
   switch (kind) {
     case ts.ScriptElementKind.variableElement:
     case ts.ScriptElementKind.localVariableElement:
-    case ts.ScriptElementKind.parameterElement:
       return 'variable'
+    case ts.ScriptElementKind.parameterElement:
+      return 'parameter'
     case ts.ScriptElementKind.memberVariableElement:
     case ts.ScriptElementKind.memberGetAccessorElement:
     case ts.ScriptElementKind.memberSetAccessorElement:
@@ -50,7 +58,7 @@ export function mapTypeScriptCompletionKind(kind: ts.ScriptElementKind): string 
     case ts.ScriptElementKind.enumElement:
       return 'enum'
     case ts.ScriptElementKind.enumMemberElement:
-      return 'constant'
+      return 'enum-member'
     case ts.ScriptElementKind.moduleElement:
     case ts.ScriptElementKind.externalModuleName:
       return 'namespace'
@@ -73,13 +81,6 @@ function displayPartsToText(
 ): string | undefined {
   if (!parts?.length) return undefined
   return parts.map((part) => part.text).join('')
-}
-
-function buildCompletionDetail(entry: ts.CompletionEntry): string | undefined {
-  const source = displayPartsToText(entry.sourceDisplay)
-  const modifiers = entry.kindModifiers?.trim()
-  if (source && modifiers) return `${source} · ${modifiers}`
-  return source ?? modifiers
 }
 
 export function normalizeCommonJsAutoImport(fileName: string, newText: string): string {
@@ -173,16 +174,28 @@ export function buildTypeScriptCompletionItems({
 
   if (!completions?.entries.length) return { items: [], isIncomplete: false }
 
-  const entries = completions.entries.slice(0, MaxCompletionItems)
+  // Unchecked JavaScript includes names collected from the entire file. Those are
+  // only useful as a fallback when TypeScript cannot identify any receiver members.
+  const candidates = completions.isMemberCompletion &&
+    completions.entries.some((entry) => entry.kind !== ts.ScriptElementKind.warning)
+    ? completions.entries.filter((entry) => entry.kind !== ts.ScriptElementKind.warning)
+    : completions.entries
+  const entries = candidates.slice(0, MaxCompletionItems)
   const items = entries.map((entry): WorkbenchLanguageServiceCompletionItem => {
     const range = entry.replacementSpan
       ? rangeFromTextSpanInContent(content, fileName, entry.replacementSpan)
       : null
+    const kind = mapTypeScriptCompletionKind(entry.kind)
+    const source = displayPartsToText(entry.sourceDisplay)
+    const description = entry.labelDetails?.description
     return {
       label: entry.name,
-      kind: mapTypeScriptCompletionKind(entry.kind),
-      detail: entry.labelDetails?.detail ?? buildCompletionDetail(entry),
-      returnType: entry.labelDetails?.description,
+      kind,
+      detail: entry.labelDetails?.detail,
+      returnType: entry.source ? undefined : description,
+      source: source ?? (entry.source ? description : undefined),
+      deprecated: entry.kindModifiers?.split(',').includes(ts.ScriptElementKindModifier.deprecatedModifier) || undefined,
+      resolvePreview: (kind !== 'keyword' && kind !== 'text' && !entry.isSnippet) || undefined,
       insertText: entry.insertText ?? entry.name,
       range: range ?? undefined,
       // TypeScript 的 sortText 只分优先级（本地、全局、自动导入……），同级再按名字排；空格排在数字、字母之前。
@@ -202,7 +215,7 @@ export function buildTypeScriptCompletionItems({
 
   return {
     items,
-    isIncomplete: completions.entries.length > entries.length || !!completions.isIncomplete,
+    isIncomplete: candidates.length > entries.length || !!completions.isIncomplete,
   }
 }
 
@@ -223,7 +236,7 @@ export function resolveTypeScriptCompletionItem({
   relativePath: string
   item: WorkbenchLanguageServiceCompletionResolveData
   format?: WorkbenchLanguageServiceEditFormat
-}): { additionalTextEdits: WorkbenchLanguageServiceCompletionTextEdit[]; documentation?: string } {
+}): Pick<WorkbenchLanguageServiceCompletionResolveResult, 'additionalTextEdits' | 'signature' | 'signatureParts' | 'documentation'> {
   const details = service.getCompletionEntryDetails(
     fileName,
     offset,
@@ -237,6 +250,8 @@ export function resolveTypeScriptCompletionItem({
 
   return {
     additionalTextEdits: collectAdditionalTextEdits(details, fileName, content, relativePath),
+    signature: displayPartsToText(details.displayParts),
+    signatureParts: mapDisplayParts(details.displayParts),
     documentation: displayPartsToText(details.documentation),
   }
 }

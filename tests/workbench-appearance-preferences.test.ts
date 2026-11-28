@@ -22,25 +22,22 @@ function source(path: string): string {
 
 describe('Workbench appearance preferences', () => {
   test('offers two neutral themes and two visually distinct color themes', () => {
+    expect(normalizeWorkbenchPreferences({ theme: 'light-modern' }).theme).toBe('light-modern')
+    expect(normalizeWorkbenchPreferences({ theme: 'dark-modern' }).theme).toBe('dark-modern')
     expect(normalizeWorkbenchPreferences({ theme: 'warm-paper' }).theme).toBe('warm-paper')
     expect(normalizeWorkbenchPreferences({ theme: 'midnight-blue' }).theme).toBe('midnight-blue')
     expect(isWorkbenchDarkTheme('warm-paper')).toBe(false)
     expect(isWorkbenchDarkTheme('midnight-blue')).toBe(true)
 
-    expect(
-      normalizeWorkbenchPreferences({
-        theme: 'light-plus' as WorkbenchThemeId,
-      }).theme
-    ).toBe('light-modern')
-    expect(
-      normalizeWorkbenchPreferences({
-        theme: 'dark-plus' as WorkbenchThemeId,
-      }).theme
-    ).toBe('dark-modern')
-
     const shellStyles = source('src/renderer/src/styles/01-shell.module.css')
     expect(shellStyles).toContain("data-workbench-theme='warm-paper'")
     expect(shellStyles).toContain("data-workbench-theme='midnight-blue'")
+  })
+
+  test('uses the default theme for a retired theme ID', () => {
+    expect(normalizeWorkbenchPreferences({ theme: 'dark-plus' as WorkbenchThemeId }).theme).toBe(
+      DEFAULT_WORKBENCH_PREFERENCES.theme
+    )
   })
 
   test('density changes virtual rows and visible chrome geometry', () => {

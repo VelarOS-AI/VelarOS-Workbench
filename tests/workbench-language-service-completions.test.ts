@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { autocompletion, type Completion, type CompletionResult } from '@codemirror/autocomplete'
+import { autocompletion, type Completion, CompletionContext, type CompletionResult } from '@codemirror/autocomplete'
 import { EditorSelection, EditorState, type TransactionSpec } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import { describe, test } from 'bun:test'
@@ -8,6 +8,7 @@ import { describe, test } from 'bun:test'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { Result } from '@velaros-ai/velaros/core/result'
 
+import { hideUnchangedWorkbenchCompletions } from '../src/renderer/src/models/editor/workbenchCodeMirrorCompletionPresentation'
 import {
   buildWorkbenchLanguageServiceCompletionResult,
   requestWorkbenchLanguageServiceCompletions,
@@ -129,6 +130,38 @@ void describe('LSP snippets become CodeMirror snippets', () => {
 })
 
 void describe('language service completions in CodeMirror', () => {
+  void test('hides unchanged automatic suggestions and leaves manual completion available', async () => {
+    const state = stateWithCursor('break§')
+    const source = hideUnchangedWorkbenchCompletions(() => ({ from: 0, options: [{ label: 'break' }] }))
+    assert.equal(await source(new CompletionContext(state, 5, false)), null)
+    assert.equal((await source(new CompletionContext(state, 5, true)))?.options.length, 1)
+  })
+
+  void test('prefers common receiver methods and adds call parentheses only where needed', () => {
+    const methods = [
+      { label: 'assert', kind: 'method' },
+      { label: 'log', kind: 'method' },
+      { label: 'warn', kind: 'method' },
+    ]
+    const view = new FakeEditorView(stateWithCursor('console.§'))
+    const result = completionResult(view.state, 'src/main.js', methods)
+    assert.ok((result.options.find((option) => option.label === 'log')?.boost ?? 0) >
+      (result.options.find((option) => option.label === 'warn')?.boost ?? 0))
+    accept(view, result, 'log')
+    assert.equal(view.state.doc.toString(), 'console.log()')
+    assert.equal(view.state.selection.main.head, 'console.log('.length)
+
+    const existing = new FakeEditorView(stateWithCursor('console.lo§ (value)'))
+    accept(existing, completionResult(existing.state, 'src/main.js', methods), 'log')
+    assert.equal(existing.state.doc.toString(), 'console.log (value)')
+    assert.equal(existing.state.selection.main.head, 'console.log ('.length)
+
+    const imported = new FakeEditorView(stateWithCursor('import { lo§ } from "./logger"'))
+    const functions = [{ label: 'log', kind: 'function' }]
+    accept(imported, completionResult(imported.state, 'src/main.js', functions), 'log')
+    assert.equal(imported.state.doc.toString(), 'import { log } from "./logger"')
+  })
+
   void test('keeps every item and filters only on extensions of the word typed so far', () => {
     const state = stateWithCursor('document.qu§')
     const items = Array.from({ length: 300 }, (_, index) => ({ label: `member${index}` }))
@@ -326,5 +359,29 @@ void describe('language service completions in CodeMirror', () => {
       result?.options.map((option) => option.label),
       ['valueOne', 'valueTwo']
     )
+  })
+
+  void test('member completion keeps receiver candidates and omits unrelated project symbols', () => {
+    const state = stateWithCursor('console.lo§')
+    const result = buildWorkbenchLanguageServiceCompletionResult({
+      state,
+      position: state.selection.main.head,
+      path: 'src/main.js',
+      result: { items: [{ label: 'log', kind: 'method' }] },
+      localResult: { from: 'console.'.length, options: [{ label: 'loaded' }] },
+    })
+    assert.deepEqual(result?.options.map((option) => option.label), ['log'])
+  })
+
+  void test('clangd label padding does not affect filtering or insertion', () => {
+    const state = stateWithCursor('pointer->va§')
+    const view = new FakeEditorView(state)
+    const result = completionResult(state, 'main.c', [
+      { label: ' value', filterText: 'value', insertText: 'value', kind: 'property' },
+    ])
+    assert.equal(result.options[0]?.label, 'value')
+    assert.equal(result.options[0]?.displayLabel, undefined)
+    accept(view, result, 'value')
+    assert.equal(view.state.doc.toString(), 'pointer->value')
   })
 })

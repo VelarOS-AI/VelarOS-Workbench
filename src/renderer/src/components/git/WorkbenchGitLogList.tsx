@@ -241,6 +241,7 @@ export function WorkbenchGitLogList({
           {commits.slice(start, end).map((commit, offset) => {
             const row = graph?.[start + offset]
             const refs = sortWorkbenchGitRefs(commit.refs)
+            const date = formatWorkbenchGitCommitRelativeDate(locale, commit)
             return (
               <div
                 key={commit.sha}
@@ -264,35 +265,39 @@ export function WorkbenchGitLogList({
                   />
                 )}
                 <span className={styles.gitGraphSummary}>
-                  {refs.slice(0, RefsShown).map((ref) => (
-                    <span
-                      key={`${ref.kind}:${ref.name}`}
-                      className={styles.gitGraphRef}
-                      data-kind={ref.kind}
-                      data-current={ref.current ? 'true' : undefined}
-                      title={ref.name}
-                      onContextMenu={(event) => {
-                        if (!onRefContextMenu) return
-                        event.preventDefault()
-                        event.stopPropagation()
-                        onSelect(commit.sha)
-                        onRefContextMenu(ref, commit, event)
-                      }}
-                    >
-                      {ref.kind === 'tag' ? <TagIcon size={10} /> : <GitBranchIcon size={10} />}
-                      <span>{ref.name}</span>
-                    </span>
-                  ))}
-                  {refs.length > RefsShown && (
-                    <span
-                      className={styles.gitGraphRef}
-                      data-kind="more"
-                      title={refs
-                        .slice(RefsShown)
-                        .map((ref) => ref.name)
-                        .join('\n')}
-                    >
-                      +{refs.length - RefsShown}
+                  {!!refs.length && (
+                    <span className={styles.gitGraphRefs}>
+                      {refs.slice(0, RefsShown).map((ref) => (
+                        <span
+                          key={`${ref.kind}:${ref.name}`}
+                          className={styles.gitGraphRef}
+                          data-kind={ref.kind}
+                          data-current={ref.current ? 'true' : undefined}
+                          title={ref.name}
+                          onContextMenu={(event) => {
+                            if (!onRefContextMenu) return
+                            event.preventDefault()
+                            event.stopPropagation()
+                            onSelect(commit.sha)
+                            onRefContextMenu(ref, commit, event)
+                          }}
+                        >
+                          {ref.kind === 'tag' ? <TagIcon size={10} /> : <GitBranchIcon size={10} />}
+                          <span>{ref.name}</span>
+                        </span>
+                      ))}
+                      {refs.length > RefsShown && (
+                        <span
+                          className={styles.gitGraphRef}
+                          data-kind="more"
+                          title={refs
+                            .slice(RefsShown)
+                            .map((ref) => ref.name)
+                            .join('\n')}
+                        >
+                          +{refs.length - RefsShown}
+                        </span>
+                      )}
                     </span>
                   )}
                   <span className={styles.gitGraphSubject} title={commit.subject}>
@@ -302,8 +307,8 @@ export function WorkbenchGitLogList({
                 <span className={styles.gitGraphAuthor} title={commit.authorName}>
                   {commit.authorName}
                 </span>
-                <span className={styles.gitGraphDate}>
-                  {formatWorkbenchGitCommitRelativeDate(locale, commit)}
+                <span className={styles.gitGraphDate} title={date}>
+                  {date}
                 </span>
               </div>
             )

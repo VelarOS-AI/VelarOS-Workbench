@@ -4,7 +4,6 @@ import {
   type MouseEvent,
   type ReactElement,
   type ReactNode,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -41,6 +40,7 @@ export interface TopToolbarProps {
   gitWorkspaceRoot: string
   gitSummary: Nullable<SystemWorkspaceGitSummary>
   onGitRefresh: () => Promise<void>
+  onGitWorkingTreeChanged: () => Promise<void>
   gitSshKeyPath?: string
   hasUnsavedOpenTabs: boolean
   onRepositoryChanged: () => void | Promise<void>
@@ -55,6 +55,7 @@ export function WorkbenchTopLeading({
   gitWorkspaceRoot,
   gitSummary,
   onGitRefresh,
+  onGitWorkingTreeChanged,
   gitSshKeyPath,
   hasUnsavedOpenTabs,
   onRepositoryChanged,
@@ -64,6 +65,7 @@ export function WorkbenchTopLeading({
   | 'gitWorkspaceRoot'
   | 'gitSummary'
   | 'onGitRefresh'
+  | 'onGitWorkingTreeChanged'
   | 'gitSshKeyPath'
   | 'hasUnsavedOpenTabs'
   | 'onRepositoryChanged'
@@ -75,11 +77,13 @@ export function WorkbenchTopLeading({
 
   return (
     <WorkbenchGitBranchControl
+      key={gitWorkspaceRoot}
       workspaceRoot={gitWorkspaceRoot}
       summary={gitSummary}
       gitSshKeyPath={gitSshKeyPath}
       hasUnsavedOpenTabs={hasUnsavedOpenTabs}
       onRefresh={onGitRefresh}
+      onWorkingTreeChanged={onGitWorkingTreeChanged}
       onRepositoryChanged={onRepositoryChanged}
       onOpenCommitTool={onOpenGitCommitTool}
     />
@@ -163,7 +167,6 @@ function WorkbenchRunAction({
   const [menuOpen, setMenuOpen] = useState(false)
   const [duplicateRunDialogOpen, setDuplicateRunDialogOpen] = useState(false)
   const [draftCommand, setDraftCommand] = useState('')
-  const hasProjectTasks = topRun.options.some((option) => option.runNow)
   const activeOption = useMemo(
     () => toNullable(topRun.options.find((option) => option.value === topRun.activeCommandKey)),
     [topRun.activeCommandKey, topRun.options]
@@ -268,6 +271,7 @@ function WorkbenchRunAction({
       return
     }
 
+    if (event.key === 'Escape') return
     event.stopPropagation()
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
     const buttons = [
@@ -282,27 +286,12 @@ function WorkbenchRunAction({
     target.focus()
   }
 
-  // 菜单收起时焦点还在菜单里（它马上要卸掉）或者已经没了着落，就还给打开之前的地方；焦点已经到了别处的不动它。
-  const menuPanelRef = useRef<HTMLDivElement>(null)
   const commandInputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    if (!menuOpen) return undefined
-    const previous = document.activeElement
-    return () => {
-      const focused = document.activeElement
-      const stranded =
-        !focused ||
-        focused === document.body ||
-        !focused.isConnected ||
-        !!menuPanelRef.current?.contains(focused)
-      if (stranded && previous instanceof HTMLElement && previous.isConnected) previous.focus()
-    }
-  }, [menuOpen])
 
   return (
     <>
       <AnchoredPopover
-        anchorClassName={hasProjectTasks ? styles.topRunTaskAnchor : ''}
+        anchorClassName={styles.topRunTaskAnchor}
         open={menuOpen}
         onOpenChange={setMenuOpen}
         // 焦点给命令输入框：浮层先挂出来、摆好位置才看得见，输入框上的 autoFocus 赶在那之前，落不上。
@@ -332,12 +321,11 @@ function WorkbenchRunAction({
               delayDuration={80}
             >
               <IconButton
-                {...getAnchorProps<HTMLButtonElement>({ disabled: true, onClick: handleRunClick })}
                 variant="ghost"
                 size="icon-sm"
                 className={className}
                 label={actionLabel}
-                disabled={false}
+                onClick={handleRunClick}
                 onContextMenu={handleRunContextMenu}
               >
                 {oneShotBusy ? (
@@ -347,26 +335,25 @@ function WorkbenchRunAction({
                 )}
               </IconButton>
             </BubbleTooltip>
-            {hasProjectTasks && (
-              <IconButton
-                {...getAnchorProps<HTMLButtonElement>({ disabled: true })}
-                className={styles.topRunTaskMenuButton}
-                label={t('workbench.projectToolMenu')}
-                size={18}
-                aria-haspopup="menu"
-                onClick={() => {
+            <IconButton
+              {...getAnchorProps<HTMLButtonElement>({
+                disabled: true,
+                onClick: () => {
                   if (menuOpen) setMenuOpen(false)
                   else openConfig()
-                }}
-              >
-                <CaretDownIcon size={12} />
-              </IconButton>
-            )}
+                },
+              })}
+              className={styles.topRunTaskMenuButton}
+              label={t('workbench.projectToolMenu')}
+              size={18}
+              aria-haspopup="menu"
+            >
+              <CaretDownIcon size={12} />
+            </IconButton>
           </>
         )}
       >
         <div
-          ref={menuPanelRef}
           className={styles.runActionPanel}
           role="menu"
           aria-label={placeholder}

@@ -326,6 +326,7 @@ const historyWindowBridge: WorkbenchHistoryWindowBridge = {
 
 const settingsWindowBridge: WorkbenchSettingsWindowBridge = {
   open: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.open),
+  ready: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.ready),
   close: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.close),
   exitProject: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.exitProject),
   getTavilyConfigured: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.tavilyConfigured),

@@ -470,15 +470,9 @@
   @apply min-h-0 min-w-0 flex-1;
 }
 
-.gitLogView {
-  @apply grid h-full min-h-0 min-w-0;
-  grid-template-columns: clamp(130px, 18%, 230px) minmax(0, 1fr) clamp(255px, 32%, 390px);
-}
-
 .gitLogBranchPane,
 .gitCommitDetailPane {
-  @apply min-h-0 min-w-0 overflow-hidden border-r;
-  border-color: var(--workbench-border);
+  @apply min-h-0 min-w-0 overflow-hidden;
   background: var(--workbench-surface);
 }
 
@@ -487,10 +481,7 @@
 }
 
 .gitCommitDetailPane {
-  border-right: 0;
-  border-left: 1px solid var(--workbench-border);
   container: git-commit-detail / inline-size;
-  overflow: hidden;
 }
 
 /*

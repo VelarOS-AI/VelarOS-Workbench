@@ -7,6 +7,7 @@ import { describe, test } from 'bun:test'
 import {
   buildWorkbenchLayoutStyleVariables,
   DEFAULT_WORKBENCH_LAYOUT_SIZES,
+  normalizeWorkbenchLayoutSizes,
   resizeWorkbenchLayoutSizes,
 } from '../src/renderer/src/models/layout/workbenchLayoutModel'
 
@@ -34,6 +35,15 @@ void describe('Workbench pane resize', () => {
         filePaneWidth: start.filePaneWidth,
       },
       start
+    )
+  })
+
+  void test('clamps a saved right pane width to the current limits', () => {
+    assert.equal(normalizeWorkbenchLayoutSizes({ rightPaneWidth: 308 }).rightPaneWidth, 360)
+    assert.equal(normalizeWorkbenchLayoutSizes({ rightPaneWidth: 480 }).rightPaneWidth, 480)
+    assert.equal(
+      normalizeWorkbenchLayoutSizes(undefined).rightPaneWidth,
+      DEFAULT_WORKBENCH_LAYOUT_SIZES.rightPaneWidth
     )
   })
 

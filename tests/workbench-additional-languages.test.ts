@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict'
 
+import { CompletionContext } from '@codemirror/autocomplete'
 import { ensureSyntaxTree, HighlightStyle } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { highlightTree, tagHighlighter, tags } from '@lezer/highlight'
 import { test } from 'bun:test'
 
+import { resolveWorkbenchOfflineCodeCompletion } from '../src/renderer/src/models/editor/workbenchCodeMirrorCompletions'
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import { usesWorkbenchExternalLspLanguageService } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
+import { shouldRequestWorkbenchLanguageServiceCompletions } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageServiceCompletions'
 import { getWorkbenchCodeHighlightSpecs } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import { resolveWorkbenchFilePresentation } from '../src/renderer/src/models/files/workbenchFilePresentation'
 import { fileLanguage } from '../src/renderer/src/models/shared/workbenchUtils'
-import { resolveBuiltinWorkbenchLanguageService } from '../src/shared/workbenchLanguageServices'
+import { getWorkbenchLanguageServiceDocumentId, resolveBuiltinWorkbenchLanguageService } from '../src/shared/workbenchLanguageServices'
 
 const samples = [
   ['Hello.java', 'Java', 'java', 'public class Hello { String name = "world"; }'],
@@ -161,7 +164,53 @@ test('all shader stages, scripts, WebAssembly text and code fences have language
     'scss',
   ])
     assert.equal(resolveWorkbenchCodeMirrorLanguage(null, token).mode, 'builtin')
-  for (const token of ['c', 'cpp', 'c++', 'wasm'])
-    assert.equal(resolveBuiltinWorkbenchLanguageService(token), null)
+  assert.equal(resolveBuiltinWorkbenchLanguageService('wasm'), null)
   assert.equal(resolveWorkbenchCodeMirrorLanguage('module.wasm', '').mode, 'plain-text')
+})
+
+test('C and C++ share a clangd service and select syntax and document ids by file', () => {
+  const clangd = resolveBuiltinWorkbenchLanguageService('c')
+  assert.ok(clangd)
+  assert.equal(clangd.command, 'clangd')
+  for (const [file, language, label, content] of [
+    ['main.c', 'c', 'C', 'int hello(void) { const char *name = "world"; return 1; }'],
+    ['main.cpp', 'cpp', 'C++', 'namespace demo { constexpr const char *name = "world"; }'],
+    ['main.hxx', 'cpp', 'C++', 'struct Demo { const char *name = "world"; };'],
+    ['main.h', 'cpp', 'C / C++', 'struct Demo { const char *name; };'],
+    ['main.ixx', 'cpp', 'C++', 'export module demo; export const char *name = "world";'],
+  ] as const) {
+    const support = resolveWorkbenchCodeMirrorLanguage(file, '')
+    assert.equal(support.mode, 'builtin', file)
+    assert.equal(support.languageId, language, file)
+    assert.equal(fileLanguage(file), label)
+    assert.equal(resolveBuiltinWorkbenchLanguageService(file.split('.').at(-1)!), clangd)
+    assert.equal(getWorkbenchLanguageServiceDocumentId(clangd, file), language)
+    const state = EditorState.create({ doc: content, extensions: support.extension })
+    const tree = ensureSyntaxTree(state, content.length, 1_000)
+    assert.ok(tree)
+    let hasKeywords = false
+    highlightTree(tree, highlighter, (_from, _to, classes) => { if (classes === 'keyword') hasKeywords = true })
+    assert.ok(hasKeywords, file)
+  }
+  assert.equal(resolveWorkbenchCodeMirrorLanguage(null, 'c++').languageId, 'cpp')
+})
+
+test('C and C++ complete their own keywords without clangd and request pointer members from clangd', async () => {
+  for (const [path, keyword, otherKeyword] of [
+    ['main.c', 'restrict', 'namespace'], ['main.cpp', 'namespace', 'restrict'],
+  ] as const) {
+    const support = resolveWorkbenchCodeMirrorLanguage(path, '')
+    const source = resolveWorkbenchOfflineCodeCompletion(path)
+    assert.ok(source)
+    const state = EditorState.create({ doc: keyword.slice(0, 2), extensions: support.extension })
+    const options = (await source(new CompletionContext(state, state.doc.length, false)))?.options ?? []
+    assert.ok(options.some((option) => option.label === keyword))
+    assert.ok(!options.some((option) => option.label === otherKeyword))
+    const comment = EditorState.create({ doc: `// ${keyword}`, extensions: support.extension })
+    assert.equal(await source(new CompletionContext(comment, comment.doc.length, false)), null)
+    const member = EditorState.create({ doc: 'pointer->', extensions: support.extension })
+    const context = new CompletionContext(member, member.doc.length, false)
+    assert.equal(shouldRequestWorkbenchLanguageServiceCompletions(context, path), true)
+    assert.equal(await source(context), null)
+  }
 })

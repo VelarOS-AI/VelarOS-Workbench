@@ -1008,3 +1008,13 @@ button.statusBarItem:hover {
 .statusBarSpacer {
   @apply min-w-0 flex-1;
 }
+
+.statusBarProjectIndex {
+  @apply flex shrink-0 items-center gap-2 whitespace-nowrap;
+}
+
+.statusBarProjectIndexTrack {
+  width: 60px;
+  height: 3px;
+  accent-color: var(--workbench-accent-solid);
+}

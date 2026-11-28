@@ -125,6 +125,11 @@ export interface WorkbenchIndexProjectResult {
   truncated: boolean
 }
 
+export interface WorkbenchProjectIndexProgress {
+  scannedFiles: number
+  totalFiles: number
+}
+
 export type WorkbenchCodeGraphMode = 'full' | 'local'
 
 export interface WorkbenchCodeGraphNode {
@@ -350,6 +355,8 @@ export interface WorkbenchLanguageServiceCompletionItem {
   detail?: string
   /** 右侧展示的返回类型或尾随类型说明。 */
   returnType?: string
+  source?: string
+  deprecated?: boolean
   documentation?: string
   insertText?: string
   /**
@@ -365,6 +372,8 @@ export interface WorkbenchLanguageServiceCompletionItem {
   additionalTextEdits?: WorkbenchLanguageServiceCompletionTextEdit[]
   /** 接受时还要再问语言服务才知道的改动（TypeScript 的自动导入）：原样交回 resolve。 */
   resolve?: WorkbenchLanguageServiceCompletionResolveData
+  /** 选中时可查询签名和文档，接受时无需等待。 */
+  resolvePreview?: boolean
   /** 接受后接着再弹一次补全（CSS 属性名补完，接着给属性值）。 */
   retrigger?: boolean
 }
@@ -394,6 +403,8 @@ export interface WorkbenchLanguageServiceCompletionResolveResult {
   path: string
   /** 按发起补全时的正文算的附加改动（自动导入语句）。 */
   additionalTextEdits: WorkbenchLanguageServiceCompletionTextEdit[]
+  signature?: string
+  signatureParts?: readonly WorkbenchLanguageServiceDisplayPart[]
   documentation?: string
 }
 

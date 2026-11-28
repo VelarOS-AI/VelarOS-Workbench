@@ -30,6 +30,8 @@ import { type WorkspaceGitStash } from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
 
+import { WorkbenchGitColumnResizeHandle } from './WorkbenchGitColumnResizeHandle'
+
 /** 右侧详情看的是什么：日志里选中的提交，或者贮藏列表里选中的一条贮藏。 */
 export type WorkbenchGitDetailsTarget =
   { kind: 'commit'; commit: WorkspaceGitLogEntry } | { kind: 'stash'; stash: WorkspaceGitStash }
@@ -212,7 +214,7 @@ export function WorkbenchGitDetailsPane({
             <header className={styles.gitCommitChangesHeader}>
               <span>
                 <FilesIcon size={14} />
-                {t('workbench.gitChangedFiles', { count: diffFiles.length })}
+                <span>{t('workbench.gitChangedFiles', { count: diffFiles.length })}</span>
               </span>
               <span className={styles.gitCommitStats}>
                 <strong>+{diffStats.additions}</strong>
@@ -252,35 +254,38 @@ export function WorkbenchGitDetailsPane({
         </div>
       </aside>
       {selectedDiffFile && (
-        <aside className={styles.gitCommitPatch} aria-label={t('workbench.gitDiffPreview')}>
-          <header className={styles.gitCommitPatchHeader}>
-            <span title={selectedDiffFile.path}>{selectedDiffFile.path}</span>
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              label={t('common.close')}
-              title={t('common.close')}
-              onClick={() => {
-                setSelectedDiffPath(null)
-                selectedButton.current?.focus({ preventScroll: true })
-              }}
-            >
-              <XIcon size={13} />
-            </IconButton>
-          </header>
-          <pre key={selectedDiffFile.path} className={styles.gitToolCommitDiff} tabIndex={0}>
-            {selectedDiffFile.lines.slice(0, PatchLinesShown).map((line, index) => (
-              <span
-                key={`${index}-${line.text}`}
-                className={styles.gitCommitPatchLine}
-                data-kind={line.kind}
+        <>
+          <WorkbenchGitColumnResizeHandle label={t('workbench.gitResizeDetails')} />
+          <aside className={styles.gitCommitPatch} aria-label={t('workbench.gitDiffPreview')}>
+            <header className={styles.gitCommitPatchHeader}>
+              <span title={selectedDiffFile.path}>{selectedDiffFile.path}</span>
+              <IconButton
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                label={t('common.close')}
+                title={t('common.close')}
+                onClick={() => {
+                  setSelectedDiffPath(null)
+                  selectedButton.current?.focus({ preventScroll: true })
+                }}
               >
-                {line.text || ' '}
-              </span>
-            ))}
-          </pre>
-        </aside>
+                <XIcon size={13} />
+              </IconButton>
+            </header>
+            <pre key={selectedDiffFile.path} className={styles.gitToolCommitDiff} tabIndex={0}>
+              {selectedDiffFile.lines.slice(0, PatchLinesShown).map((line, index) => (
+                <span
+                  key={`${index}-${line.text}`}
+                  className={styles.gitCommitPatchLine}
+                  data-kind={line.kind}
+                >
+                  {line.text || ' '}
+                </span>
+              ))}
+            </pre>
+          </aside>
+        </>
       )}
     </>
   )

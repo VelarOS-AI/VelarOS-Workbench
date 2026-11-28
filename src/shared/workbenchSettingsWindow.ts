@@ -5,6 +5,7 @@ export const WorkbenchSettingsWindowQuery = 'settings'
 
 export const WorkbenchSettingsWindowChannels = {
   open: 'workbench-app:settings-window:open',
+  ready: 'workbench-app:settings-window:ready',
   close: 'workbench-app:settings-window:close',
   exitProject: 'workbench-app:settings-window:exit-project',
   tavilyConfigured: 'workbench-app:settings-window:tavily-configured',
@@ -13,6 +14,7 @@ export const WorkbenchSettingsWindowChannels = {
 
 export interface WorkbenchSettingsWindowBridge {
   open: () => Promise<void>
+  ready: () => Promise<void>
   close: () => Promise<void>
   exitProject: () => Promise<void>
   getTavilyConfigured: () => Promise<boolean>

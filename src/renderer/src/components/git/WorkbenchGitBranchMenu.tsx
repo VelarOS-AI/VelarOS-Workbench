@@ -2,16 +2,21 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactElement,
   type RefObject,
+  useId,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import {
   ArrowDownIcon,
+  ArrowLineUpIcon,
   ArrowUpIcon,
   CaretDownIcon,
+  CaretRightIcon,
   CloudArrowDownIcon,
   FolderIcon,
   GitBranchIcon,
+  GitMergeIcon,
   type Icon,
   PlusIcon,
   SpinnerGapIcon,
@@ -47,16 +52,13 @@ const RemoteActionIcons: Record<WorkbenchGitRemoteActionItem['action'], Icon> = 
 const BranchIndentStepPx = 14
 const BranchRowPaddingPx = 6
 
-/**
- * 菜单里能用方向键走到的项，按从上到下的顺序：搜索框、远端操作、目录与分支、「新建分支」。行内悬停才出的
- * 小按钮不算（Tab 能到）。
- */
 const MenuItemSelector = 'input, [data-git-menu-item]:not(:disabled)'
 
 interface WorkbenchGitBranchMenuProps {
   branches: readonly WorkspaceGitBranch[]
   /** 当前分支；分离的 HEAD 上为 null（没有哪个分支算当前的）。 */
   currentBranch: Nullable<string>
+  selectedBranch: Nullable<WorkspaceGitBranch>
   search: string
   searchRef: RefObject<Nullable<HTMLInputElement>>
   remoteActions: readonly WorkbenchGitRemoteActionItem[]
@@ -70,20 +72,21 @@ interface WorkbenchGitBranchMenuProps {
   locked: boolean
   /** 合并、变基之类进行到一半：不能切分支、新建分支，这是原因（悬停时看得到）。 */
   branchesBlocked: Nullable<string>
+  canIntegrate: boolean
   onSearchChange: (search: string) => void
+  onSelectBranch: (branch: Nullable<WorkspaceGitBranch>) => void
   onRunRemoteAction: (action: WorkbenchGitRemoteActionItem['action']) => void
   onCancelRemoteAction: () => void
   onSwitchBranch: (branch: WorkspaceGitBranch) => void
   onPushBranch: (branch: WorkspaceGitBranch) => void
-  onOpenCreateBranch: () => void
+  onRunBranchOperation: (action: 'merge' | 'rebase', branch: WorkspaceGitBranch) => void
+  onOpenCreateBranch: (branch?: WorkspaceGitBranch) => void
 }
 
-/**
- * 顶栏分支面板：搜索右侧获取远端，当前分支行内提供拉取与推送，下方可新建分支。
- */
 export function WorkbenchGitBranchMenu({
   branches,
   currentBranch,
+  selectedBranch,
   search,
   searchRef,
   remoteActions,
@@ -92,60 +95,78 @@ export function WorkbenchGitBranchMenu({
   switchingBranch,
   locked,
   branchesBlocked,
+  canIntegrate,
   onSearchChange,
+  onSelectBranch,
   onRunRemoteAction,
   onCancelRemoteAction,
   onSwitchBranch,
   onPushBranch,
+  onRunBranchOperation,
   onOpenCreateBranch,
 }: WorkbenchGitBranchMenuProps): ReactElement {
   const { t } = useWorkbenchI18n()
+  const detailsId = useId()
+  const detailsRef = useRef<HTMLElement>(null)
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set())
   const searching = !!search.trim()
   const branchesLocked = locked || !!branchesBlocked
-  const trees = useMemo(() => {
+  const { matched, trees } = useMemo(() => {
     const matched = filterWorkbenchGitBranches(branches, search)
     return {
-      local: buildWorkbenchGitBranchTree(
-        matched.filter((branch) => !isWorkbenchGitRemoteBranch(branch)),
-        'local'
-      ),
-      remote: buildWorkbenchGitBranchTree(matched.filter(isWorkbenchGitRemoteBranch), 'remote'),
+      matched,
+      trees: {
+        local: buildWorkbenchGitBranchTree(
+          matched.filter((branch) => !isWorkbenchGitRemoteBranch(branch)),
+          'local'
+        ),
+        remote: buildWorkbenchGitBranchTree(matched.filter(isWorkbenchGitRemoteBranch), 'remote'),
+      },
     }
   }, [branches, search])
+
+  const selected = matched.find(
+    (branch) =>
+      selectedBranch &&
+      branch.name === selectedBranch.name &&
+      isWorkbenchGitRemoteBranch(branch) === isWorkbenchGitRemoteBranch(selectedBranch)
+  )
+  const selectedRemote = !!selected && isWorkbenchGitRemoteBranch(selected)
+  const selectedCurrent =
+    !!selected && !selectedRemote && (selected.current || selected.name === currentBranch)
+  const runningInDetails =
+    (running?.action === 'pull' && selectedCurrent) ||
+    (running?.action === 'upload' &&
+      !!selected &&
+      !selectedRemote &&
+      (running.branch ? running.branch === selected.name : selectedCurrent))
+
   function renderRemoteAction(
     item: WorkbenchGitRemoteActionItem,
-    inline = false,
+    active?: Nullable<WorkbenchGitRemoteOperation>,
     branch?: WorkspaceGitBranch
   ): ReactElement {
     const ActionIcon = RemoteActionIcons[item.action]
-    const matchesAction =
-      running?.action === item.action || (running?.action === 'sync' && item.action === 'fetch')
-    const active =
-      matchesAction && (item.action !== 'upload' || running?.branch === branch?.name)
-        ? running
-        : null
     const unavailable = active ? active.cancelling : item.disabled || locked || !!running
     const label = branch ? `${item.label} ${branch.name}` : item.label
     const cancelLabel = active ? describeWorkbenchGitRemoteActionCancel(active, t) : undefined
-    const iconSize = inline ? 12 : 15
+    const hint = `${item.label}${item.count > 0 ? ` (${item.count})` : ''} · ${item.hint}`
+    const iconOnly = item.action === 'fetch'
     return (
       <button
         key={item.action}
         type="button"
-        className={inline ? undefined : styles.gitBranchMenuAction}
-        data-git-menu-item={!inline || undefined}
-        data-action={branch ? undefined : item.action}
+        className={iconOnly ? styles.gitBranchMenuAction : styles.gitBranchMenuCommand}
+        data-git-menu-item
+        data-action={item.action}
         data-running={!!active || undefined}
         aria-label={cancelLabel ?? label}
         aria-description={
-          active
-            ? describeWorkbenchGitRemoteActionProgress(active.action, t)
-            : `${item.label}${item.count > 0 ? ` (${item.count})` : ''} · ${item.hint}`
+          active ? describeWorkbenchGitRemoteActionProgress(active.action, t) : hint
         }
         aria-disabled={unavailable || undefined}
-        disabled={unavailable && (!!active || !!branch)}
-        title={cancelLabel ?? ''}
+        disabled={active?.cancelling}
+        title={cancelLabel ?? hint}
         onClick={() => {
           if (unavailable) return
           if (active) onCancelRemoteAction()
@@ -154,38 +175,55 @@ export function WorkbenchGitBranchMenu({
         }}
       >
         {active ? (
-          <SpinnerGapIcon size={iconSize} className={styles.spinIcon} aria-hidden="true" />
+          <SpinnerGapIcon size={15} className={styles.spinIcon} aria-hidden="true" />
         ) : (
-          <ActionIcon size={iconSize} aria-hidden="true" />
+          <ActionIcon size={15} aria-hidden="true" />
         )}
-        {inline && <span>{item.label}</span>}
+        {!iconOnly && <span>{cancelLabel ?? item.label}</span>}
       </button>
     )
   }
 
-  function toggleFolder(key: string): void {
+  function toggleFolder(key: string, expanded: boolean): void {
+    if (searching) return
+    const namespace = selectedRemote ? 'remote' : 'local'
+    if (expanded && selected && `${namespace}:${selected.name}`.startsWith(`${key}/`))
+      onSelectBranch(null)
     setCollapsedFolders((current) => {
       const next = new Set(current)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      if (expanded) next.add(key)
+      else next.delete(key)
       return next
     })
   }
 
-  /** ↑ ↓ 在菜单的各项之间走（到头绕回），Home / End 到头尾；搜索框里的 Home / End 是移动光标，不拦。 */
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    const target = event.target as HTMLElement
+    const inDetails = !!detailsRef.current?.contains(target)
+    if (event.key === 'ArrowRight' && target.hasAttribute('data-git-branch-row')) {
+      event.preventDefault()
+      target.click()
+      return
+    }
+    if (event.key === 'ArrowLeft' && inDetails) {
+      event.preventDefault()
+      event.currentTarget.querySelector<HTMLElement>('[data-selected="true"] > button')?.focus()
+      return
+    }
     const vertical = event.key === 'ArrowDown' || event.key === 'ArrowUp'
     if (!vertical && event.key !== 'Home' && event.key !== 'End') return
     if (!vertical && event.target === searchRef.current) return
 
-    const items = [...event.currentTarget.querySelectorAll<HTMLElement>(MenuItemSelector)]
+    const items = [...event.currentTarget.querySelectorAll<HTMLElement>(MenuItemSelector)].filter(
+      (item) => !!detailsRef.current?.contains(item) === inDetails
+    )
     if (items.length === 0) return
     event.preventDefault()
     if (!vertical) {
       ;(event.key === 'Home' ? items[0] : items.at(-1))?.focus()
       return
     }
-    const index = items.indexOf(document.activeElement as HTMLElement)
+    const index = items.indexOf(target)
     const step = event.key === 'ArrowDown' ? 1 : -1
     items[index < 0 ? 0 : (index + step + items.length) % items.length]?.focus()
   }
@@ -193,68 +231,43 @@ export function WorkbenchGitBranchMenu({
   function renderBranch(branch: WorkspaceGitBranch, label: string, depth: number): ReactElement {
     const remote = isWorkbenchGitRemoteBranch(branch)
     const current = !remote && (branch.current || branch.name === currentBranch)
-    const checkoutLabel = t('workbench.gitBranchCheckoutCreated')
-    const pushLabel = t('workbench.gitUpload')
+    const isSelected = selected === branch
     return (
       <div
         key={`${remote ? 'remote' : 'local'}:${branch.name}`}
         className={styles.gitBranchMenuRow}
         data-current={current || undefined}
-        title={branchesBlocked && !current ? branchesBlocked : branch.name}
+        data-selected={isSelected || undefined}
+        title={branch.name}
       >
         <button
           type="button"
           className={styles.gitBranchMenuRowMain}
           style={{ paddingLeft: BranchRowPaddingPx + depth * BranchIndentStepPx }}
           data-git-menu-item
+          data-git-branch-row
           aria-current={current || undefined}
-          disabled={branchesLocked || current}
-          onClick={() => onSwitchBranch(branch)}
+          aria-expanded={isSelected}
+          aria-controls={isSelected ? detailsId : undefined}
+          onClick={(event) => {
+            onSelectBranch(branch)
+            if (event.detail === 0) {
+              requestAnimationFrame(() => {
+                const first = detailsRef.current?.querySelector<HTMLElement>(MenuItemSelector)
+                ;(first ?? detailsRef.current)?.focus()
+              })
+            }
+          }}
         >
           {switchingBranch === branch.name ? (
             <SpinnerGapIcon size={13} className={styles.spinIcon} />
           ) : (
             <GitBranchIcon size={13} weight={current ? 'fill' : 'regular'} />
           )}
-          <span>{label}</span>
+          <span className={styles.gitBranchMenuBranchName}>{label}</span>
           {current && !!branch.upstream && <small>{branch.upstream}</small>}
+          <CaretRightIcon size={11} aria-hidden="true" />
         </button>
-        {current ? (
-          <div
-            className={styles.gitBranchMenuRowActions}
-            role="group"
-            aria-label={`${branch.name} · ${t('workbench.gitRemoteActionsMenu')}`}
-            title=""
-          >
-            {remoteActions
-              .filter((item) => item.action === 'pull' || item.action === 'upload')
-              .map((item) => renderRemoteAction(item, true))}
-          </div>
-        ) : (
-          <div className={styles.gitBranchMenuRowActions} role="group" title="">
-            <button
-              type="button"
-              disabled={branchesLocked}
-              aria-label={`${checkoutLabel} ${branch.name}`}
-              onClick={() => onSwitchBranch(branch)}
-            >
-              <GitBranchIcon size={12} />
-              <span>{checkoutLabel}</span>
-            </button>
-            {!remote &&
-              renderRemoteAction(
-                {
-                  action: 'upload',
-                  label: pushLabel,
-                  hint: branch.name,
-                  disabled: branchesLocked,
-                  count: 0,
-                },
-                true,
-                branch
-              )}
-          </div>
-        )}
       </div>
     )
   }
@@ -272,7 +285,7 @@ export function WorkbenchGitBranchMenu({
           style={{ paddingLeft: BranchRowPaddingPx + depth * BranchIndentStepPx }}
           data-git-menu-item
           aria-expanded={expanded}
-          onClick={() => toggleFolder(node.key)}
+          onClick={() => toggleFolder(node.key, expanded)}
         >
           <CaretDownIcon
             size={11}
@@ -301,53 +314,134 @@ export function WorkbenchGitBranchMenu({
     )
   }
 
-  return (
-    // 这是一块带搜索框的面板，不是纯菜单：按键只认方向键，其余照常（打字、Tab、Esc 关掉）。
-    <div className={styles.gitBranchMenu} onKeyDown={handleKeyDown}>
-      <div className={styles.gitBranchMenuSearch}>
-        <SearchField
-          ref={searchRef}
-          size="sm"
-          value={search}
-          placeholder={t('workbench.gitBranchSearchPlaceholder')}
-          aria-label={t('workbench.gitBranchSearchPlaceholder')}
-          onChange={(event) => onSearchChange(event.target.value)}
-        />
+  function renderDetails(branch: WorkspaceGitBranch): ReactElement {
+    const pull = remoteActions.find((item) => item.action === 'pull')
+    const push = remoteActions.find((item) => item.action === 'upload')
+    return (
+      <section
+        ref={detailsRef}
+        id={detailsId}
+        className={styles.gitBranchMenuDetails}
+        aria-labelledby={`${detailsId}-name`}
+        tabIndex={-1}
+      >
         <div
-          className={styles.gitBranchMenuActions}
-          role="group"
-          aria-label={t('workbench.gitRemoteActionsMenu')}
+          id={`${detailsId}-name`}
+          className={styles.gitBranchMenuDetailsName}
+          title={branch.name}
         >
-          {remoteActions
-            .filter((item) => item.action === 'fetch')
-            .map((item) => renderRemoteAction(item))}
+          {branch.name}
         </div>
-      </div>
-      {remoteNote && (
-        <div className={styles.gitBranchMenuRemote}>
-          <p className={styles.gitBranchMenuNote}>{remoteNote}</p>
+        <div className={styles.gitBranchMenuDetailsList}>
+          {!selectedCurrent &&
+            renderCommand('workbench.gitBranchCheckoutCreated', GitBranchIcon, () =>
+              onSwitchBranch(branch)
+            )}
+          {renderCommand('workbench.gitBranchCreateFromSelected', PlusIcon, () =>
+            onOpenCreateBranch(branch)
+          )}
+          {selectedCurrent &&
+            pull &&
+            renderRemoteAction(pull, running?.action === 'pull' ? running : null)}
+          {!selectedRemote &&
+            push &&
+            renderRemoteAction(
+              selectedCurrent
+                ? push
+                : {
+                    ...push,
+                    hint: branchesBlocked ?? branch.name,
+                    disabled: !!branchesBlocked,
+                    count: 0,
+                  },
+              runningInDetails && running?.action === 'upload' ? running : null,
+              selectedCurrent ? undefined : branch
+            )}
+          {!selectedCurrent && canIntegrate && (
+            <>
+              {renderCommand('workbench.gitMergeIntoCurrent', GitMergeIcon, () =>
+                onRunBranchOperation('merge', branch)
+              )}
+              {renderCommand('workbench.gitRebaseCurrentOnto', ArrowLineUpIcon, () =>
+                onRunBranchOperation('rebase', branch)
+              )}
+            </>
+          )}
         </div>
-      )}
-      <div className={styles.gitBranchMenuList}>
-        {renderGroup('local', t('workbench.gitBranchLocal'))}
-        {renderGroup('remote', t('workbench.gitBranchRemoteGroup'))}
-        {trees.local.length === 0 && trees.remote.length === 0 && (
-          <div className={styles.gitBranchMenuEmpty}>{t('workbench.gitBranchNoMatch')}</div>
+      </section>
+    )
+  }
+
+  function renderCommand(key: string, CommandIcon: Icon, onClick: () => void): ReactElement {
+    return (
+      <button
+        type="button"
+        className={styles.gitBranchMenuCommand}
+        data-git-menu-item
+        disabled={branchesLocked}
+        title={branchesBlocked ?? undefined}
+        onClick={onClick}
+      >
+        <CommandIcon size={15} aria-hidden="true" />
+        <span>{t(key)}</span>
+      </button>
+    )
+  }
+
+  return (
+    <div className={styles.gitBranchMenu} onKeyDown={handleKeyDown}>
+      <div className={styles.gitBranchMenuBrowser}>
+        <div className={styles.gitBranchMenuSearch}>
+          <SearchField
+            ref={searchRef}
+            size="sm"
+            value={search}
+            placeholder={t('workbench.gitBranchSearchPlaceholder')}
+            aria-label={t('workbench.gitBranchSearchPlaceholder')}
+            onChange={(event) => {
+              const nextSearch = event.target.value
+              if (selected && filterWorkbenchGitBranches([selected], nextSearch).length === 0)
+                onSelectBranch(null)
+              onSearchChange(nextSearch)
+            }}
+          />
+          <div
+            className={styles.gitBranchMenuActions}
+            role="group"
+            aria-label={t('workbench.gitRemoteActionsMenu')}
+          >
+            {remoteActions
+              .filter((item) => item.action === 'fetch')
+              .map((item) => renderRemoteAction(item, runningInDetails ? null : running))}
+          </div>
+        </div>
+        {remoteNote && (
+          <div className={styles.gitBranchMenuRemote}>
+            <p className={styles.gitBranchMenuNote}>{remoteNote}</p>
+          </div>
         )}
+        <div className={styles.gitBranchMenuList}>
+          {renderGroup('local', t('workbench.gitBranchLocal'))}
+          {renderGroup('remote', t('workbench.gitBranchRemoteGroup'))}
+          {trees.local.length === 0 && trees.remote.length === 0 && (
+            <div className={styles.gitBranchMenuEmpty}>{t('workbench.gitBranchNoMatch')}</div>
+          )}
+        </div>
+        <div className={styles.gitBranchMenuFooter}>
+          <button
+            type="button"
+            className={styles.gitBranchMenuCreate}
+            data-git-menu-item
+            disabled={branchesLocked}
+            title={branchesBlocked ?? undefined}
+            onClick={() => onOpenCreateBranch()}
+          >
+            <PlusIcon size={14} />
+            <span>{t('workbench.gitBranchCreateDialogTitle')}</span>
+          </button>
+        </div>
       </div>
-      <div className={styles.gitBranchMenuFooter}>
-        <button
-          type="button"
-          className={styles.gitBranchMenuCreate}
-          data-git-menu-item
-          disabled={branchesLocked}
-          title={branchesBlocked ?? undefined}
-          onClick={onOpenCreateBranch}
-        >
-          <PlusIcon size={14} />
-          <span>{t('workbench.gitBranchCreateDialogTitle')}</span>
-        </button>
-      </div>
+      {selected && renderDetails(selected)}
     </div>
   )
 }

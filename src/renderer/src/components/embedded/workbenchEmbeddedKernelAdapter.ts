@@ -42,6 +42,7 @@ export function buildStandaloneWorkbenchEditorChrome(
   }
   const editorChromeActions = {
     onGitRefresh: model.actions.refreshGitPanel,
+    onGitWorkingTreeChanged: model.actions.refreshProjectAndGit,
     onRepositoryChanged: model.actions.handleRepositoryChanged,
     onOpenGitCommitTool: () => {
       model.surface.setActiveLeftTool('commit')
@@ -140,9 +141,10 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onResolveExternalFileConflict: (resolution) => {
           if (activePath) void workbench.resolveSelectedExternalFileConflict(resolution, activePath)
         },
-        onEditorContentChange: (content) => {
-          if (activePath) workbench.setEditorContent(content, activePath)
+        onEditorContentChange: (content, defer) => {
+          if (activePath) workbench.setEditorContent(content, activePath, defer)
         },
+        readEditorContent: workbench.readEditorContent,
         onOpenDirectory: (path) => void workbench.openDirectory(path),
         onRevealSelectedFile: () => {
           if (activePath) void workbench.revealEntryPath(activePath)

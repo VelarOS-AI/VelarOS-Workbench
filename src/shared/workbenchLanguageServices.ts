@@ -2,6 +2,18 @@ import { toNullable } from '@velaros-ai/velaros/core'
 
 export type WorkbenchLanguageServiceInstallKind = 'builtin'
 
+const LspCompletionKinds: Partial<Record<number, string>> = {
+  1: 'text', 2: 'method', 3: 'function', 4: 'constructor', 5: 'property',
+  6: 'variable', 7: 'class', 8: 'interface', 9: 'namespace', 10: 'property',
+  11: 'type', 12: 'value', 13: 'enum', 14: 'keyword', 15: 'snippet',
+  16: 'color', 17: 'file', 18: 'file', 19: 'folder', 20: 'enum-member',
+  21: 'constant', 22: 'class', 23: 'event', 24: 'operator', 25: 'type',
+}
+
+export function workbenchLspCompletionKind(kind: number | undefined): string | undefined {
+  return kind === undefined ? undefined : LspCompletionKinds[kind]
+}
+
 export type WorkbenchLanguageServiceRuntime =
   | 'typescript-language-service'
   | 'html-language-service'
@@ -33,6 +45,7 @@ export interface WorkbenchLanguageServiceDescriptor {
   projectRootMarkers?: readonly string[]
   args?: string[]
   documentLanguageId?: string
+  documentLanguageIds?: Readonly<Record<string, string>>
   protocol?: WorkbenchLanguageServerProtocolContract
   extensionRequests?: readonly WorkbenchLanguageServiceExtensionRequestDescriptor[]
   hover?: {
@@ -59,6 +72,11 @@ export interface WorkbenchLanguageServiceExtensionRequestDescriptor {
   /** Path below initializeResult.capabilities that enables the request. */
   capabilityPath: string[]
 }
+
+export const WorkbenchCppFileExtensions: readonly string[] = [
+  'h', 'cc', 'cpp', 'cxx', 'c++', 'hh', 'hpp', 'hxx', 'h++', 'inl', 'ipp', 'tpp',
+  'ixx', 'cppm', 'ccm', 'cxxm', 'c++m', 'mpp',
+]
 
 const BuiltinLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
   {
@@ -133,6 +151,19 @@ const BuiltinLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     command: 'csharp-ls',
     documentLanguageId: 'csharp',
     initializeTimeoutMs: 90_000,
+  },
+  {
+    id: 'c-cpp',
+    label: 'C / C++',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['c', ...WorkbenchCppFileExtensions],
+    languages: ['c', 'cpp', 'c++'],
+    command: 'clangd',
+    args: ['--background-index', '--log=error'],
+    documentLanguageId: 'cpp',
+    documentLanguageIds: { c: 'c' },
+    projectRootMarkers: ['compile_commands.json', 'compile_flags.txt', '.clangd'],
   },
   {
     id: 'go',
@@ -241,6 +272,16 @@ function normalizeToken(token: string): string {
 
 function extensionFromPath(path: Nullable<string>): string {
   return path?.split('.').at(-1)?.toLowerCase() ?? ''
+}
+
+export function getWorkbenchLanguageServiceDocumentId(
+  descriptor: WorkbenchLanguageServiceDescriptor,
+  path: string
+): string {
+  const ids = descriptor.documentLanguageIds
+  const extension = extensionFromPath(path)
+  return (ids && Object.hasOwn(ids, extension) ? ids[extension] : undefined) ??
+    descriptor.documentLanguageId ?? descriptor.languages[0] ?? descriptor.id
 }
 
 export {

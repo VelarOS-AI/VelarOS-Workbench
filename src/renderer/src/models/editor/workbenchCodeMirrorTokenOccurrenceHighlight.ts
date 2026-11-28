@@ -35,6 +35,7 @@ const WORD_PART_PATTERN = /[\p{L}\p{N}_$]/u
 const WORD_HAS_LETTER_PATTERN = /[\p{L}_$]/u
 const TOKEN_OCCURRENCE_BG_ALPHA = 0.16
 const SemanticOccurrenceDelayMs = 150
+const EditedSemanticOccurrenceDelayMs = 500
 
 interface WorkbenchCaretToken {
   from: number
@@ -183,7 +184,11 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
         if (semanticChanged) {
           this.semanticDecorations = null
           this.useTextMatches = !runtime
-          this.scheduleSemantic(update.view, token)
+          this.scheduleSemantic(
+            update.view,
+            token,
+            update.docChanged ? EditedSemanticOccurrenceDelayMs : SemanticOccurrenceDelayMs
+          )
         }
         // 滚动只重绘可视区内的同词匹配，语义范围覆盖全文。
         if (this.semanticDecorations) this.decorations = this.semanticDecorations
@@ -195,7 +200,11 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
         if (this.timer !== null) clearTimeout(this.timer)
       }
 
-      private scheduleSemantic(view: EditorView, token: Nullable<WorkbenchCaretToken>): void {
+      private scheduleSemantic(
+        view: EditorView,
+        token: Nullable<WorkbenchCaretToken>,
+        delay = SemanticOccurrenceDelayMs
+      ): void {
         const generation = ++this.requestGeneration
         if (this.timer !== null) clearTimeout(this.timer)
         this.timer = null
@@ -203,7 +212,7 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
         this.timer = setTimeout(() => {
           this.timer = null
           void this.loadSemantic(view, token, generation)
-        }, SemanticOccurrenceDelayMs)
+        }, delay)
       }
 
       private applyToken(
@@ -220,13 +229,22 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
           view.dom.style.removeProperty(TOKEN_OCCURRENCE_BG_VAR)
           return
         }
-        if (!shouldMeasureBackground) return
+        if (shouldMeasureBackground && this.useTextMatches) this.measureBackground(view, token)
+      }
 
+      private measureBackground(view: EditorView, token: WorkbenchCaretToken): void {
+        const generation = this.requestGeneration
         view.requestMeasure({
           key: this,
           read: () => resolveTokenBackground(view, token),
           write: (background) => {
-            view.dom.style.setProperty(TOKEN_OCCURRENCE_BG_VAR, background ?? '')
+            const style = view.dom.style
+            const color = background ?? ''
+            if (
+              generation === this.requestGeneration &&
+              style.getPropertyValue(TOKEN_OCCURRENCE_BG_VAR) !== color
+            )
+              style.setProperty(TOKEN_OCCURRENCE_BG_VAR, color)
           },
         })
       }
@@ -266,6 +284,7 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
           this.applyToken(view, token, false)
         }
         view.dispatch({ effects: semanticOccurrenceRefreshEffect.of() })
+        if (this.decorations.size) this.measureBackground(view, token)
       }
     },
     { decorations: (plugin) => plugin.decorations }

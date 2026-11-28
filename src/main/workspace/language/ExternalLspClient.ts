@@ -8,7 +8,7 @@ import { URI } from 'vscode-uri'
 import { Log, optionalWhen } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
-import type { WorkbenchLanguageServiceDescriptor } from '@shared/workbenchLanguageServices'
+import { getWorkbenchLanguageServiceDocumentId, type WorkbenchLanguageServiceDescriptor } from '@shared/workbenchLanguageServices'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isPathInsideRoot } from '../PathContainmentHelper'
@@ -512,10 +512,6 @@ export function externalLspRuntimeFingerprint(
   })
 }
 
-function languageIdFor(descriptor: WorkbenchLanguageServiceDescriptor): string {
-  return descriptor.documentLanguageId ?? descriptor.languages[0] ?? descriptor.id
-}
-
 function launchFor(
   runtimeRoot: string,
   descriptor: WorkbenchLanguageServiceDescriptor,
@@ -630,7 +626,7 @@ export class ExternalLspClient {
     if (!current) {
       const document = {
         content,
-        languageId: languageIdFor(this.descriptor),
+        languageId: getWorkbenchLanguageServiceDocumentId(this.descriptor, path),
         version: this.nextDocumentVersion++,
       }
       this.documents.set(uri, document)

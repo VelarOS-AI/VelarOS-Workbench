@@ -1,4 +1,4 @@
-import { Text } from '@codemirror/state'
+import { type ChangeDesc, Text } from '@codemirror/state'
 
 import { isBlank, isEmpty } from '@velaros-ai/velaros/core'
 
@@ -51,6 +51,28 @@ function isCommentOnlyLine(textAfterIndent: string): boolean {
 
 function isClosingConstructLine(textAfterIndent: string): boolean {
   return /^[}\])]/.test(textAfterIndent)
+}
+
+function indentGuideLinePrefix(line: string): string {
+  return line.slice(0, firstNonWhitespaceIndex(line) + 2)
+}
+
+export function workbenchIndentGuidesChanged(before: Text, after: Text, changes: ChangeDesc): boolean {
+  let changed = before.lines !== after.lines
+  changes.iterChangedRanges((fromBefore, toBefore, fromAfter, toAfter) => {
+    if (changed) return
+    const previous = before.lineAt(fromBefore)
+    const next = after.lineAt(fromAfter)
+    if (toBefore > previous.to || toAfter > next.to) {
+      changed = true
+      return
+    }
+
+    // Guide geometry only depends on indentation and the start of the text (including comment markers).
+    changed = indentGuideLinePrefix(previous.text) !== indentGuideLinePrefix(next.text) ||
+      isBlank(previous.text) !== isBlank(next.text)
+  })
+  return changed
 }
 
 function getDocLineText(doc: Text, lineIndex: number): string {

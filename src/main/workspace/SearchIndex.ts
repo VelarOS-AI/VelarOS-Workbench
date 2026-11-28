@@ -12,7 +12,6 @@ import type { Dirent } from 'node:fs'
 import { readdir, realpath, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
-import { isPresent } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
@@ -395,6 +394,13 @@ class SearchIndex {
       }
 
       const requestedEntryPath = resolve(options.requestedPath, entry.name)
+      const searchablePath = this.pathResolver
+        .toProjectRelativePath(options.projectRoot, requestedEntryPath)
+        .toLowerCase()
+      const matches = options.queryTokens.every((token) => searchablePath.includes(token))
+      const mayHaveChildren = entry.isDirectory() || entry.isSymbolicLink()
+      if (!matches && (!mayHaveChildren || options.depth >= options.maxDepth)) continue
+
       const realEntryPath = await realpath(requestedEntryPath).catch(() => null)
       if (!realEntryPath) {
         continue
@@ -413,16 +419,15 @@ class SearchIndex {
       }
 
       const isDirectory = entryStats.isDirectory()
-      const directoryEntry = await this.entryHelper.toDirectoryEntry(
-        options.projectRoot,
-        requestedEntryPath,
-        options.includeHidden
-      )
-      const score = this.scoreSearchEntry(directoryEntry, options.query, options.queryTokens)
-      if (isPresent(score)) {
+      if (matches) {
+        const directoryEntry = await this.entryHelper.toDirectoryEntry(
+          options.projectRoot,
+          requestedEntryPath,
+          options.includeHidden
+        )
         options.candidates.push({
           entry: directoryEntry,
-          score,
+          score: this.scoreSearchEntry(directoryEntry, options.query),
         })
 
         if (options.candidates.length > options.limit * 4) {
@@ -444,19 +449,12 @@ class SearchIndex {
     }
   }
 
-  private scoreSearchEntry(
-    entry: WorkbenchDirectoryEntry,
-    query: string,
-    queryTokens: string[]
-  ): Nullable<number> {
+  private scoreSearchEntry(entry: WorkbenchDirectoryEntry, query: string): number {
     const lowerQuery = query.toLowerCase()
     const lowerName = entry.name.toLowerCase()
     const lowerPath = entry.path.toLowerCase()
     const extensionIndex = lowerName.lastIndexOf('.')
     const lowerNameStem = extensionIndex > 0 ? lowerName.slice(0, extensionIndex) : lowerName
-
-    if (!queryTokens.every((token) => lowerPath.includes(token) || lowerName.includes(token)))
-      return null
 
     let score = entry.type === 'file' ? 0 : 1
     if (lowerName === lowerQuery || lowerNameStem === lowerQuery) {

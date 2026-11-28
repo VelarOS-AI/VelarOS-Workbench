@@ -198,32 +198,38 @@ function keywordPatternFor(languageId: string): Nullable<RegExp> {
   return null
 }
 
-function isCodePosition(lineText: string, position: number, languageId: string): boolean {
+/** Keyword matches arrive in order, so each part of a long line only needs to be scanned once. */
+function createCodePositionScanner(
+  lineText: string,
+  languageId: string
+): (position: number) => boolean {
+  let offset = 0
   let quote: Nullable<string> = null
   let escaped = false
+  let inlineComment = false
   const hashComments = ['py', 'pyi', 'python'].includes(languageId.trim().toLowerCase())
   const injectedLineComment = resolveWorkbenchEditorLanguage(languageId)?.basicSyntax?.lineComment
+  const slashComments = injectedLineComment === '//' || !injectedLineComment
+  const useHashComments = injectedLineComment === '#' || hashComments
 
-  for (let index = 0; index < position; index += 1) {
-    const char = lineText[index]
-    const next = lineText[index + 1]
-    if (escaped) {
-      escaped = false
-      continue
+  return (position) => {
+    while (!inlineComment && offset < position) {
+      const char = lineText[offset++]
+      if (escaped) {
+        escaped = false
+      } else if (quote) {
+        if (char === '\\') escaped = true
+        else if (char === quote) quote = null
+      } else if (char === '"' || char === "'" || char === '`') {
+        quote = char
+      } else {
+        inlineComment =
+          (slashComments && char === '/' && lineText[offset] === '/') ||
+          (useHashComments && char === '#')
+      }
     }
-    if (quote) {
-      if (char === '\\') escaped = true
-      else if (char === quote) quote = null
-      continue
-    }
-    if ((injectedLineComment === '//' || !injectedLineComment) && char === '/' && next === '/')
-      return false
-    if (injectedLineComment === '#' && char === '#') return false
-    if (hashComments && char === '#') return false
-    if (char === '"' || char === "'" || char === '`') quote = char
+    return !inlineComment && !quote
   }
-
-  return !quote
 }
 
 export function getWorkbenchJavaScriptKeywordRangeAtPosition(
@@ -243,8 +249,9 @@ export function getWorkbenchJavaScriptKeywordRangeAtPosition(
     const index = match.index ?? 0
     const from = line.from + index
     const to = from + match[0].length
-    if (offset < from || offset > to) continue
-    if (!isCodePosition(line.text, index, normalizedLanguage)) return null
+    if (offset < from) break
+    if (offset > to) continue
+    if (!createCodePositionScanner(line.text, normalizedLanguage)(index)) return null
     return { from, to }
   }
 
@@ -268,9 +275,10 @@ export function buildWorkbenchBasicKeywordDecorations(
       if (!visitedLines.has(line.number)) {
         visitedLines.add(line.number)
         const pattern = new RegExp(sourcePattern.source, sourcePattern.flags)
+        const isCodePosition = createCodePositionScanner(line.text, languageId)
         for (const match of line.text.matchAll(pattern)) {
           const index = match.index ?? 0
-          if (!isCodePosition(line.text, index, languageId)) continue
+          if (!isCodePosition(index)) continue
           builder.add(
             line.from + index,
             line.from + index + match[0].length,

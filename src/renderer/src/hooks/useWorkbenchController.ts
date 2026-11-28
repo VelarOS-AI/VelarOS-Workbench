@@ -8,7 +8,10 @@ import {
 } from '@renderer/models/editor/workbenchImportUpdates'
 import { buildWorkbenchLanguageServiceEditReport } from '@renderer/models/editor/workbenchLanguageServiceEditReport'
 import { getWorkbenchLanguageServiceFileRenameEdits } from '@renderer/models/editor/workbenchLanguageServiceIpc'
-import { buildWorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
+import {
+  buildWorkbenchProjectContextFiles,
+  buildWorkbenchProjectContextIndex,
+} from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import {
   readWorkbenchProjectSession,
@@ -66,7 +69,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions) {
   const commandActions = command.actions
   const projectIndex = useWorkbenchProjectIndexController({
     activeProject: project,
-    enabled: true,
+    enabled: openedProjectId === project.id,
   })
   const editor = useWorkbenchEditorController({
     activeProject: project,
@@ -197,14 +200,19 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions) {
       })
     }
   )
+  const projectContextFiles = useMemo(
+    () => buildWorkbenchProjectContextFiles(tree.childrenByPath, projectIndex.indexedFileSnapshots),
+    [tree.childrenByPath, projectIndex.indexedFileSnapshots]
+  )
   const projectContextIndex = useMemo(
     () =>
       buildWorkbenchProjectContextIndex({
         childrenByPath: tree.childrenByPath,
         openFiles: editor.openedFileSnapshots,
         indexedFiles: projectIndex.indexedFileSnapshots,
+        files: projectContextFiles,
       }),
-    [tree.childrenByPath, editor.openedFileSnapshots, projectIndex.indexedFileSnapshots]
+    [tree.childrenByPath, editor.openedFileSnapshots, projectIndex.indexedFileSnapshots, projectContextFiles]
   )
   const languageServiceInsights = useWorkbenchLanguageServiceInsights({
     projectRoot: project.rootPath,
@@ -342,6 +350,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions) {
     isMutatingTree: mutation.isMutatingTree,
     isSearchingEntries: search.isSearchingEntries,
     isIndexingProject: projectIndex.isIndexingProject,
+    projectIndexProgress: projectIndex.projectIndexProgress,
     isRunningCommand: commandState.command.isRunningCommand,
     hasActiveRunCommand: commandState.command.hasActiveRunCommand,
     isValidationStale: commandState.command.isValidationStale,
@@ -367,6 +376,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions) {
     /** 项目搜索的替换落到开着的文件上（在标签正文上换，能撤销，不写盘）。 */
     replaceOpenTabContents: editor.replaceOpenTabContents,
     setEditorContent: editor.setEditorContent,
+    readEditorContent: editor.readEditorContent,
     setTreeActionName: mutation.setTreeActionName,
     setSearchQuery: search.setSearchQuery,
     setCommandInput: commandActions.command.setCommandInput,

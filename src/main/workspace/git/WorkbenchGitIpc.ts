@@ -127,7 +127,7 @@ export function registerWorkbenchGitIpc(
   ipcMain.handle(WorkbenchGitChannels.createBranch, (_event, input: unknown) =>
     callWithEnvelope(() => {
       const request = parseCreateBranch(input)
-      return service.createBranch(request.workspaceRoot, request.branch)
+      return service.createBranch(request.workspaceRoot, request.branch, request.startPoint)
     })
   )
   ipcMain.handle(WorkbenchGitChannels.remoteAction, (_event, input: unknown) =>
@@ -319,9 +319,12 @@ function parseSwitchBranch(input: unknown): WorkbenchGitSwitchBranchRequest {
 
 function parseCreateBranch(input: unknown): WorkbenchGitCreateBranchRequest {
   if (!hasStringFields(input, ['workspaceRoot', 'branch'])) return invalidRequest()
+  if (input['startPoint'] !== undefined && typeof input['startPoint'] !== 'string')
+    return invalidRequest()
   return {
     workspaceRoot: input['workspaceRoot'] as string,
     branch: input['branch'] as string,
+    startPoint: optionalWhen(isString, input['startPoint']),
   }
 }
 

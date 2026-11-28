@@ -177,14 +177,6 @@
   color: var(--workbench-editor-hover-type, #007070) !important;
 }
 
-.editorSymbolTooltip[data-has-definition-preview='true']
-  [data-hover-part='type'][data-hover-modifier-target='true'] {
-  cursor: pointer;
-  text-decoration-line: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
 .editorSymbolTooltip [data-hover-part='name'] {
   color: var(--workbench-editor-hover-name, #871094) !important;
 }
@@ -414,6 +406,8 @@
 .editorSignatureTooltipHost {
   position: absolute;
   z-index: 40;
+  width: max-content;
+  max-width: calc(100% - 16px);
   pointer-events: none;
 }
 
@@ -473,33 +467,8 @@
 }
 
 .codeMirrorEditor :global(.cm-workbenchTokenOccurrence) {
-  position: relative;
-  isolation: isolate;
-}
-
-.codeMirrorEditor :global(.cm-workbenchTokenOccurrence)::before {
-  /* 浅色包裹：背景色取自光标所在标识符的语法着色（见 token-occurrence 扩展），
-     高度随代码行，宽度贴合标识符。 */
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset-block-start: 50%;
-  inset-inline: 0;
-  height: 1lh;
-  translate: 0 -50%;
+  /* 行内文字盒和光标使用同一套字体度量。 */
   background: var(--workbench-token-occurrence-bg, rgba(120, 128, 145, 0.14));
-  pointer-events: none;
-}
-
-/* 换行时标识符可能拆成多个行内盒，逐段绘制背景。 */
-.codeMirrorEditor :global(.cm-lineWrapping .cm-workbenchTokenOccurrence) {
-  padding-block: max(0px, calc((1lh - 1.16em) / 2));
-  background: var(--workbench-token-occurrence-bg, rgba(120, 128, 145, 0.14));
-  box-decoration-break: clone;
-}
-
-.codeMirrorEditor :global(.cm-lineWrapping .cm-workbenchTokenOccurrence)::before {
-  content: none;
 }
 
 .codeMirrorEditor :global(.cm-workbenchDeprecated),

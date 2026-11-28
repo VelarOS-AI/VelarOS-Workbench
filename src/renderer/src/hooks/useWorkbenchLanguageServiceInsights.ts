@@ -139,18 +139,24 @@ export function useWorkbenchLanguageServiceInsights({
       [...pendingPathsRef.current].filter((path) => contentByPath.has(path))
     )
     for (const path of changedPaths) pendingPaths.add(path)
-    pendingPathsRef.current = pendingPaths
-    setDiagnosticsPendingPaths(new Set(pendingPaths))
+    const previousPendingPaths = pendingPathsRef.current
+    if (
+      pendingPaths.size !== previousPendingPaths.size ||
+      [...pendingPaths].some((path) => !previousPendingPaths.has(path))
+    ) {
+      pendingPathsRef.current = pendingPaths
+      setDiagnosticsPendingPaths(pendingPaths)
+    }
     if (rootChanged) setDiagnosticsByPath(new Map())
     else if (changedPaths.size > 0)
       setDiagnosticsByPath((current) => omitWorkbenchPendingDiagnostics(current, changedPaths))
 
-    // 当前文件的实时缓冲进共享的打开文件覆盖层：别的标签看到的是刚改过的依赖，而不是旧的标签快照。
-    const openTabsWithLiveContent = currentTabs.map((tab) =>
-      tab.path === activePath ? { ...tab, content: activeContent } : tab
-    )
     const request = async (paths: readonly string[]): Promise<void> => {
       if (disposed || contextRef.current.projectRoot !== root || isEmpty(paths)) return
+      // 只在诊断实际发出时构造快照，同时让其它标签看到当前文件的最新编辑。
+      const openTabsWithLiveContent = currentTabs.map((tab) =>
+        tab.path === activePath ? { ...tab, content: activeContent } : tab
+      )
       // Submit one file at a time. A large set of restored tabs must not spend
       // every request's timeout budget waiting for earlier ESLint workers.
       for (const path of paths) {
@@ -191,11 +197,12 @@ export function useWorkbenchLanguageServiceInsights({
             })
           }
         }
-        const remaining = new Set(
-          [...pendingPathsRef.current].filter((pending) => pending !== path)
-        )
-        pendingPathsRef.current = remaining
-        setDiagnosticsPendingPaths(remaining)
+        if (pendingPathsRef.current.has(path)) {
+          const remaining = new Set(pendingPathsRef.current)
+          remaining.delete(path)
+          pendingPathsRef.current = remaining
+          setDiagnosticsPendingPaths(remaining)
+        }
       }
     }
 
@@ -227,17 +234,15 @@ export function useWorkbenchLanguageServiceInsights({
     tLatest,
   ])
 
-  // 整项目检查的锚点：打开着的 TypeScript 文件，当前文件在前（它所在的项目先查）。
+  // 标签焦点只决定检查顺序，文件集合和磁盘版本才决定是否重新检查。
   const projectAnchorKey = useMemo(
     () =>
       openTabs
         .map((tab) => tab.path)
         .filter((path) => usesWorkbenchTypeScriptLanguageService(path))
-        .sort(
-          (left, right) => Number(right === selectedFilePath) - Number(left === selectedFilePath)
-        )
+        .sort()
         .join('\n'),
-    [openTabs, selectedFilePath]
+    [openTabs]
   )
   const projectPassRef = useRef({
     root: null as Nullable<string>,
@@ -270,11 +275,15 @@ export function useWorkbenchLanguageServiceInsights({
         // 按真实完成串行衔接；已失效的 effect 不再派发后续批次。
         await previous
         if (disposed || contextRef.current.projectRoot !== root) return
+        const activePath = contextRef.current.selectedFilePath
+        const orderedAnchors = [...anchorPaths].sort(
+          (left, right) => Number(right === activePath) - Number(left === activePath)
+        )
         do {
           const result = await getWorkbenchLanguageServiceProjectDiagnostics(
             {
               projectRoot: root,
-              anchorPaths,
+              anchorPaths: orderedAnchors,
               cursor,
               openFiles: buildWorkbenchLanguageServiceOpenFiles(contextRef.current.openTabs),
             },

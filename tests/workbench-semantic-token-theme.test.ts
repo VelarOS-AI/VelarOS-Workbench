@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 
 import { highlightingFor } from '@codemirror/language'
-import { EditorState } from '@codemirror/state'
+import { EditorState, Text } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { type Tag, tags } from '@lezer/highlight'
 import { test } from 'bun:test'
 
+import { clipWorkbenchHighlightRanges } from '../src/renderer/src/models/editor/workbenchCodeMirrorHighlightViewport'
 import {
   buildWorkbenchSemanticTokenDecorations,
   getWorkbenchSemanticTokenTheme,
@@ -16,6 +17,19 @@ import {
   type WorkbenchCodeTokenPalette,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import type { WorkbenchThemeId } from '../src/renderer/src/models/workbenchPreferences'
+
+void test('horizontal highlighting leaves off-screen marks out and preserves bidirectional and short lines', () => {
+  const doc = Text.of(['a'.repeat(800), 'short', 'שלום ' + 'z'.repeat(500), 'b'.repeat(600)])
+  const visible = [{ from: 0, to: doc.length }]
+  assert.deepEqual(clipWorkbenchHighlightRanges(doc, visible, 200), [
+    { from: 0, to: 200 },
+    { from: doc.line(2).from, to: doc.line(4).from + 200 },
+  ])
+  const fragment = [{ from: doc.line(4).from + 400, to: doc.length }]
+  assert.deepEqual(clipWorkbenchHighlightRanges(doc, fragment, 200), [])
+  assert.deepEqual(clipWorkbenchHighlightRanges(doc, fragment, 700), fragment)
+  assert.equal(clipWorkbenchHighlightRanges(doc, visible, Infinity), visible)
+})
 
 function semanticThemeRules(theme: WorkbenchThemeId): string {
   const state = EditorState.create({ extensions: [getWorkbenchSemanticTokenTheme(theme)] })

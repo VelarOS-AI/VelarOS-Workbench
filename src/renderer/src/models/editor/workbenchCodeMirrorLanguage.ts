@@ -1,7 +1,9 @@
+import type { CompletionSource } from '@codemirror/autocomplete'
+import { cpp } from '@codemirror/lang-cpp'
 import { css } from '@codemirror/lang-css'
 import { go } from '@codemirror/lang-go'
 import { html } from '@codemirror/lang-html'
-import { javascript } from '@codemirror/lang-javascript'
+import { autoCloseTags, javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { less } from '@codemirror/lang-less'
 import { markdown } from '@codemirror/lang-markdown'
@@ -18,7 +20,7 @@ import {
   LanguageSupport,
   StreamLanguage,
 } from '@codemirror/language'
-import { dart, kotlin, shader } from '@codemirror/legacy-modes/mode/clike'
+import { c, dart, kotlin, shader } from '@codemirror/legacy-modes/mode/clike'
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
 import { groovy } from '@codemirror/legacy-modes/mode/groovy'
 import { properties } from '@codemirror/legacy-modes/mode/properties'
@@ -26,15 +28,17 @@ import { shell } from '@codemirror/legacy-modes/mode/shell'
 import { swift } from '@codemirror/legacy-modes/mode/swift'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
 import { wast } from '@codemirror/legacy-modes/mode/wast'
-import type { Extension } from '@codemirror/state'
+import { EditorState, type Extension } from '@codemirror/state'
 import { csharpLanguage } from '@codincod/codemirror-lang-csharp'
 import { styleTags, tags } from '@lezer/highlight'
 
 import {
   getWorkbenchPathExtension,
   normalizeWorkbenchLanguage,
+  WorkbenchCppFileExtensions,
 } from '@shared/workbenchLanguageServices'
 
+import { hideUnchangedWorkbenchCompletions, isWorkbenchJavaScriptMemberCompletion } from './workbenchCodeMirrorCompletionPresentation'
 import { workbenchJavaLanguage } from './workbenchCodeMirrorJava'
 import { resolveWorkbenchEditorLanguage } from './workbenchEditorLanguageContributions'
 import { workbenchGitIgnoreLanguage } from './workbenchGitIgnoreLanguage'
@@ -95,6 +99,8 @@ const AdditionalLanguages = [
     tokens: ['cs', 'csx', 'csharp', 'c#'],
     support: new LanguageSupport(WorkbenchCSharpLanguage),
   },
+  { id: 'c', name: 'C', tokens: ['c'], support: new LanguageSupport(StreamLanguage.define(c)) },
+  { id: 'cpp', name: 'C++', tokens: [...WorkbenchCppFileExtensions], support: cpp() },
   {
     id: 'groovy',
     name: 'Groovy',
@@ -264,15 +270,24 @@ export function resolveWorkbenchCodeMirrorLanguage(
       mode: 'builtin',
     }
 
-  if (TypeScriptTokens.has(token) || JavaScriptTokens.has(token))
+  if (TypeScriptTokens.has(token) || JavaScriptTokens.has(token)) {
+    const jsx = JsxTokens.has(token)
+    const support = javascript({ jsx, typescript: TypeScriptTokens.has(token) })
+    // Reuse the language package's own keyword, snippet and local binding sources.
+    const sources = EditorState.create({ extensions: support.extension })
+      .languageDataAt<CompletionSource>('autocomplete', 0)
     return {
-      extension: javascript({
-        jsx: JsxTokens.has(token),
-        typescript: TypeScriptTokens.has(token),
-      }),
+      extension: new LanguageSupport(support.language, [
+        ...sources.map((source) => support.language.data.of({
+          autocomplete: hideUnchangedWorkbenchCompletions((context) =>
+            isWorkbenchJavaScriptMemberCompletion(context) ? null : source(context)),
+        })),
+        jsx ? autoCloseTags : [],
+      ]),
       languageId: token,
       mode: 'builtin',
     }
+  }
 
   if (PythonTokens.has(token)) return { extension: python(), languageId: 'python', mode: 'builtin' }
 

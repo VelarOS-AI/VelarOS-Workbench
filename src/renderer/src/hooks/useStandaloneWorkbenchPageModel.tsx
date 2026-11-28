@@ -23,6 +23,7 @@ import { useWorkbenchProductRuntime } from '@renderer/composition/WorkbenchProdu
 import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
 import { useWorkbenchCommandPalette } from '@renderer/hooks/useWorkbenchCommandPalette'
 import { useWorkbenchDebugShortcuts } from '@renderer/hooks/useWorkbenchDebugShortcuts'
+import { useWorkbenchEditorZoom } from '@renderer/hooks/useWorkbenchEditorZoom'
 import { useWorkbenchKeyboardShortcuts } from '@renderer/hooks/useWorkbenchKeyboardShortcuts'
 import { useWorkbenchKeymapController } from '@renderer/hooks/useWorkbenchKeymapController'
 import { useWorkbenchLayoutController } from '@renderer/hooks/useWorkbenchLayoutController'
@@ -58,10 +59,6 @@ import {
   type WorkbenchProject,
 } from '@renderer/models/project/workbenchProjects'
 import type { PersistedWorkbenchEditorCursor } from '@renderer/models/project/workbenchProjectSessionModel'
-import {
-  getZoomedWorkbenchEditorZoomLevel,
-  type WorkbenchEditorZoomAction,
-} from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 import { type BrowserElementSelection } from '@velaros-ai/capabilities/browser/contracts'
@@ -217,6 +214,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
   } = useWorkbenchProductRuntime()
   const sessionCursorByPathRef = useRef<Record<string, PersistedWorkbenchEditorCursor>>({})
   const workbenchPreferences = useWorkbenchPreferences()
+  const zoomEditor = useWorkbenchEditorZoom(workbenchPreferences)
   const workbench = useWorkbenchController({
     project,
     previewTabsEnabled: workbenchPreferences.preferences.editorPreviewTabs,
@@ -246,6 +244,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     WorkbenchChatFileReferenceDelivery[]
   >([])
   const chatFileReferenceDeliverySeqRef = useRef(0)
+  const terminalOpening = useRef(false)
 
   const exitCurrentProject = useMemoizedFn(async (): Promise<boolean> => {
     if (!workbench.closeProject()) return false
@@ -478,7 +477,7 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     selectedEntryPath: workbench.selectedEntryPath,
     editorLayout: workbench.editorLayout,
     selectedFilePath: workbench.selectedFilePath,
-    cursorPosition: editorNavigation.cursorPosition,
+    cursorStore: editorNavigation.cursorStore,
     cursorByPathRef: sessionCursorByPathRef,
   })
 
@@ -581,15 +580,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     return () => window.removeEventListener('mouseup', handleMouseUp)
   }, [navigateBackLatest, navigateForwardLatest])
 
-  const zoomEditor = useMemoizedFn((action: WorkbenchEditorZoomAction): void => {
-    workbenchPreferences.updatePreferences({
-      editorZoomLevel: getZoomedWorkbenchEditorZoomLevel(
-        workbenchPreferences.preferences.editorZoomLevel,
-        action
-      ),
-    })
-  })
-
   // 关窗与退出前的确认：这个窗口有没有未保存的改动随时报给主进程（macOS 顺带标在关闭按钮上）；
   // 主进程拦下关闭时交回这里，先存能存的，存不下的再问用户，答复送回去由主进程放行或作罢。
   const { hasUnsavedOpenTabs, confirmWindowClose } = workbench
@@ -641,20 +631,9 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
             void exitCurrentProject()
             return
           }
-          case 'zoom-editor-in': {
-            zoomEditor('increase')
-            return
-          }
-          case 'zoom-editor-out': {
-            zoomEditor('decrease')
-            return
-          }
-          case 'zoom-editor-reset': {
-            zoomEditor('reset')
-          }
         }
       }),
-    [exitCurrentProject, zoomEditor]
+    [exitCurrentProject]
   )
   const workspaceFileRefreshInFlightRef = useRef(false)
   const workspaceFileRefreshQueuedRef = useRef(false)
@@ -849,8 +828,8 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     if (document.activeElement?.closest('[data-project-search-form]')) return undefined
     if (!workbench.selectedFilePath || editorCovered) return undefined
     return readWorkbenchProjectSearchSeed(
-      workbench.editorContent,
-      editorNavigation.cursorPosition.selection
+      workbench.readEditorContent(workbench.selectedFilePath) ?? workbench.editorContent,
+      editorNavigation.readCursorPosition().selection
     )
   }
 
@@ -935,9 +914,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
         saveWorkbenchFile: (request) => workbenchHost.kernel.project.saveWorkbenchFile(request),
       })
       editorNavigation.patchLightTabMetadata(saved)
-      translate.messageLatest.current.success({
-        title: translate.tLatest.current('workbench.saveSucceeded'),
-      })
       return true
     } catch (error) {
       const appError = AppError.from(error)
@@ -1129,6 +1105,12 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     }
 
     surface.openBottomTool(tool)
+    if (tool === 'terminal' && workbench.terminalSessions.length === 0 && !terminalOpening.current) {
+      terminalOpening.current = true
+      void workbench.createTerminalSession().finally(() => {
+        terminalOpening.current = false
+      })
+    }
   }
 
   async function createProjectAiRulesFile(): Promise<void> {

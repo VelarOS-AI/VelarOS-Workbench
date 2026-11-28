@@ -25,18 +25,11 @@ export const DEFAULT_WORKBENCH_LAYOUT_SIZES: WorkbenchLayoutSizes = {
 }
 
 const STORAGE_KEY = 'velaros.workbench.layout.v1'
-const LEGACY_DEFAULT_RIGHT_PANE_WIDTH = 308
 const log = Log.tag('workbench-layout-model')
 
 export function normalizeWorkbenchLayoutSizes(
   sizes: Partial<WorkbenchLayoutSizes> | undefined
 ): WorkbenchLayoutSizes {
-  const savedRightPaneWidth = readNumber(sizes?.rightPaneWidth)
-  const rightPaneWidth =
-    savedRightPaneWidth === LEGACY_DEFAULT_RIGHT_PANE_WIDTH
-      ? DEFAULT_WORKBENCH_LAYOUT_SIZES.rightPaneWidth
-      : (savedRightPaneWidth ?? DEFAULT_WORKBENCH_LAYOUT_SIZES.rightPaneWidth)
-
   return {
     commandPanelHeight: clampWorkbenchPaneSize(
       'command',
@@ -46,7 +39,10 @@ export function normalizeWorkbenchLayoutSizes(
       'file',
       readNumber(sizes?.filePaneWidth) ?? DEFAULT_WORKBENCH_LAYOUT_SIZES.filePaneWidth
     ),
-    rightPaneWidth: clampWorkbenchPaneSize('right', rightPaneWidth),
+    rightPaneWidth: clampWorkbenchPaneSize(
+      'right',
+      readNumber(sizes?.rightPaneWidth) ?? DEFAULT_WORKBENCH_LAYOUT_SIZES.rightPaneWidth
+    ),
   }
 }
 

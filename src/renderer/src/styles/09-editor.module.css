@@ -1620,6 +1620,7 @@
 .codeMirrorEditor {
   @apply min-h-0 min-w-0 flex-1;
   position: relative;
+  contain: size layout style;
   height: 100%;
   overflow: hidden;
   background: var(--workbench-editor-bg);
@@ -1663,6 +1664,11 @@
 .codeMirrorEditor :global(.cm-line) {
   /* Leave the final character clear of the vertical overlay scrollbar. */
   padding: 0 calc(var(--workbench-editor-font-size) * 2 + 8px) 0 0;
+}
+
+.codeMirrorEditor :global(.cm-content:not(.cm-lineWrapping) .cm-line) {
+  /* In unwrapped code, typing on the widest line must not resize all the other lines. */
+  contain: inline-size layout style;
 }
 
 .codeMirrorEditor :global(.cm-line.cm-workbenchIndentGuide) {
@@ -1949,7 +1955,7 @@
   background: transparent;
 }
 
-.codeMirrorEditor :global(.cm-focused:not(.cm-workbenchActiveLineSuppressed) .cm-activeLine) {
+.codeMirrorEditor :global(.cm-focused .cm-activeLine) {
   background: var(--workbench-editor-active-line);
 }
 
@@ -1958,16 +1964,8 @@
   background: color-mix(in srgb, var(--status-red) 10%, transparent);
 }
 
-.codeMirrorEditor
-  :global(
-    .cm-editor:not(.cm-workbenchActiveLineSuppressed)
-      .cm-line.cm-workbenchLineNumberMarkerLine.cm-activeLine
-  ),
-.codeMirrorEditor
-  :global(
-    .cm-editor:not(.cm-workbenchActiveLineSuppressed)
-      .cm-line.cm-workbenchBreakpointLine.cm-activeLine
-  ) {
+.codeMirrorEditor :global(.cm-editor .cm-line.cm-workbenchLineNumberMarkerLine.cm-activeLine),
+.codeMirrorEditor :global(.cm-editor .cm-line.cm-workbenchBreakpointLine.cm-activeLine) {
   background: color-mix(in srgb, var(--status-red) 12%, var(--workbench-editor-active-line));
 }
 
@@ -1987,7 +1985,7 @@
   box-shadow: inset 2px 0 0 var(--status-green);
 }
 
-.codeMirrorEditor :global(.cm-focused:not(.cm-workbenchActiveLineSuppressed) .cm-activeLineGutter) {
+.codeMirrorEditor :global(.cm-focused .cm-activeLineGutter) {
   background: var(--workbench-editor-active-gutter);
   color: var(--workbench-editor-fg);
 }
@@ -1997,8 +1995,8 @@
  * synthetic cursor and selection layers with the active-line treatment so a
  * scrollbar/trackpad gesture cannot expose a range anchored at document 0.
  */
-.codeMirrorEditor :global(.cm-editor.cm-workbenchActiveLineSuppressed .cm-selectionLayer),
-.codeMirrorEditor :global(.cm-editor.cm-workbenchActiveLineSuppressed .cm-cursorLayer) {
+.codeMirrorEditor :global(.cm-selectionLayer.cm-workbenchActiveLineSuppressed),
+.codeMirrorEditor :global(.cm-cursorLayer.cm-workbenchActiveLineSuppressed) {
   visibility: hidden;
 }
 
@@ -2051,6 +2049,8 @@
 
 .codeMirrorEditor :global(.cm-tooltip-hover),
 .codeMirrorEditor :global(.cm-tooltip.cm-tooltip-hover) {
+  width: max-content;
+  max-width: calc(100% - 16px);
   max-height: min(420px, 50vh);
   background-color: var(--workbench-editor-tooltip-bg, #ffffff);
 }

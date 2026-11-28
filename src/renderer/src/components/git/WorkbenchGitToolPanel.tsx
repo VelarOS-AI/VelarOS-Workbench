@@ -43,6 +43,7 @@ import {
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchContextMenu, type WorkbenchContextMenuItem } from '../chrome/WorkbenchContextMenu'
 
+import { WorkbenchGitColumnResizeHandle } from './WorkbenchGitColumnResizeHandle'
 import { WorkbenchGitDetailsPane, type WorkbenchGitDetailsTarget } from './WorkbenchGitDetailsPane'
 import { WorkbenchGitLogList } from './WorkbenchGitLogList'
 import { WorkbenchGitOperationBanner } from './WorkbenchGitOperationBanner'
@@ -95,8 +96,8 @@ const StashActionSuccessTitleKeys: Record<WorkspaceGitStashAction, string> = {
 }
 
 /**
- * 拆分前 Workbench 底部 Git 工具：查看分支与提交历史，不承担提交操作。中间是提交图（默认全部本地分支和
- * 远端分支，左侧点一个分支就只看它），右侧是选中提交的改动。贮藏也列在这里（左侧分支下面）：点一条看它
+ * 拆分前 Workbench 底部 Git 工具：查看分支与提交历史，不承担提交操作。中间是提交图（默认查看当前分支，
+ * 左侧点一个分支就只看它），右侧是选中提交的改动。贮藏也列在这里（左侧分支下面）：点一条看它
  * 里面的改动，应用、弹出或删除。
  *
  * 右键菜单：在分支上（左侧的分支、提交行上的分支标签）把它合并到当前分支、把当前分支变基到它上面；
@@ -114,8 +115,10 @@ export function WorkbenchGitToolPanel({
   onOpenCommitTool,
 }: WorkbenchGitToolPanelProps): ReactElement {
   const { t, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
-  /** 日志只看的那个分支；空串是全部分支。 */
-  const [logBranch, setLogBranch] = useState('')
+  /** null 跟随当前分支；显式选中的空串表示全部分支。 */
+  const [logSelection, setLogSelection] = useState<
+    Nullable<{ workspaceRoot: string; branch: string }>
+  >(null)
   const [logSearch, setLogSearch] = useState('')
   const [selectedCommitSha, setSelectedCommitSha] = useState<Nullable<string>>(null)
   /** 选中的贮藏：选着它时右侧看的是它，不是日志里选中的提交。 */
@@ -125,7 +128,11 @@ export function WorkbenchGitToolPanel({
   const isRepository = !!summary?.repository
   const revision = summary?.checkedAt ?? null
   const branches = useMemo(() => summary?.branches ?? [], [summary?.branches])
-  const currentBranch = summary?.status?.branch ?? null
+  const currentBranch = branches.find((branch) => branch.current)?.name ?? null
+  const selectedBranch = logSelection?.workspaceRoot === workspaceRoot ? logSelection.branch : null
+  const isSelectionAvailable =
+    selectedBranch === '' || branches.some((branch) => branch.name === selectedBranch)
+  const logBranch = (isSelectionAvailable ? selectedBranch : currentBranch) ?? ''
   const log = useWorkbenchGitLog({
     workspaceRoot,
     branch: logBranch,
@@ -167,10 +174,14 @@ export function WorkbenchGitToolPanel({
     return commit ? { kind: 'commit', commit } : null
   }, [commits, selectedCommitSha, selectedStash])
 
-  // 只看的那个分支没了（删掉了、换了项目）：回到全部分支。
+  // 主动选中的分支没了，或换了项目时，重新跟随当前分支。
   useEffect(() => {
-    if (logBranch && !branches.some((branch) => branch.name === logBranch)) setLogBranch('')
-  }, [branches, logBranch])
+    if (
+      logSelection &&
+      (logSelection.workspaceRoot !== workspaceRoot || (isRepository && !isSelectionAvailable))
+    )
+      setLogSelection(null)
+  }, [isRepository, isSelectionAvailable, logSelection, workspaceRoot])
 
   // 选中的提交还在日志里就留着（日志原地刷新、往后翻页都不动它），不在了选最新的那个。
   useEffect(() => {
@@ -322,7 +333,6 @@ export function WorkbenchGitToolPanel({
     )
 
   // 范围标签点一下：在「全部分支」与当前分支之间切换（在看别的分支时先回到全部）。
-  const scopeToggleTarget = logBranch ? '' : (currentBranch ?? '')
   const scopeToggleLabel = logBranch
     ? t('workbench.gitLogShowAllBranches')
     : currentBranch
@@ -346,7 +356,7 @@ export function WorkbenchGitToolPanel({
             <WorkbenchGitRefsPane
               branches={branches}
               logBranch={logBranch}
-              onSelectBranch={setLogBranch}
+              onSelectBranch={(branch) => setLogSelection({ workspaceRoot, branch })}
               onBranchContextMenu={(branch, event) =>
                 openBranchMenu(resolveWorkbenchGitListedBranch(branch), branch.current, event)
               }
@@ -355,9 +365,10 @@ export function WorkbenchGitToolPanel({
               selectedStashSha={selectedStash?.sha ?? null}
               onSelectStash={(stash) => setSelectedStashSha(stash.sha)}
             />
+            <WorkbenchGitColumnResizeHandle label={t('workbench.gitResizeBranches')} />
             <section className={styles.gitLogListPane}>
-              <div className={styles.gitLogSearchBar}>
-                <div className={styles.gitLogSearchField}>
+              <div className={styles.gitSearchBar}>
+                <div className={styles.gitSearchField}>
                   <SearchField
                     size="sm"
                     value={logSearch}
@@ -371,7 +382,7 @@ export function WorkbenchGitToolPanel({
                   title={scopeToggleLabel}
                   aria-label={scopeToggleLabel}
                   disabled={!logBranch && !currentBranch}
-                  onClick={() => setLogBranch(scopeToggleTarget)}
+                  onClick={() => setLogSelection(logBranch ? { workspaceRoot, branch: '' } : null)}
                 >
                   {logBranch ? <GitBranchIcon size={12} /> : <GitForkIcon size={12} />}
                   <span>{logBranch || t('workbench.gitLogAllBranches')}</span>
@@ -423,6 +434,7 @@ export function WorkbenchGitToolPanel({
                 </Paragraph>
               )}
             </section>
+            <WorkbenchGitColumnResizeHandle label={t('workbench.gitResizeLog')} />
             <WorkbenchGitDetailsPane
               workspaceRoot={workspaceRoot}
               target={detailsTarget}

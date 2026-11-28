@@ -60,6 +60,7 @@ import {
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import {
   getWorkbenchHoverTokenRange,
+  hasWorkbenchLanguageHoverDetails,
   shouldUseWorkbenchSingleCodeHoverLayout,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
@@ -166,6 +167,7 @@ void describe('focused Workbench language surface', () => {
         'markdown',
         'java',
         'csharp',
+        'c-cpp',
         'go',
         'rust',
         'vue',
@@ -190,6 +192,7 @@ void describe('focused Workbench language surface', () => {
         'markdown',
         'java',
         'csharp',
+        'c-cpp',
         'go',
         'rust',
         'vue',
@@ -202,8 +205,6 @@ void describe('focused Workbench language surface', () => {
       ]
     )
     remove()
-    for (const language of ['c', 'cpp'])
-      assert.equal(resolveBuiltinWorkbenchLanguageService(language), null)
   })
 
   void test('leaves indented Sass to syntax highlighting instead of the SCSS service', async () => {
@@ -1370,6 +1371,41 @@ void describe('focused Workbench language surface', () => {
     )
   })
 
+  void test('previews record parameters and braced type members without crossing declarations', () => {
+    const record = [
+      'public sealed record RelayEntry(',
+      ...Array.from({ length: 12 }, (_, index) => `    int Field${index},`),
+      '    string LastField',
+      ');',
+    ].join('\n')
+    const structure = [
+      'public struct Point',
+      '{',
+      '    public int X;',
+      '',
+      '    public string Label = "}";',
+      '}',
+    ].join('\n')
+    assert.equal(buildExternalDefinitionPreview(`${record}\n${structure}`, 1, 22), record)
+    assert.equal(buildExternalDefinitionPreview(`${structure}\n${record}`, 1, 15), structure)
+    assert.equal(buildExternalDefinitionPreview(record, 2, 9), '')
+    assert.equal(buildExternalDefinitionPreview('record Point(int X);', 1, 18), '')
+  })
+
+  void test('suppresses repeated declarations and symbol names while keeping useful hover details', () => {
+    const path = 'Program.cs'
+    const line = { number: 4, text: '    int RelayHeartbeatTimeoutSeconds,' }
+    const name = 'RelayHeartbeatTimeoutSeconds'
+    const definition = { path, line: 4, column: 5 }
+    const hover = { displayText: `(parameter) int ${name}`, definition }
+    assert.equal(hasWorkbenchLanguageHoverDetails(hover, path, line, name), false)
+    assert.equal(hasWorkbenchLanguageHoverDetails({ displayText: name }, path, line, name), false)
+    assert.equal(hasWorkbenchLanguageHoverDetails({ ...hover, documentation: 'Relay timeout.' }, path, line, name), true)
+    assert.equal(hasWorkbenchLanguageHoverDetails({ ...hover, definitionPreview: { kind: 'code', text: 'record RelayEntry(int Timeout);' } }, path, line, name), true)
+    assert.equal(hasWorkbenchLanguageHoverDetails(hover, path, { number: 15, text: `var timeout = relay.${name};` }, name), true)
+    assert.equal(hasWorkbenchLanguageHoverDetails({ displayText: 'const timeout: number' }, 'app.ts', { number: 1, text: 'const timeout = readTimeout()' }, 'timeout'), true)
+  })
+
   void test('keeps the hover interactive until a modifier-click navigation actually opens', async () => {
     const editor = await readFile('src/renderer/src/components/editor/CodeMirrorEditor.tsx', 'utf8')
 
@@ -1422,15 +1458,14 @@ void describe('focused Workbench language surface', () => {
     )
     assert.match(
       hoverFeatures,
-      /const hoverRequest = getWorkbenchLanguageServiceHover[\s\S]{0,420}const reply = await Promise\.race/u
+      /Promise\.all\(\[hoverRequest, waitForWorkbenchEditorHoverDelay\(view\)\]\)/u
     )
     // 诊断的修复另外问、回来再补按钮：不排在悬浮说明的请求前面等。
     assert.doesNotMatch(hoverFeatures, /await context\.codeActions/u)
     assert.doesNotMatch(hoverFeatures, /buildWorkbenchEditorHoverStatusDom/u)
-    assert.match(hoverFeatures, /scheduleResolvedHoverRender[\s\S]{0,220}requestAnimationFrame/u)
     assert.match(
       hoverFeatures,
-      /definitionPreviewExpanded = true\s+scheduleResolvedHoverRender\(\)/u
+      /createHoverDefinitionPreviewSection\([\s\S]{0,200}if \(definitionPreview\) wrapper\.append\(definitionPreview\)/u
     )
   })
 
@@ -1488,21 +1523,31 @@ void describe('focused Workbench language surface', () => {
     )
   })
 
-  void test('keeps inferred type hints stable while a fresh document analysis is pending', () => {
-    const state = EditorState.create({ doc: 'const value = createValue()' })
+  void test('invalidates inferred type hints on an edited line and maps the remaining hints', () => {
+    const state = EditorState.create({ doc: 'const value = createValue()\nconst other = 1' })
+    const otherOffset = state.doc.line(2).from + 11
     const decorations = buildWorkbenchInlayHintDecorations(state.doc.length, [
       {
         position: { line: 1, column: 12, offset: 11 },
         text: ': Value',
         kind: 'type',
       },
+      {
+        position: { line: 2, column: 12, offset: otherOffset },
+        text: ': number',
+        kind: 'type',
+      },
     ])
-    const transaction = state.update({ changes: { from: 0, insert: '//' } })
-    const mapped = mapWorkbenchInlayHintDecorationsThroughChanges(decorations, transaction.changes)
     const positions: number[] = []
-    mapped.between(0, transaction.state.doc.length, (from) => positions.push(from))
+    const edit = state.update({ changes: { from: 0, insert: '//' } })
+    const mapped = mapWorkbenchInlayHintDecorationsThroughChanges(decorations, state.doc, edit.changes)
+    mapped.between(0, edit.newDoc.length, (from) => positions.push(from))
+    assert.deepEqual(positions, [otherOffset + 2])
 
-    assert.deepEqual(positions, [13])
+    const remove = state.update({ changes: { from: 0, to: state.doc.line(2).from } })
+    const afterDeletion = mapWorkbenchInlayHintDecorationsThroughChanges(decorations, state.doc, remove.changes)
+    assert.equal(afterDeletion.size, 1)
+    assert.equal(afterDeletion.iter().from, 11)
   })
 
   void test('does not duplicate the active buffer in background semantic requests', async () => {
@@ -2422,6 +2467,12 @@ void describe('shared external LSP client', () => {
       content: '@component App:\n',
       position: { line: 1, column: 3 },
     })
+    const unsavedType = 'export type Profile:\n  id: string\n  active: boolean'
+    const typeHover = await services.getHover({
+      ...request,
+      content: unsavedType,
+      position: { line: 1, column: 13 },
+    })
     const definition = await services.getDefinition(request)
     const references = await services.getReferences(request)
     const documentHighlights = await services.getDocumentHighlights(request)
@@ -2464,6 +2515,7 @@ void describe('shared external LSP client', () => {
     assert.equal(suppressedHover.hover, null)
     assert.equal(decoratorHover.hover?.displayText, 'Velar hover')
     assert.equal(decoratorHover.hover?.definition?.path, 'main.fakevel')
+    assert.equal(typeHover.hover?.definitionPreview?.text, unsavedType)
     assert.equal(definition.locations[0]?.path, 'main.fakevel')
     assert.equal(references.locations[0]?.line, 2)
     assert.deepEqual(documentHighlights.highlights[0], {

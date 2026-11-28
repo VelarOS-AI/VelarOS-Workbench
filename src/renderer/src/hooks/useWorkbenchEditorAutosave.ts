@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { type RefObject, useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   buildWorkbenchEditorAutosaveNoticeKey,
@@ -28,9 +28,10 @@ interface UseWorkbenchEditorAutosaveParams {
   /** 正在问用户要不要保存的标签：等用户回答，别抢在「不保存」之前把它写回去。 */
   heldPaths: ReadonlySet<string>
   openTabsByPath: Map<string, WorkbenchOpenEditorTab>
+  openTabsByPathLatest: RefObject<ReadonlyMap<string, WorkbenchOpenEditorTab>>
   saveEditorTab: (
     tab: WorkbenchOpenEditorTab,
-    options?: { notify?: boolean; silent?: boolean }
+    options?: { silent?: boolean }
   ) => Promise<WorkbenchEditorSaveResult>
   /** 某个文件自动保存失败：同一文件的同一种失败只通知一次。 */
   onAutosaveFailed: (path: string, message: string) => void
@@ -54,6 +55,7 @@ export function useWorkbenchEditorAutosave({
   isSavingFile,
   heldPaths,
   openTabsByPath,
+  openTabsByPathLatest,
   saveEditorTab,
   onAutosaveFailed,
 }: UseWorkbenchEditorAutosaveParams): WorkbenchEditorAutosave {
@@ -63,7 +65,6 @@ export function useWorkbenchEditorAutosave({
   const saveEditorTabLatest = useLatest(saveEditorTab)
   const onAutosaveFailedLatest = useLatest(onAutosaveFailed)
   const activeProjectLatest = useLatest(activeProject)
-  const openTabsByPathLatest = useLatest(openTabsByPath)
   const notifiedFailureKeysRef = useRef(new Set<string>())
   const autosaveRunningRef = useRef(false)
   const exitFlushedTabKeysRef = useRef(new Set<string>())
@@ -80,13 +81,16 @@ export function useWorkbenchEditorAutosave({
     }
   }
 
-  const runAutosave = useMemoizedFn(async (): Promise<void> => {
+  const runAutosave = useMemoizedFn(async (
+    scheduledTabs: ReadonlyMap<string, WorkbenchOpenEditorTab>
+  ): Promise<void> => {
     const project = activeProjectLatest.current
     if (!project || autosaveRunningRef.current) return
 
     const dueTabs = selectDueWorkbenchEditorAutosaveTabs(
-      [...openTabsByPathLatest.current.values()].filter(
-        (tab) => !heldPathsLatest.current.has(tab.path)
+      [...scheduledTabs.values()].filter(
+        (tab) =>
+          openTabsByPathLatest.current.get(tab.path) === tab && !heldPathsLatest.current.has(tab.path)
       ),
       failuresLatest.current,
       Date.now()
@@ -141,7 +145,7 @@ export function useWorkbenchEditorAutosave({
     )
     if (nextAt === null) return undefined
 
-    const lease = timers.after(nextAt - Date.now(), () => void runAutosave(), {
+    const lease = timers.after(nextAt - Date.now(), () => void runAutosave(openTabsByPath), {
       label: 'workbench.editor.autosave',
     })
     return (): void => {

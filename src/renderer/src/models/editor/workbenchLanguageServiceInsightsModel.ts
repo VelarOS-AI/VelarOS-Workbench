@@ -9,14 +9,14 @@ export function omitWorkbenchPendingDiagnostics(
   diagnosticsByPath: ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>,
   diagnosticsPendingPaths: ReadonlySet<string>
 ): ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]> {
-  if (!diagnosticsPendingPaths.size) return diagnosticsByPath
-
-  const nextDiagnostics = new Map(diagnosticsByPath)
+  let nextDiagnostics: Map<string, readonly WorkbenchLanguageServiceDiagnostic[]> | undefined
   for (const path of diagnosticsPendingPaths) {
+    if (!diagnosticsByPath.has(path)) continue
+    nextDiagnostics ??= new Map(diagnosticsByPath)
     nextDiagnostics.delete(path)
   }
 
-  return nextDiagnostics
+  return nextDiagnostics ?? diagnosticsByPath
 }
 
 /** 整项目检查的一批结果并进已有的：这一批查过的文件以新结果为准（没有问题的清掉），其余不动。 */

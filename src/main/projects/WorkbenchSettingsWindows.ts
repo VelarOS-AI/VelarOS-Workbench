@@ -16,6 +16,7 @@ interface SettingsWindowsOptions {
 /** One modeless settings window per project owner; never create a second workspace. */
 export class WorkbenchSettingsWindows {
   private readonly windows = new Map<number, BrowserWindow>()
+  private readonly initialized = new WeakSet<BrowserWindow>()
 
   public constructor(private readonly options: SettingsWindowsOptions) {}
 
@@ -26,6 +27,7 @@ export class WorkbenchSettingsWindows {
     const ownerId = owner.webContents.id
     const existing = this.windows.get(ownerId)
     if (existing && !existing.isDestroyed()) {
+      if (!this.initialized.has(existing)) return
       if (existing.isMinimized()) existing.restore()
       if (!existing.isVisible()) existing.show()
       existing.focus()
@@ -37,13 +39,18 @@ export class WorkbenchSettingsWindows {
     window.once('closed', () => {
       if (this.windows.get(ownerId) === window) this.windows.delete(ownerId)
     })
-    window.once('ready-to-show', () => {
-      if (!window.isDestroyed()) {
-        window.show()
-        window.focus()
-      }
-    })
     this.options.loadWindow(window)
+  }
+
+  /** 显示设置前，等渲染器按已保存的主题绘制。 */
+  public ready(sender: WebContents): void {
+    const window = this.findSettingsWindow(sender)
+    if (!window) throw new AppError('PERMISSION', 'Not a settings window')
+    if (this.initialized.has(window)) return
+
+    this.initialized.add(window)
+    window.show()
+    window.focus()
   }
 
   public close(sender: WebContents): void {
@@ -61,12 +68,14 @@ export class WorkbenchSettingsWindows {
   }
 
   public assertSettingsWindow(sender: WebContents): void {
-    if (
-      ![...this.windows.values()].some(
-        (window) => !window.isDestroyed() && window.webContents.id === sender.id
-      )
-    )
+    if (!this.findSettingsWindow(sender))
       throw new AppError('PERMISSION', 'Not a settings window')
+  }
+
+  private findSettingsWindow(sender: WebContents): BrowserWindow | undefined {
+    return [...this.windows.values()].find(
+      (window) => !window.isDestroyed() && window.webContents.id === sender.id
+    )
   }
 
   public dispose(): void {

@@ -34,8 +34,30 @@ try {
   await expect(page.getByRole('complementary', { name: '右侧工具窗口' })).toBeVisible({
     timeout: 30000,
   })
-  await app.evaluate(({ BrowserWindow }) => {
+  await page.evaluate(() => {
+    const key = 'velaros.workbench.preferences.v1'
+    const preferences = JSON.parse(localStorage.getItem(key) ?? '{}')
+    localStorage.setItem(key, JSON.stringify({ ...preferences, theme: 'dark-modern' }))
+    window.dispatchEvent(new Event('velaros:workbench-preferences-changed'))
+  })
+  await expect(page.locator('html')).toHaveAttribute('data-workbench-theme', 'dark-modern')
+  await app.evaluate(({ app, BrowserWindow }) => {
     globalThis.__captionCalls = []
+    app.once('browser-window-created', (_, window) => {
+      window.once('show', async () => {
+        const firstAppearance = await window.webContents.executeJavaScript(`({
+          theme: document.documentElement.dataset.workbenchTheme,
+          background: getComputedStyle(document.documentElement).getPropertyValue('--workbench-bg').trim(),
+          mounted: Boolean(document.querySelector('#root')?.childElementCount),
+        })`)
+        globalThis.__settingsFirstAppearance = {
+          ...firstAppearance,
+          minimizable: window.isMinimizable(),
+          maximizable: window.isMaximizable(),
+          fullscreenable: window.isFullScreenable(),
+        }
+      })
+    })
     for (const w of BrowserWindow.getAllWindows()) {
       const set = w.setTitleBarOverlay.bind(w)
       w.setTitleBarOverlay = (options) => {
@@ -54,6 +76,17 @@ try {
   await expect(settings.getByRole('heading', { name: '外观', exact: true })).toBeVisible({
     timeout: 15000,
   })
+  const darkBackground = await page.locator('html').evaluate((element) =>
+    getComputedStyle(element).getPropertyValue('--workbench-bg').trim()
+  )
+  await expect.poll(() => app.evaluate(() => globalThis.__settingsFirstAppearance)).toEqual({
+    theme: 'dark-modern',
+    background: darkBackground,
+    mounted: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+  })
   await app.evaluate(({ BrowserWindow }) => {
     for (const w of BrowserWindow.getAllWindows()) {
       if (w.__observed) continue
@@ -65,21 +98,21 @@ try {
       }
     }
   })
-  for (const theme of ['dark-modern', 'warm-paper', 'midnight-blue', 'light-modern']) {
+  for (const theme of ['warm-paper', 'midnight-blue', 'light-modern', 'dark-modern']) {
     await settings.locator(`input[type=radio][value="${theme}"]`).check({ force: true })
     await expect(settings.locator('html')).toHaveAttribute('data-workbench-theme', theme)
     await expect(page.locator('html')).toHaveAttribute('data-workbench-theme', theme)
     const colors = await settings.evaluate(() => ({
-      bg: getComputedStyle(document.documentElement).getPropertyValue('--workbench-bg').trim(),
+      toolbar: getComputedStyle(document.documentElement).getPropertyValue('--workbench-toolbar').trim(),
       ink: getComputedStyle(document.documentElement).getPropertyValue('--workbench-text').trim(),
     }))
     await expect
       .poll(async () =>
         app.evaluate(
-          ({ BrowserWindow }, { bg, ink }) =>
+          ({ BrowserWindow }, { toolbar, ink }) =>
             BrowserWindow.getAllWindows().every((w) =>
               globalThis.__captionCalls.some(
-                (call) => call.id === w.id && call.color === bg && call.symbolColor === ink
+                (call) => call.id === w.id && call.color === toolbar && call.symbolColor === ink
               )
             ),
           colors
@@ -92,6 +125,17 @@ try {
           .locator('.workbench-native-caption')
           .evaluate((el) => getComputedStyle(el).userSelect),
         'none'
+      )
+      assert.equal(
+        await current.locator('.workbench-native-caption').evaluate((el) => {
+          const expected = document.createElement('div')
+          expected.style.color = 'var(--workbench-toolbar)'
+          el.append(expected)
+          const matches = getComputedStyle(el).backgroundColor === getComputedStyle(expected).color
+          expected.remove()
+          return matches
+        }),
+        true
       )
       assert.equal(
         await current.evaluate(() => innerHeight >= document.documentElement.scrollHeight),
@@ -131,7 +175,7 @@ try {
     await fs.writeFile(path.join(output, `${name}.png`), Buffer.from(data.split(',')[1], 'base64'))
   }
   console.info(
-    'PASS packaged settings: native caption colors synchronize across main/settings for all four themes; title is not selectable; one update action and version badge; no viewport overflow'
+    'PASS packaged settings: dark first paint, no desktop minimization, synchronized caption colors, version badge, and no viewport overflow'
   )
   console.info(JSON.stringify(results))
 } finally {

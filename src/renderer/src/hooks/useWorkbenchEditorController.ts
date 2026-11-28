@@ -1,4 +1,5 @@
 import { type SetStateAction, useEffect, useMemo, useRef, useState } from 'react'
+import { useWorkbenchEditorSnapshot } from '@renderer/hooks/useWorkbenchEditorSnapshot'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { applyWorkbenchLanguageServiceEditsToContent } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import { isWorkbenchEditorTabAutosavable } from '@renderer/models/editor/workbenchEditorAutosave'
@@ -155,7 +156,6 @@ export interface WorkbenchFileOpenOptions extends WorkbenchEditorOpenTabIntent {
 }
 
 interface WorkbenchSaveEditorTabOptions {
-  notify?: boolean
   silent?: boolean
 }
 
@@ -169,19 +169,16 @@ export function useWorkbenchEditorController({
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   // 开着的文件的正文与磁盘快照，按路径存；标签栏上怎么排、每组显示哪个、当前组是哪个在标签布局里。
   // 两边的路径始终是同一批：加、关、改名都在同一轮里一起改。
-  const [openTabsByPath, setOpenTabsSnapshot] = useState<Map<string, WorkbenchOpenEditorTab>>(
-    () => new Map()
-  )
   // 正文与格式的实际 owner 立即接纳每次修改；异步保存/关闭不等待 React 提交才看到新草稿。
-  const openTabsByPathLatest = useRef(openTabsByPath)
+  const [openTabsByPath, openTabsByPathLatest, setOpenTabsSnapshot] =
+    useWorkbenchEditorSnapshot(() => new Map<string, WorkbenchOpenEditorTab>())
   const setOpenTabsByPath = useMemoizedFn(
-    (update: SetStateAction<Map<string, WorkbenchOpenEditorTab>>): void => {
+    (update: SetStateAction<Map<string, WorkbenchOpenEditorTab>>, defer = false): void => {
       const current = openTabsByPathLatest.current
       const next = typeof update === 'function' ? update(current) : update
       if (next === current) return
 
-      openTabsByPathLatest.current = next
-      setOpenTabsSnapshot(next)
+      setOpenTabsSnapshot(next, defer)
     }
   )
   const {
@@ -298,26 +295,30 @@ export function useWorkbenchEditorController({
    * 选过的格式转换跟着正文走；上次保存被拒的说明针对的是旧正文，一改就作废。
    * 正文一改，预览标签就留下：有改动的标签不会被下一次预览顶替掉。
    */
-  function updateOpenTabContent(file: WorkbenchReadFileResult, content: string): void {
+  function updateOpenTabContent(file: WorkbenchReadFileResult, content: string, defer = false): void {
     keepOpenFile(file.path)
-    setOpenTabsByPath((current) => {
-      const currentTab = current.get(file.path)
-      // 标签已经关掉了（改动到得比关闭晚）：不把它凭空加回来，标签布局里已经没有它了。
-      if (!currentTab || currentTab.content === content) return current
-
-      const nextTab = { ...currentTab, content, unencodableSaveError: undefined }
-      return new Map(current).set(file.path, nextTab)
-    })
+    const current = openTabsByPathLatest.current
+    const previous = current.get(file.path)
+    // A closed tab must not be resurrected by an edit from its departing view.
+    if (!previous || previous.content === content) return
+    const next = { ...previous, content, unencodableSaveError: undefined }
+    // The first dirty edit and returning to the saved text update the window close guard promptly.
+    const deferSnapshot =
+      defer && !previous.unencodableSaveError && isDirtyTab(previous) === isDirtyTab(next)
+    setOpenTabsByPath(new Map(current).set(file.path, next), deferSnapshot)
   }
 
   /** 编辑器里的输入：改的是那个编辑器正在显示的文件（`path`，另一组的编辑器也经这里）；不给就是当前文件。 */
-  const updateEditorContent = useMemoizedFn((content: string, path?: string): void => {
+  const updateEditorContent = useMemoizedFn((content: string, path?: string, defer = false): void => {
     const targetPath = path ?? selectedFilePathRef.current
     const file = targetPath ? openTabsByPathLatest.current.get(targetPath)?.file : undefined
     if (!file || !isWorkbenchFileEditable(file, chosenEditModes.get(file.path))) return
 
-    updateOpenTabContent(file, content)
+    updateOpenTabContent(file, content, defer)
   })
+  const readEditorContent = useMemoizedFn((path: Nullable<string>): string | undefined =>
+    path ? openTabsByPathLatest.current.get(path)?.content : undefined
+  )
 
   useWorkbenchHistoryWindowOwner({
     projectRoot: activeProject?.rootPath ?? null,
@@ -1388,11 +1389,6 @@ export function useWorkbenchEditorController({
         switch (result.status) {
           case 'saved': {
             notifyFilesSaved()
-            if (options.notify) {
-              messageLatest.current.success({
-                title: tLatest.current('workbench.saveSucceeded'),
-              })
-            }
             break
           }
           case 'conflict': {
@@ -1450,6 +1446,7 @@ export function useWorkbenchEditorController({
     isSavingFile,
     heldPaths: autosaveHeldPaths,
     openTabsByPath,
+    openTabsByPathLatest,
     saveEditorTab,
     onAutosaveFailed: (path, message) => {
       messageLatest.current.error({
@@ -1477,16 +1474,13 @@ export function useWorkbenchEditorController({
     if (!isDirtyTab({ file: tab.file, content: nextContent, textConversion: tab.textConversion }))
       return
 
-    await saveEditorTab(
-      {
-        path: tab.path,
-        file: tab.file,
-        content: nextContent,
-        textConversion: tab.textConversion,
-        externalChange: tab.externalChange,
-      },
-      { notify: true }
-    )
+    await saveEditorTab({
+      path: tab.path,
+      file: tab.file,
+      content: nextContent,
+      textConversion: tab.textConversion,
+      externalChange: tab.externalChange,
+    })
   })
 
   /**
@@ -1511,10 +1505,7 @@ export function useWorkbenchEditorController({
             })
           : current
       })
-      await saveEditorTab(
-        { ...tab, textConversion, unencodableSaveError: undefined },
-        { notify: true }
-      )
+      await saveEditorTab({ ...tab, textConversion, unencodableSaveError: undefined })
     }
   )
 
@@ -1552,11 +1543,6 @@ export function useWorkbenchEditorController({
     const summary = summarizeWorkbenchEditorSaveResults(await saveEditorTabs(dirtyTabs))
     if (activeProjectRef.current?.id !== owningProjectId) return false
 
-    if (!isEmpty(summary.savedPaths)) {
-      messageLatest.current.success({
-        title: tLatest.current('workbench.saveAllSucceeded', { count: summary.savedPaths.length }),
-      })
-    }
     reportUnsavedResults(summary)
     return ![...openTabsByPathLatest.current.values()].some(isDirtyTab)
   })
@@ -1724,6 +1710,7 @@ export function useWorkbenchEditorController({
     saveRevision,
     externalRevision,
     setEditorContent: updateEditorContent,
+    readEditorContent,
     applyLanguageServiceFileChanges,
     applyLanguageServiceRename,
     applyLanguageServiceEdits,

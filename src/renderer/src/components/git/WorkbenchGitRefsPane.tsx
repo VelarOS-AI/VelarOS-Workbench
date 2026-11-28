@@ -1,5 +1,5 @@
 import { type MouseEvent, type ReactElement, useState } from 'react'
-import { GitBranchIcon, GitForkIcon, StackIcon } from '@phosphor-icons/react'
+import { GitBranchIcon, StackIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { formatWorkbenchGitCommitRelativeDate } from '@renderer/models/git/changesPanel.model'
 import {
@@ -58,30 +58,19 @@ export function WorkbenchGitRefsPane({
   )
 
   return (
-    <aside className={styles.gitLogBranchPane}>
-      <div className={styles.gitBranchPaneHeader}>
-        <p className={styles.gitPaneSectionTitle}>{t('workbench.gitBranches')}</p>
-        <span>{branches.length}</span>
-      </div>
-      <div className={styles.gitBranchSearch}>
-        <SearchField
-          size="sm"
-          value={search}
-          placeholder={t('workbench.gitBranchSearchPlaceholder')}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+    <aside className={styles.gitLogBranchPane} aria-label={t('workbench.gitBranches')}>
+      <div className={styles.gitSearchBar}>
+        <div className={styles.gitSearchField}>
+          <SearchField
+            size="sm"
+            value={search}
+            placeholder={t('workbench.gitBranchSearchPlaceholder')}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
       </div>
       <ScrollArea className={styles.gitBranchScroll}>
         <div className={styles.gitBranchList}>
-          <button
-            type="button"
-            className={styles.gitBranchRow}
-            data-active={logBranch === ''}
-            onClick={() => onSelectBranch('')}
-          >
-            <GitForkIcon size={13} />
-            <span className={styles.gitBranchName}>{t('workbench.gitLogAllBranches')}</span>
-          </button>
           <BranchGroup
             label={t('workbench.gitBranchLocal')}
             branches={localBranches}

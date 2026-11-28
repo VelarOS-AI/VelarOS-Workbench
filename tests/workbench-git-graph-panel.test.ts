@@ -104,17 +104,18 @@ void describe('Workbench Git commit graph: the log behind it', () => {
 })
 
 void describe('Workbench Git commit graph: the tool window', () => {
-  void test('shows every branch by default, limits to one on request, draws lanes and loads on scroll', () => {
+  void test('defaults to the current branch, supports all branches, draws lanes and loads on scroll', () => {
     const panel = readSource('src/renderer/src/components/git/WorkbenchGitToolPanel.tsx')
     const list = readSource('src/renderer/src/components/git/WorkbenchGitLogList.tsx')
     const refsPane = readSource('src/renderer/src/components/git/WorkbenchGitRefsPane.tsx')
     const hook = readSource('src/renderer/src/hooks/useWorkbenchGitLog.ts')
     const service = readSource('src/main/workspace/git/WorkbenchGitService.ts')
 
-    // 默认全部分支（空串）；左侧点一个分支、或点范围标签，只看一个分支。
-    assert.match(panel, /const \[logBranch, setLogBranch\] = useState\(''\)/u)
-    assert.match(panel, /const scopeToggleTarget = logBranch \? '' : \(currentBranch \?\? ''\)/u)
-    assert.match(refsPane, /data-active=\{logBranch === ''\}[\s\S]*?onSelectBranch\(''\)/u)
+    // 默认跟随当前分支；显式选中的分支或全部分支覆盖默认值。
+    assert.match(panel, /const logBranch = \(isSelectionAvailable \? selectedBranch : currentBranch\) \?\? ''/u)
+    assert.match(panel, /setLogSelection\(logBranch \? \{ workspaceRoot, branch: '' \} : null\)/u)
+    assert.match(refsPane, /data-active=\{logBranch === branch\.name\}/u)
+    assert.doesNotMatch(refsPane, /gitLogAllBranches/u)
     assert.match(service, /args\.push\('--branches', '--remotes'\)/u)
     assert.doesNotMatch(service, /'--all'/u)
 

@@ -35,8 +35,23 @@
   color: var(--workbench-text);
 }
 
+.gitBranchMenuPanel[data-topbar-panel='picker'][data-slot='popover-content']:has(
+    .gitBranchMenuDetails
+  ) {
+  width: min(528px, calc(100vw - 16px));
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+}
+
 .gitBranchMenu {
   display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.gitBranchMenuBrowser {
+  display: flex;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   flex-direction: column;
@@ -60,7 +75,8 @@
 }
 
 .gitBranchMenuAction,
-.gitBranchMenuCreate {
+.gitBranchMenuCreate,
+.gitBranchMenuCommand {
   display: flex;
   min-width: 0;
   height: var(--topbar-panel-row-height);
@@ -68,7 +84,7 @@
   gap: var(--topbar-panel-icon-gap);
   padding: 0 var(--topbar-panel-item-padding);
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   color: var(--workbench-text);
   background: transparent;
   font: inherit;
@@ -79,7 +95,8 @@
 }
 
 .gitBranchMenuAction > svg,
-.gitBranchMenuCreate > svg {
+.gitBranchMenuCreate > svg,
+.gitBranchMenuCommand > svg {
   flex: 0 0 auto;
   color: var(--workbench-text-muted);
 }
@@ -101,32 +118,25 @@
 }
 
 .gitBranchMenuAction:hover:not([aria-disabled='true']),
-.gitBranchMenuAction:focus-visible:not([aria-disabled='true']),
 .gitBranchMenuCreate:hover:not(:disabled),
-.gitBranchMenuCreate:focus-visible {
-  outline: none;
+.gitBranchMenuCommand:hover:not(:disabled):not([aria-disabled='true']),
+.gitBranchMenuAction:focus-visible,
+.gitBranchMenuCreate:focus-visible,
+.gitBranchMenuCommand:focus-visible {
   color: var(--workbench-theme-color);
   background: color-mix(in srgb, var(--workbench-theme-color) 10%, transparent);
 }
 
-.gitBranchMenuAction:hover:not([aria-disabled='true']) > svg,
-.gitBranchMenuAction:focus-visible:not([aria-disabled='true']) > svg,
-.gitBranchMenuCreate:hover:not(:disabled) > svg,
-.gitBranchMenuCreate:focus-visible > svg {
-  color: inherit;
-}
-
-.gitBranchMenuAction[aria-disabled='true'] {
-  cursor: default;
-  opacity: 0.45;
-}
-
-/* 保留不可用动作的键盘焦点，方便查看气泡说明。 */
-.gitBranchMenuAction[aria-disabled='true']:focus-visible {
-  outline: 1px solid var(--workbench-border);
+.gitBranchMenuAction:focus-visible,
+.gitBranchMenuCreate:focus-visible,
+.gitBranchMenuCommand:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--workbench-theme-color) 48%, transparent);
   outline-offset: -1px;
 }
 
+.gitBranchMenuAction[aria-disabled='true'],
+.gitBranchMenuCommand[aria-disabled='true'],
+.gitBranchMenuCommand:disabled,
 .gitBranchMenuCreate:disabled {
   cursor: default;
   opacity: 0.45;
@@ -194,7 +204,7 @@
   height: var(--topbar-panel-row-height);
   flex-shrink: 0;
   margin-inline: var(--topbar-panel-gap);
-  border-radius: 6px;
+  border-radius: 0;
   color: var(--workbench-text);
 }
 
@@ -240,7 +250,6 @@
 }
 
 .gitBranchMenuRow {
-  position: relative;
   display: flex;
   min-width: 0;
   align-items: stretch;
@@ -253,6 +262,10 @@
 
 .gitBranchMenuRow[data-current='true'] {
   background: color-mix(in srgb, var(--workbench-theme-color) 12%, transparent);
+}
+
+.gitBranchMenuRow[data-selected='true'] {
+  background: color-mix(in srgb, var(--workbench-theme-color) 22%, transparent);
 }
 
 .gitBranchMenuRowMain {
@@ -272,15 +285,6 @@
   cursor: pointer;
 }
 
-.gitBranchMenuRowMain:disabled {
-  cursor: default;
-}
-
-/* 有操作在跑、暂时切不了的分支淡一些；当前分支那一行本来就点不了，不算。 */
-.gitBranchMenuRow:not([data-current='true']) .gitBranchMenuRowMain:disabled {
-  opacity: 0.55;
-}
-
 .gitBranchMenuRowMain:focus-visible {
   outline: 1px solid color-mix(in srgb, var(--workbench-theme-color) 48%, transparent);
   outline-offset: -1px;
@@ -291,15 +295,17 @@
   color: var(--workbench-text-muted);
 }
 
-.gitBranchMenuRow[data-current='true'] .gitBranchMenuRowMain > svg {
+.gitBranchMenuRow[data-current='true'] .gitBranchMenuRowMain > svg:first-child,
+.gitBranchMenuRow[data-selected='true'] .gitBranchMenuRowMain > svg:last-child {
   color: var(--workbench-theme-color);
 }
 
-.gitBranchMenuRow[data-current='true'] .gitBranchMenuRowMain > span {
+.gitBranchMenuRow[data-current='true'] .gitBranchMenuBranchName,
+.gitBranchMenuRow[data-selected='true'] .gitBranchMenuBranchName {
   font-weight: 600;
 }
 
-.gitBranchMenuRowMain > span {
+.gitBranchMenuBranchName {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -319,79 +325,47 @@
   white-space: nowrap;
 }
 
-/* 悬停或焦点在这一行时右边浮出来的「签出」「推送」；名字让出它们的位置。 */
-.gitBranchMenuRow:hover .gitBranchMenuRowMain:not(:disabled) > span,
-.gitBranchMenuRow:has(:focus-visible) .gitBranchMenuRowMain:not(:disabled) > span {
-  padding-right: 88px;
-}
-
-.gitBranchMenuRowActions {
-  position: absolute;
-  z-index: 1;
-  top: 4px;
-  right: 4px;
+.gitBranchMenuDetails {
   display: flex;
-  height: 22px;
-  align-items: center;
-  gap: 1px;
-  padding: 1px;
-  border: 1px solid var(--workbench-border);
-  border-radius: 5px;
-  opacity: 0;
-  background: var(--workbench-surface);
-  pointer-events: none;
-  transition: opacity 120ms ease;
+  min-width: 0;
+  flex: 0 0 min(224px, 48%);
+  flex-direction: column;
+  gap: var(--topbar-panel-gap);
+  padding: 0 var(--topbar-panel-gap) var(--topbar-panel-gap) var(--topbar-panel-padding);
+  border-left: 1px solid var(--workbench-border);
 }
 
-.gitBranchMenuRow:hover .gitBranchMenuRowActions,
-.gitBranchMenuRow:has(:focus-visible) .gitBranchMenuRowActions,
-.gitBranchMenuRowActions:has(> button[data-running='true']) {
-  opacity: 1;
-  pointer-events: auto;
+.gitBranchMenuDetailsName {
+  flex-shrink: 0;
+  overflow: hidden;
+  padding: 0 var(--topbar-panel-item-padding);
+  border-bottom: 1px solid var(--workbench-border);
+  font-size: var(--topbar-panel-font-size);
+  font-weight: 600;
+  line-height: calc(var(--topbar-panel-row-height) + 2 * var(--topbar-panel-padding) - 1px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.gitBranchMenuRowActions > button {
-  display: inline-flex;
-  height: 18px;
-  align-items: center;
-  gap: 3px;
-  padding: 0 5px;
-  border: 0;
-  border-radius: 3px;
-  color: var(--workbench-text-muted);
-  background: transparent;
-  font: inherit;
-  font-size: var(--topbar-panel-detail-font-size);
-  font-weight: 500;
-  cursor: pointer;
+.gitBranchMenuDetailsList {
+  max-height: var(--topbar-panel-list-max-height);
+  overflow-y: auto;
 }
 
-/* 当前分支为共用的行内操作条留出空间。 */
-.gitBranchMenuRow[data-current='true']:hover .gitBranchMenuRowMain,
-.gitBranchMenuRow[data-current='true']:has(:focus-visible, button[data-running='true']) .gitBranchMenuRowMain {
-  padding-right: 100px;
+.gitBranchMenuCommand {
+  width: 100%;
+  height: auto;
+  min-height: var(--topbar-panel-row-height);
+  padding-block: var(--topbar-panel-padding);
 }
 
-.gitBranchMenuRow[data-current='true']:hover .gitBranchMenuRowMain > small,
-.gitBranchMenuRow[data-current='true']:has(:focus-visible, button[data-running='true']) .gitBranchMenuRowMain > small {
-  display: none;
-}
-
-.gitBranchMenuRowActions > button:hover:not(:disabled):not([aria-disabled='true']),
-.gitBranchMenuRowActions > button:focus-visible:not([aria-disabled='true']) {
-  outline: none;
-  color: var(--workbench-theme-color);
-  background: color-mix(in srgb, var(--workbench-theme-color) 12%, transparent);
-}
-
-.gitBranchMenuRowActions > button:disabled,
-.gitBranchMenuRowActions > button[aria-disabled='true'] {
-  cursor: default;
-  opacity: 0.42;
+.gitBranchMenuCommand > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .gitBranchMenuAction[data-running='true'] > svg,
-.gitBranchMenuRowActions > button[data-running='true'] > svg {
+.gitBranchMenuCommand[data-running='true'] > svg {
   color: var(--workbench-theme-color);
 }
 
@@ -541,7 +515,6 @@
   flex-shrink: 0;
   align-items: center;
   gap: var(--topbar-panel-gap);
-  border-radius: 6px;
   transition: background 120ms ease;
 }
 
@@ -562,6 +535,7 @@
   justify-content: flex-start;
   gap: var(--topbar-panel-icon-gap);
   padding: var(--topbar-panel-padding) var(--topbar-panel-item-padding);
+  border-radius: 0;
   text-align: left;
 }
 
@@ -617,6 +591,7 @@
   height: var(--topbar-panel-row-height);
   flex: 0 0 var(--topbar-panel-row-height);
   margin-right: var(--topbar-panel-gap);
+  border-radius: 0;
   color: var(--workbench-text-muted);
 }
 
@@ -651,6 +626,7 @@
   gap: var(--topbar-panel-icon-gap);
   min-width: 0;
   padding-inline: var(--topbar-panel-item-padding);
+  border-radius: 0;
   font-size: var(--topbar-panel-font-size);
 }
 

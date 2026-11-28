@@ -1,5 +1,5 @@
 import { type Extension, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
-import { closeHoverTooltips, Decoration, type DecorationSet, EditorView } from '@codemirror/view'
+import { closeHoverTooltips, Decoration, type DecorationSet, EditorView, hasHoverTooltips } from '@codemirror/view'
 
 export interface WorkbenchDefinitionHoverRange {
   from: number
@@ -14,11 +14,16 @@ export const setWorkbenchDefinitionHoverRange =
   StateEffect.define<Nullable<WorkbenchDefinitionHoverRange>>()
 
 const editorsAwaitingPointerMovement = new WeakSet<EditorView>()
+const editorsOutsidePointer = new WeakSet<EditorView>()
+const lastPointerMoveByEditor = new WeakMap<EditorView, number>()
+export const WorkbenchHoverPrefetchDelayMs = 200
+const WorkbenchHoverDisplayDelayMs = 1200
 
 export function clearWorkbenchEditorHover(view: EditorView): void {
   // A pending CodeMirror hover can restart after a transaction using its previous pointer position.
   editorsAwaitingPointerMovement.add(view)
-  view.dispatch({ effects: [setWorkbenchDefinitionHoverRange.of(null), closeHoverTooltips] })
+  if ((view.state.field(workbenchDefinitionHoverField, false)?.size ?? 0) > 0 || hasHoverTooltips(view.state))
+    view.dispatch({ effects: [setWorkbenchDefinitionHoverRange.of(null), closeHoverTooltips] })
 }
 
 export function resumeWorkbenchEditorHover(view: EditorView): void {
@@ -26,7 +31,19 @@ export function resumeWorkbenchEditorHover(view: EditorView): void {
 }
 
 export function isWorkbenchEditorHoverSuppressed(view: EditorView): boolean {
-  return editorsAwaitingPointerMovement.has(view)
+  return (
+    editorsAwaitingPointerMovement.has(view) ||
+    editorsOutsidePointer.has(view) ||
+    view.state.selection.ranges.some((range) => !range.empty)
+  )
+}
+
+export function waitForWorkbenchEditorHoverDelay(view: EditorView): Promise<void> {
+  const now = performance.now()
+  const pointerMove = lastPointerMoveByEditor.get(view) ?? now - WorkbenchHoverPrefetchDelayMs
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, WorkbenchHoverDisplayDelayMs - (now - pointerMove)))
+  })
 }
 
 export function buildWorkbenchDefinitionHoverDecorations(
@@ -57,4 +74,20 @@ export const workbenchDefinitionHoverField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 })
 
-export const workbenchDefinitionHoverExtension: Extension = [workbenchDefinitionHoverField]
+export const workbenchDefinitionHoverExtension: Extension = [
+  workbenchDefinitionHoverField,
+  EditorView.domEventObservers({
+    mousemove: (_event, view) => {
+      resumeWorkbenchEditorHover(view)
+      editorsOutsidePointer.delete(view)
+      lastPointerMoveByEditor.set(view, performance.now())
+    },
+    mouseleave: (_event, view) => {
+      editorsOutsidePointer.add(view)
+    },
+  }),
+  EditorView.updateListener.of((update) => {
+    // Don't start new hover requests at a stationary pointer while the user edits below it.
+    if (update.docChanged) editorsAwaitingPointerMovement.add(update.view)
+  }),
+]

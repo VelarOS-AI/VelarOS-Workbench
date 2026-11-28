@@ -84,6 +84,7 @@ import {
   type WorkbenchMoveEntryResult,
   type WorkbenchProjectAiRulesRequest,
   type WorkbenchProjectAiRulesResult,
+  type WorkbenchProjectIndexProgress,
   type WorkbenchReadFileRequest,
   type WorkbenchReadFileResult,
   type WorkbenchReadImageFileRequest,
@@ -127,6 +128,11 @@ import type {
   WorkbenchGitCancelRemoteActionResult,
 } from '@shared/workbenchGit'
 
+export interface WorkbenchProjectIndexOptions {
+  signal?: AbortSignal
+  onProgress?: (progress: WorkbenchProjectIndexProgress) => void
+}
+
 /** Workbench 所需的项目、编辑器、终端与代码智能 Kernel 能力。 */
 export interface WorkbenchProjectKernelPort {
   listWorkbenchDirectory(
@@ -140,7 +146,8 @@ export interface WorkbenchProjectKernelPort {
     request: WorkbenchFindExistingFilesRequest
   ): Promise<Result<WorkbenchFindExistingFilesResult>>
   indexWorkbenchProject(
-    request: WorkbenchIndexProjectRequest
+    request: WorkbenchIndexProjectRequest,
+    options?: WorkbenchProjectIndexOptions
   ): Promise<Result<WorkbenchIndexProjectResult>>
   getWorkbenchProjectAiRules(
     request: WorkbenchProjectAiRulesRequest
@@ -339,7 +346,8 @@ export interface WorkbenchWorkspaceKernelPort {
   ): Promise<Result<SystemWorkspaceGitSwitchBranchResult>>
   createWorkspaceGitBranch(
     workspaceRoot: string,
-    branch: string
+    branch: string,
+    startPoint?: string
   ): Promise<Result<SystemWorkspaceGitCreateBranchResult>>
   performWorkspaceGitAction(
     workspaceRoot: string,

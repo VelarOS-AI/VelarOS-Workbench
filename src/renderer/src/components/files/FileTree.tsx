@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
+import { useWorkbenchCodeTheme, useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   buildTreeNodes,
@@ -24,7 +24,7 @@ import {
 } from '@renderer/models/files/fileTree.model'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
-import { getWorkbenchFileTreeRowHeight } from '@renderer/models/workbenchPreferences'
+import { getWorkbenchFileTreeRowHeight, isWorkbenchDarkTheme } from '@renderer/models/workbenchPreferences'
 import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
 import { Tree } from 'react-arborist'
 
@@ -109,6 +109,7 @@ export function FileTree({
 }: FileTreeProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const density = useWorkbenchDensity()
+  const darkIcons = isWorkbenchDarkTheme(useWorkbenchCodeTheme())
   const rowHeight = getWorkbenchFileTreeRowHeight(density)
   const treeRef = useRef<FileTreeApi>(null)
   const syncingOpenStateRef = useRef(false)
@@ -154,6 +155,7 @@ export function FileTree({
   // @arch-guard:suspend velaros/code-style/prefer-meaningful-use-memo 理由：Context value 的引用稳定性用于阻止文件选择时刷新全部可见树行。
   const rowRuntime = useMemo(
     () => ({
+      darkIcons,
       collapseDirectoryLabel: t('workbench.treeCollapseFolder'),
       expandDirectoryLabel: t('workbench.treeExpandFolder'),
       describeSymlink: (symlink: WorkbenchDirectoryEntrySymlink) =>
@@ -170,7 +172,7 @@ export function FileTree({
       onContextMenuEntry: handleTreeContextMenuEntry,
       onOpenFile: handleTreeOpenFile,
     }),
-    [gitDecorations, handleTreeContextMenuEntry, handleTreeOpenFile, isMutatingTree, t]
+    [darkIcons, gitDecorations, handleTreeContextMenuEntry, handleTreeOpenFile, isMutatingTree, t]
   )
   const disableTreeEntryMutation = useCallback(
     (data: FileTreeNodeData) => isMutatingTree || data.entry.path === ROOT_PATH,

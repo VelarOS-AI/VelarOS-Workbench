@@ -87,10 +87,12 @@ void describe('Workbench editor zoom', () => {
   })
 
   void test('removes Electron page zoom roles and routes the focused window command', async () => {
-    const [menuSource, windowSource, rendererSource, presentationSource, kernelSource] = await Promise.all([
+    const [menuSource, windowSource, rendererSource, zoomSource, historySource, presentationSource, kernelSource] = await Promise.all([
       readFile('src/main/projects/ProjectHubMenu.ts', 'utf8'),
       readFile('src/main/projects/WorkbenchEditorZoom.ts', 'utf8'),
       readFile('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx', 'utf8'),
+      readFile('src/renderer/src/hooks/useWorkbenchEditorZoom.ts', 'utf8'),
+      readFile('src/renderer/src/app/StandaloneWorkbenchHistoryWindow.tsx', 'utf8'),
       readFile('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
       readFile('src/renderer/src/components/embedded/WorkbenchEmbeddedKernel.tsx', 'utf8'),
     ])
@@ -100,7 +102,10 @@ void describe('Workbench editor zoom', () => {
     assert.match(windowSource, /before-input-event/u)
     assert.match(windowSource, /event\.preventDefault\(\)/u)
     assert.match(windowSource, /setZoomFactor\(1\)/u)
-    assert.match(rendererSource, /getZoomedWorkbenchEditorZoomLevel/u)
+    assert.match(rendererSource, /useWorkbenchEditorZoom\(workbenchPreferences\)/u)
+    assert.match(historySource, /useWorkbenchEditorZoom\(preferences\)/u)
+    assert.match(zoomSource, /getZoomedWorkbenchEditorZoomLevel/u)
+    assert.match(zoomSource, /addEventListener\('wheel', handleWheel, \{ passive: false \}\)/u)
     assert.match(presentationSource, /editorStyle:\s*workbenchPreferences\.style/u)
     assert.match(kernelSource, /\.\.\.embeddedChrome\.editorStyle/u)
   })

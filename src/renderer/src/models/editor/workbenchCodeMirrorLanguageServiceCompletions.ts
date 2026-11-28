@@ -1,15 +1,17 @@
 import {
   type Completion,
   type CompletionContext,
-  type CompletionInfo,
   type CompletionResult,
+  insertBracket,
   pickedCompletion,
   snippet,
   startCompletion,
 } from '@codemirror/autocomplete'
+import { syntaxTree } from '@codemirror/language'
 import {
   type ChangeDesc,
   ChangeSet,
+  EditorSelection,
   type EditorState,
   StateEffect,
   StateField,
@@ -17,6 +19,7 @@ import {
   Transaction,
 } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
+import type { SyntaxNode } from '@lezer/common'
 
 import { Log, optionalWhen } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
@@ -30,8 +33,11 @@ import {
   type WorkbenchLanguageServiceCompletionTextEdit,
   type WorkbenchLanguageServiceRange,
 } from '@shared/contracts/workbench'
+import { getWorkbenchPathExtension, WorkbenchCppFileExtensions, workbenchLspCompletionKind } from '@shared/workbenchLanguageServices'
 
 import {
+  createWorkbenchCompletionInfo,
+  isWorkbenchJavaScriptMemberCompletion,
   WORKBENCH_COMPLETION_RETURN_TYPE,
   type WorkbenchCompletionPresentation,
 } from './workbenchCodeMirrorCompletionPresentation'
@@ -39,19 +45,18 @@ import {
   resolveWorkbenchBuiltinLanguageServiceRuntime,
   usesWorkbenchExternalLspLanguageService,
   usesWorkbenchHtmlLanguageService,
+  usesWorkbenchTypeScriptLanguageService,
 } from './workbenchCodeMirrorLanguageService'
 import { convertWorkbenchLspSnippet } from './workbenchLanguageServiceSnippet'
 
 const log = Log.tag('workbench-language-service-completions')
-/** 选中的自动导入候选停这么久才去要它的导入语句与说明：方向键一路按下去不必每项都问一遍。 */
-const ResolvePreviewDelayMs = 90
 const TriggerCharacters = new Set(['.', '@', '/', '<'])
 /** 外部语言服务器（如 VelarScript）在这些结构字符后面也给补全：属性名、参数、对象键。 */
 const ExternalLspStructuralTriggers = new Set([' ', '{', ',', ':'])
 
 type WorkbenchCompletionResolution = Pick<
   WorkbenchLanguageServiceCompletionResolveResult,
-  'additionalTextEdits' | 'documentation'
+  'additionalTextEdits' | 'documentation' | 'signature' | 'signatureParts'
 >
 
 export type WorkbenchCompletionResolver = (
@@ -65,13 +70,12 @@ interface WorkbenchCompletionRequest {
   changes: ChangeDesc
   /** 有一笔改动没接上（不该发生）：之后不再按请求时的位置替换，只换光标前的词。 */
   broken: boolean
-  /** 最近一次选中项预取说明的令牌：选中项变了，之前的预取就不必再发。 */
-  previewToken: Nullable<object>
   resolve: Nullable<WorkbenchCompletionResolver>
 }
 
 interface WorkbenchPreparedCompletion {
   item: WorkbenchLanguageServiceCompletionItem
+  type: string
   request: WorkbenchCompletionRequest
   /** 请求时正文里的替换范围。 */
   range: Nullable<{ from: number; to: number }>
@@ -104,6 +108,88 @@ function completionWordStart(state: EditorState, position: number, character: Re
   return start
 }
 
+const ConsoleMethodBoosts = new Map([['log', 40], ['warn', 26], ['error', 25], ['info', 24], ['debug', 23]])
+
+function readCompletionMethodBoosts(state: EditorState, from: number): ReadonlyMap<string, number> {
+  const line = state.doc.lineAt(from)
+  const receiver = state.sliceDoc(line.from, from).match(/([\p{ID_Start}_$][\p{ID_Continue}$]*)\s*\??\.\s*$/u)?.[1]
+  if (!receiver) return new Map()
+
+  const boosts = new Map(receiver === 'console' ? ConsoleMethodBoosts : undefined)
+  const escapedReceiver = receiver.replaceAll('$', '\\$')
+  const call = new RegExp(`(?<![\\p{ID_Continue}$])${escapedReceiver}\\s*\\??\\.\\s*([\\p{ID_Start}_$][\\p{ID_Continue}$]*)\\s*\\(`, 'gu')
+  const nearby = state.sliceDoc(Math.max(0, from - 32_768), Math.min(state.doc.length, from + 32_768))
+  for (const match of nearby.matchAll(call)) {
+    const method = match[1]!
+    const base = receiver === 'console' ? ConsoleMethodBoosts.get(method) ?? 0 : 0
+    boosts.set(method, Math.min(base + 8, (boosts.get(method) ?? base) + 2))
+  }
+  return boosts
+}
+
+function isCallableCompletionName(type: string, text: string): boolean {
+  return (type === 'function' || type === 'method') &&
+    /^(?:(?:\?\.|\.)|(?:[\p{ID_Start}_$][\p{ID_Continue}$]*\.))*[\p{ID_Start}_$][\p{ID_Continue}$]*$/u.test(text)
+}
+
+function shouldInsertCall(state: EditorState, start: number, type: string, text: string): boolean {
+  if (!isCallableCompletionName(type, text)) return false
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(start, 1); node; node = node.parent) {
+    if (node.name === 'ImportDeclaration' || node.name === 'ExportGroup') return false
+  }
+  const prefix = state.sliceDoc(state.doc.lineAt(start).from, start)
+  return !/^\s*(?:import\b(?!\s*\()|from\s+\S+\s+import\b|using\b|export\s+(?:type\s+)?[{*])/u.test(prefix)
+}
+
+function completionInsertion(state: EditorState, start: number, end: number, type: string, text: string) {
+  if (!shouldInsertCall(state, start, type, text)) return { text, cursorOffset: 0 }
+  const existingOpening = state.sliceDoc(end, state.doc.lineAt(end).to).match(/^[ \t]*\(/u)?.[0]
+  return existingOpening ? { text, cursorOffset: existingOpening.length } : { text: `${text}()`, cursorOffset: -1 }
+}
+
+function addTrackedCompletionPair(state: EditorState, nameChanges: ChangeSet, cursor: number) {
+  const afterName = state.update({ changes: nameChanges, selection: EditorSelection.cursor(cursor) }).state
+  const pair = insertBracket(afterName, '(')
+  if (!pair) return null
+  return { changes: nameChanges.compose(pair.changes), selection: pair.state.selection, effects: pair.effects }
+}
+
+function applyPlainCallableCompletion(
+  view: EditorView,
+  completion: Completion,
+  from: number,
+  to: number,
+  type: string,
+  text: string
+): void {
+  const state = view.state
+  const { main } = state.selection
+  const annotations = [pickedCompletion.of(completion), Transaction.userEvent.of('input.complete')]
+  if (state.selection.ranges.length === 1 && completionInsertion(state, from, to, type, text).cursorOffset === -1) {
+    const name = state.changes({ from, to, insert: text })
+    const tracked = addTrackedCompletionPair(state, name, name.mapPos(to, 1))
+    if (tracked) {
+      view.dispatch({ ...tracked, annotations, scrollIntoView: true })
+      return
+    }
+  }
+  const typed = state.sliceDoc(from, to)
+  const changes = state.changeByRange((range) => {
+    const start = range.from + from - main.from
+    const end = to === main.from ? range.to : range.from + to - main.from
+    if (
+      start < 0 || end > state.doc.length || start > end ||
+      (range !== main && from !== to && state.sliceDoc(start, end) !== typed)
+    ) return { range }
+    const insertion = completionInsertion(state, start, end, type, text)
+    return {
+      changes: { from: start, to: end, insert: insertion.text },
+      range: EditorSelection.cursor(start + insertion.text.length + insertion.cursorOffset),
+    }
+  })
+  view.dispatch({ ...changes, annotations, scrollIntoView: true })
+}
+
 /** 这次输入该不该问语言服务：显式唤起、正在输入一个词，或刚敲了触发字符。 */
 export function shouldRequestWorkbenchLanguageServiceCompletions(
   context: Pick<CompletionContext, 'explicit' | 'pos' | 'state'>,
@@ -113,51 +199,24 @@ export function shouldRequestWorkbenchLanguageServiceCompletions(
   if (completionWordStart(context.state, context.pos, completionWordCharacter(path)) < context.pos)
     return true
   const previous = context.state.sliceDoc(context.pos - 1, context.pos)
+  if (previous === '>' && context.state.sliceDoc(context.pos - 2, context.pos) === '->') {
+    const extension = getWorkbenchPathExtension(path)
+    return extension === 'c' || WorkbenchCppFileExtensions.includes(extension)
+  }
   return (
     TriggerCharacters.has(previous) ||
     (usesWorkbenchExternalLspLanguageService(path) && ExternalLspStructuralTriggers.has(previous))
   )
 }
 
-function mapVscodeCompletionItemKind(kind: string | undefined): string | undefined {
-  switch (kind) {
-    case '2':
-      return 'method'
-    case '3':
-      return 'function'
-    case '6':
-      return 'variable'
-    case '7':
-      return 'class'
-    case '8':
-      return 'interface'
-    case '9':
-      return 'namespace'
-    case '10':
-      return 'tag'
-    case '12':
-      return 'constant'
-    case '13':
-      return 'enum'
-    case '14':
-      return 'keyword'
-    case '17':
-      return 'file'
-    case '21':
-      return 'constant'
-    default:
-      return undefined
-  }
-}
-
 function mapLanguageServiceCompletionType(kind: string | undefined, path: string): string {
-  const vscodeKind = mapVscodeCompletionItemKind(kind)
-  if (vscodeKind) return vscodeKind
-
   if (!kind) return usesWorkbenchHtmlLanguageService(path) ? 'tag' : 'text'
+  const lspKind = workbenchLspCompletionKind(Number(kind))
+  if (lspKind) return lspKind
 
   const normalized = kind.toLowerCase()
-  if (normalized === 'tag') return 'tag'
+  if (/^(?:tag|parameter|constructor|enum-member|snippet|file|folder|color|value|event|operator)$/u.test(normalized))
+    return normalized
   if (normalized.includes('keyword') || normalized.includes('scriptelementkind.keyword'))
     return 'keyword'
   if (normalized.includes('function')) return 'function'
@@ -294,7 +353,7 @@ function applyLateCompletionEdits(
 function ensureCompletionResolution(
   prepared: WorkbenchPreparedCompletion
 ): Promise<Nullable<WorkbenchCompletionResolution>> {
-  const resolveData = prepared.item.resolve
+  const resolveData = prepared.item.resolve ?? (prepared.item.resolvePreview ? { name: prepared.item.label } : null)
   const resolve = prepared.request.resolve
   if (!resolveData || !resolve) return Promise.resolve(null)
   if (prepared.resolution) return prepared.resolution.promise
@@ -321,23 +380,6 @@ function ensureCompletionResolution(
   return entry.promise
 }
 
-function textCompletionInfo(text: string | undefined): CompletionInfo {
-  return text ? document.createTextNode(text) : null
-}
-
-async function previewCompletionInfo(
-  prepared: WorkbenchPreparedCompletion
-): Promise<CompletionInfo> {
-  const token = {}
-  prepared.request.previewToken = token
-  if (!prepared.resolution) {
-    await new Promise((resolve) => setTimeout(resolve, ResolvePreviewDelayMs))
-    if (prepared.request.previewToken !== token) return null
-  }
-  const resolution = await ensureCompletionResolution(prepared)
-  return textCompletionInfo(resolution?.documentation ?? prepared.item.documentation)
-}
-
 /**
  * 接受一个语言服务补全：按它自己的替换范围（可选链换掉 `.`，import 语句补全换掉整句开头）写入，片段展开成可按 Tab
  * 跳转的占位符，自动导入这类附加改动与正文在同一笔改动里完成、一步撤销。附加改动要现算的（TypeScript 自动导入还没
@@ -350,7 +392,7 @@ function applyWorkbenchLanguageServiceCompletion(
   to: number,
   prepared: WorkbenchPreparedCompletion
 ): void {
-  const { item, request } = prepared
+  const { item, request, type } = prepared
   const state = view.state
   const mapping = currentRequestMapping(request, state)
 
@@ -405,16 +447,21 @@ function applyWorkbenchLanguageServiceCompletion(
       scrollIntoView: true,
     })
   } else {
-    const text = converted ? converted.text : insert
-    acceptChanges = state.changes([
+    const { text, cursorOffset } = item.isSnippet || item.retrigger
+      ? { text: converted?.text ?? insert, cursorOffset: 0 }
+      : completionInsertion(state, start, end, type, insert)
+    const buildChanges = (insertText: string) => state.changes([
       ...extraEdits.filter((edit) => edit.to <= start),
-      { from: start, to: end, insert: text },
+      { from: start, to: end, insert: insertText },
       ...extraEdits.filter((edit) => edit.to > start),
     ])
+    const nameChanges = cursorOffset === -1 ? buildChanges(insert) : null
+    const tracked = nameChanges ? addTrackedCompletionPair(state, nameChanges, nameChanges.mapPos(end, 1)) : null
+    acceptChanges = tracked?.changes ?? buildChanges(text)
     view.dispatch({
       changes: acceptChanges,
-      selection: { anchor: acceptChanges.mapPos(end, 1) },
-      effects,
+      selection: tracked?.selection ?? { anchor: acceptChanges.mapPos(end, 1) + cursorOffset },
+      effects: tracked ? [...tracked.effects, ...effects] : effects,
       annotations,
       scrollIntoView: true,
     })
@@ -439,7 +486,6 @@ function createWorkbenchCompletionRequest(
     path,
     changes: ChangeSet.empty(state.doc.length).desc,
     broken: false,
-    previewToken: null,
     resolve,
   }
 }
@@ -447,19 +493,28 @@ function createWorkbenchCompletionRequest(
 function toCodeMirrorCompletion(
   item: WorkbenchLanguageServiceCompletionItem,
   request: WorkbenchCompletionRequest,
-  wordStart: number
+  wordStart: number,
+  boost?: number
 ): WorkbenchCompletionPresentation {
-  const type = mapLanguageServiceCompletionType(item.kind, request.path)
+  const kind = mapLanguageServiceCompletionType(item.kind, request.path)
+  const type = kind === 'text' && item.isSnippet ? 'snippet' : kind
   const range = item.range ? rangeInDocument(request.doc, item.range) : null
+  const displayLabel = item.label.trim() || item.label
   // CodeMirror 拿 label 与光标前的词比对：替换范围从词首之前开始（`.`、`@`、`&`）时，比对文字去掉那一截。
-  let label = item.filterText || item.label
+  let label = item.filterText || displayLabel
   if (range && range.from < wordStart) {
     const leading = request.doc.sliceString(range.from, wordStart)
     if (label.startsWith(leading) && label.length > leading.length)
       label = label.slice(leading.length)
   }
   const insert = item.insertText ?? item.label
-  const prepared: WorkbenchPreparedCompletion = { item, request, range, resolution: null }
+  const prepared: WorkbenchPreparedCompletion = { item, type, request, range, resolution: null }
+  const callableName = isCallableCompletionName(type, insert)
+  const source = item.source ?? item.resolve?.source
+  const signature = item.detail?.startsWith('(') || item.detail?.startsWith('<')
+    ? `${item.label}${item.detail}${item.returnType ? `: ${item.returnType}` : ''}`
+    : item.detail ?? (item.returnType ? `${item.label}: ${item.returnType}` : undefined)
+  const canResolvePreview = request.resolve && (item.resolve || item.resolvePreview)
   const plain =
     !range &&
     !item.isSnippet &&
@@ -469,18 +524,27 @@ function toCodeMirrorCompletion(
 
   return {
     label,
-    displayLabel: optionalWhen(label !== item.label, item.label),
+    displayLabel: optionalWhen(label !== displayLabel, displayLabel),
     type,
     detail: item.detail,
     [WORKBENCH_COMPLETION_RETURN_TYPE]: item.returnType,
+    workbenchSource: source,
+    workbenchDeprecated: item.deprecated,
+    boost: type === 'method' || type === 'function' ? boost : undefined,
+    hideWhenAlreadyTyped:
+      !item.isSnippet && !item.resolve && !item.retrigger && !item.additionalTextEdits?.length &&
+      (range ? insert === request.doc.sliceString(range.from, range.to) : insert === label),
     sortText: item.sortText,
-    info: item.resolve
-      ? () => previewCompletionInfo(prepared)
-      : type === 'keyword'
-        ? undefined
-        : item.documentation,
+    info: type !== 'keyword' && (canResolvePreview || signature || item.documentation || source)
+      ? () => createWorkbenchCompletionInfo(
+          { signature, documentation: item.documentation, source },
+          canResolvePreview ? () => ensureCompletionResolution(prepared) : undefined
+        )
+      : undefined,
     apply: plain
-      ? insert
+      ? callableName
+        ? (view, completion, from, to) => applyPlainCallableCompletion(view, completion, from, to, type, insert)
+        : insert
       : (view, completion, from, to) =>
           applyWorkbenchLanguageServiceCompletion(view, completion, from, to, prepared),
   }
@@ -528,15 +592,18 @@ export function buildWorkbenchLanguageServiceCompletionResult({
   const from = completionWordStart(state, position, character)
   const typed = state.sliceDoc(from, position)
   const request = createWorkbenchCompletionRequest(state, path, resolve)
+  const boosts = readCompletionMethodBoosts(state, from)
 
   const seen = new Set<string>()
   const options: Completion[] = result.items.map((item) => {
-    const option = toCodeMirrorCompletion(item, request, from)
+    const option = toCodeMirrorCompletion(item, request, from, boosts.get(item.label))
     seen.add(option.label.toLowerCase())
     return option
   })
   // 本地索引的候选与语言服务的共用同一个替换起点才合进来（HTML 的本地候选不合）。
-  if (localResult?.from === from && !usesWorkbenchHtmlLanguageService(path)) {
+  const memberOnly = usesWorkbenchTypeScriptLanguageService(path) &&
+    isWorkbenchJavaScriptMemberCompletion({ state, pos: position })
+  if (localResult?.from === from && !memberOnly && !usesWorkbenchHtmlLanguageService(path)) {
     for (const option of localResult.options) {
       const key = option.label.toLowerCase()
       if (seen.has(key)) continue
@@ -554,6 +621,10 @@ export function buildWorkbenchLanguageServiceCompletionResult({
     validFor: result.isIncomplete
       ? undefined
       : (text: string) => text.startsWith(typed) && word.test(text),
+    getMatch: (option, matched) => {
+      const offset = option.displayLabel?.toLowerCase().indexOf(option.label.toLowerCase()) ?? 0
+      return offset < 0 ? [] : (matched ?? []).map((pos) => pos + offset)
+    },
     map: (current, changes) => {
       trackRequestChanges(request, changes)
       return current

@@ -27,7 +27,6 @@ interface UseWorkbenchCommandProjectBootstrapOptions {
   setIsRunningCommand: Dispatch<SetStateAction<boolean>>
   setActiveRunId: Dispatch<SetStateAction<Nullable<string>>>
   setIsValidationStale: Dispatch<SetStateAction<boolean>>
-  createTerminalSession: (project: WorkbenchProject) => Promise<void>
 }
 
 export function useWorkbenchCommandProjectBootstrap({
@@ -43,7 +42,6 @@ export function useWorkbenchCommandProjectBootstrap({
   setIsRunningCommand,
   setActiveRunId,
   setIsValidationStale,
-  createTerminalSession,
 }: UseWorkbenchCommandProjectBootstrapOptions): void {
   useEffect(() => {
     setTerminalSessions([])
@@ -59,13 +57,9 @@ export function useWorkbenchCommandProjectBootstrap({
     setIsRunningCommand(false)
     setActiveRunId(null)
     setIsValidationStale(false)
-    if (project) {
-      void createTerminalSession(project)
-    }
   }, [
     activeProjectId,
     activeProjectRef,
-    createTerminalSession,
     setActiveTerminalSessionId,
     setCommandHistory,
     setCommandInput,

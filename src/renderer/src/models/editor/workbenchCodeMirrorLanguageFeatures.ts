@@ -24,7 +24,12 @@ import { type WorkbenchHostRuntime } from '../../host/WorkbenchHost'
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
 import { getWorkbenchJavaScriptKeywordRangeAtPosition } from './workbenchCodeMirrorBasicSyntax'
-import { isWorkbenchEditorHoverSuppressed } from './workbenchCodeMirrorDefinitionHover'
+import { WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS } from './workbenchCodeMirrorCompletionPresentation'
+import {
+  isWorkbenchEditorHoverSuppressed,
+  waitForWorkbenchEditorHoverDelay,
+  WorkbenchHoverPrefetchDelayMs,
+} from './workbenchCodeMirrorDefinitionHover'
 import {
   buildWorkbenchLanguageServiceRequestBase,
   usesWorkbenchSemanticLanguageService,
@@ -62,7 +67,6 @@ export interface WorkbenchLanguageServiceEditorContext {
   hostRuntime?: WorkbenchHostRuntime
   hoverDefinitionLabel?: string
   hoverDefinitionPreviewLabel?: string
-  hoverLoadingLabel?: string
   /** 给了就在诊断浮层上列出修复按钮。 */
   codeActions?: WorkbenchEditorHoverCodeActions
 }
@@ -136,13 +140,6 @@ interface WorkbenchEditorHoverDiagnosticRange {
   to: number
 }
 
-interface WorkbenchEditorHoverSymbolFallback {
-  word: string
-  path: string
-  line: number
-  column: number
-}
-
 const DIAGNOSTIC_SEVERITY_ORDER: Record<Diagnostic['severity'], number> = {
   error: 0,
   warning: 1,
@@ -150,7 +147,7 @@ const DIAGNOSTIC_SEVERITY_ORDER: Record<Diagnostic['severity'], number> = {
   hint: 3,
 }
 
-export function collectDiagnosticsAtPosition(
+function collectDiagnosticsAtPosition(
   view: EditorView,
   pos: number
 ): Nullable<WorkbenchEditorHoverDiagnosticRange> {
@@ -291,22 +288,44 @@ function hoverHasDisplayCode(hover: WorkbenchLanguageServiceHoverResult): boolea
   return !!(hover.displayText.trim() || hover.displayParts?.some((part) => part.text.trim()))
 }
 
+export function hasWorkbenchLanguageHoverDetails(
+  hover: WorkbenchLanguageServiceHoverResult,
+  path: string,
+  line: { number: number; text: string },
+  symbol: string
+): boolean {
+  if (
+    hover.definitionPreview?.text.trim() ||
+    hover.tags?.some((tag) => tag.trim()) ||
+    hoverDocumentationBlocks(hover).some((block) => block.text.trim())
+  )
+    return true
+
+  const signature = (hover.displayText || hover.displayParts?.map((part) => part.text).join('') || '')
+    .replace(
+      /^\s*\((?:alias|parameter|property|field|constant|variable|local variable|method)\)\s*/iu,
+      ''
+    )
+    .replace(/\s+/gu, ' ')
+    .trim()
+  if (!signature || signature === symbol) return false
+
+  const { definition } = hover
+  if (definition && (definition.path !== path || definition.line !== line.number)) return true
+  // A signature already written on this line is redundant. Inferred types and references differ.
+  return !line.text.replace(/\s+/gu, ' ').includes(signature)
+}
+
 export function shouldUseWorkbenchSingleCodeHoverLayout(
   hover: Nullable<WorkbenchLanguageServiceHoverResult>,
-  {
-    hasDiagnostics = false,
-    showDefinitionPreview = false,
-  }: {
-    hasDiagnostics?: boolean
-    showDefinitionPreview?: boolean
-  } = {}
+  { hasDiagnostics = false }: { hasDiagnostics?: boolean } = {}
 ): boolean {
   if (
     !hover ||
     hasDiagnostics ||
     hover.definition ||
     hover.tags?.length ||
-    (showDefinitionPreview && hover.definitionPreview?.text.trim())
+    hover.definitionPreview?.text.trim()
   )
     return false
 
@@ -383,19 +402,15 @@ export function buildWorkbenchEditorHoverDom(
     hover = null,
     diagnostics = [],
     diagnosticActions = [],
-    symbolFallback = null,
     definitionLabel = 'Definition',
     definitionPreviewLabel = 'Definition',
-    showDefinitionPreview = false,
   }: {
     hover?: Nullable<WorkbenchLanguageServiceHoverResult>
     diagnostics?: readonly Diagnostic[]
     /** 这些诊断的修复，列成按钮排在诊断下面。 */
     diagnosticActions?: readonly WorkbenchEditorHoverAction[]
-    symbolFallback?: Nullable<WorkbenchEditorHoverSymbolFallback>
     definitionLabel?: string
     definitionPreviewLabel?: string
-    showDefinitionPreview?: boolean
   },
   classes: WorkbenchEditorLanguageFeatureClasses
 ): HTMLElement {
@@ -442,7 +457,6 @@ export function buildWorkbenchEditorHoverDom(
     if (
       shouldUseWorkbenchSingleCodeHoverLayout(hover, {
         hasDiagnostics: diagnostics.length > 0,
-        showDefinitionPreview,
       })
     )
       wrapper.dataset.layout = 'single-code'
@@ -459,15 +473,13 @@ export function buildWorkbenchEditorHoverDom(
     const documentation = createHoverDocumentationSection(hover, classes, hoverPartClassName)
     if (documentation) wrapper.append(documentation)
 
-    if (showDefinitionPreview) {
-      const definitionPreview = createHoverDefinitionPreviewSection(
-        hover,
-        definitionPreviewLabel,
-        classes,
-        hoverPartClassName
-      )
-      if (definitionPreview) wrapper.append(definitionPreview)
-    }
+    const definitionPreview = createHoverDefinitionPreviewSection(
+      hover,
+      definitionPreviewLabel,
+      classes,
+      hoverPartClassName
+    )
+    if (definitionPreview) wrapper.append(definitionPreview)
 
     if (hover.definition) {
       const location = document.createElement('div')
@@ -492,22 +504,6 @@ export function buildWorkbenchEditorHoverDom(
       }
       wrapper.append(tags)
     }
-  } else if (symbolFallback) {
-    if (diagnostics.length > 0) {
-      appendEditorSymbolTooltipSection(wrapper, classes)
-    }
-
-    wrapper.append(
-      createHighlightedHoverSection(classes.editorSymbolTooltipTitle, hoverPartClassName, {
-        fallbackText: symbolFallback.word,
-      })
-    )
-
-    wrapper.append(
-      createHighlightedHoverSection(classes.editorSymbolTooltipLocation, hoverPartClassName, {
-        fallbackText: `${symbolFallback.path}:${symbolFallback.line}:${symbolFallback.column}`,
-      })
-    )
   }
 
   return wrapper
@@ -587,8 +583,7 @@ function closeHoverOnRun(
 
 export function createWorkbenchLanguageServiceHoverTooltip(
   context: WorkbenchLanguageServiceEditorContext,
-  classes: WorkbenchEditorLanguageFeatureClasses,
-  fallbackHover?: (view: EditorView, position: number) => Tooltip | null
+  classes: WorkbenchEditorLanguageFeatureClasses
 ): Extension {
   let requestGeneration = 0
 
@@ -596,6 +591,11 @@ export function createWorkbenchLanguageServiceHoverTooltip(
     async (view, position): Promise<Tooltip | null> => {
       if (isWorkbenchEditorHoverSuppressed(view)) return null
       const generation = ++requestGeneration
+      const sourceDocument = view.state.doc
+      const isCurrentHover = (): boolean =>
+        generation === requestGeneration &&
+        view.state.doc === sourceDocument &&
+        !isWorkbenchEditorHoverSuppressed(view)
       const diagnosticRange = collectDiagnosticsAtPosition(view, position)
       const keywordRange = getWorkbenchJavaScriptKeywordRangeAtPosition(
         view.state.doc,
@@ -617,220 +617,77 @@ export function createWorkbenchLanguageServiceHoverTooltip(
         !keywordRange && context.path && usesWorkbenchSemanticLanguageService(context.path)
           ? buildLanguageServiceRequest(view, context, position)
           : null
-      if (!request) {
-        const fallback = fallbackHover?.(view, position) ?? null
-        if (fallback || !diagnosticRange) return fallback
-        return {
-          pos: diagnosticRange.from,
-          end: diagnosticRange.to,
-          above: false,
-          create: () => {
-            const { diagnostics } = diagnosticRange
-            const dom = buildWorkbenchEditorHoverDom({ diagnostics }, classes)
-            let destroyed = false
-            void requestActions()?.then((diagnosticActions) => {
-              if (destroyed || isEmpty(diagnosticActions)) return
-              replaceHoverTooltipDom(
-                dom,
-                buildWorkbenchEditorHoverDom({ diagnostics, diagnosticActions }, classes)
-              )
-              view.requestMeasure()
-            })
-            return {
-              dom,
-              destroy: () => {
-                destroyed = true
-              },
-            }
-          },
-        }
-      }
+      if (!request && !diagnosticRange) return null
 
-      const sourceDocument = view.state.doc
       const tokenRange = getWorkbenchHoverTokenRange(view.state, position)
-      let resolvedHover: Nullable<WorkbenchLanguageServiceHoverResult> = null
-      const hoverRequest = getWorkbenchLanguageServiceHover(request, context.hostRuntime)
-        .then((result) => (result.ok ? result.data.hover : null))
-        .catch(() => null)
-      if (!diagnosticRange) {
-        let timer: ReturnType<typeof setTimeout> | undefined
-        const reply = await Promise.race([
-          hoverRequest.then((hover) => ({ ready: true as const, hover })),
-          new Promise<{ ready: false }>((resolve) => {
-            timer = setTimeout(() => resolve({ ready: false }), 120)
-          }),
-        ])
-        if (timer) clearTimeout(timer)
-        if (
-          generation !== requestGeneration ||
-          view.state.doc !== sourceDocument ||
-          isWorkbenchEditorHoverSuppressed(view)
-        )
-          return null
-        if (reply.ready) {
-          resolvedHover = reply.hover
-          if (!resolvedHover) return null
-        }
-      }
+      const hoverRequest = request
+        ? getWorkbenchLanguageServiceHover(request, context.hostRuntime)
+            .then((result) => {
+              const hover = result.ok ? result.data.hover : null
+              const useful =
+                hover &&
+                hasWorkbenchLanguageHoverDetails(
+                  hover,
+                  request.path,
+                  sourceDocument.lineAt(tokenRange.from),
+                  sourceDocument.sliceString(tokenRange.from, tokenRange.to)
+                )
+              return useful ? hover : null
+            })
+            .catch(() => null)
+        : Promise.resolve(null)
+      // 用静止等待的时间查询；让已测量的完整气泡直接出现，避免占位内容先贴着行尾显示。
+      const [resolvedHover] = await Promise.all([hoverRequest, waitForWorkbenchEditorHoverDelay(view)])
+      if (!isCurrentHover() || (!resolvedHover && !diagnosticRange)) return null
 
       return {
         pos: diagnosticRange?.from ?? tokenRange.from,
         end: diagnosticRange?.to ?? tokenRange.to,
         above: false,
         create: () => {
-          let definitionPreviewExpanded = false
           const diagnostics = diagnosticRange?.diagnostics ?? []
-          let diagnosticActions: readonly WorkbenchEditorHoverAction[] = []
-          const dom = buildWorkbenchEditorHoverDom(
-            {
-              hover: resolvedHover,
-              diagnostics,
-              definitionLabel: context.hoverDefinitionLabel,
-              definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
-              showDefinitionPreview: definitionPreviewExpanded,
-            },
-            classes
-          )
-          if (resolvedHover?.definitionPreview) dom.dataset.hasDefinitionPreview = 'true'
-          if (!diagnosticRange && !resolvedHover) {
-            const loading = document.createElement('div')
-            loading.className = classes.editorSymbolTooltipDocsParagraph
-            loading.setAttribute('role', 'status')
-            loading.textContent = context.hoverLoadingLabel ?? 'Loading language information…'
-            dom.append(loading)
-          }
-          let hoveredTypeTarget: Nullable<HTMLElement> = null
-          let modifierTypeTarget: Nullable<HTMLElement> = null
-          let modifierActive = false
-          let previewRenderFrame: Nullable<number> = null
-          let destroyed = false
-          const syncModifierTarget = (): void => {
-            const nextTarget =
-              modifierActive &&
-              hoveredTypeTarget &&
-              dom.contains(hoveredTypeTarget) &&
-              resolvedHover?.definitionPreview
-                ? hoveredTypeTarget
-                : null
-            if (modifierTypeTarget === nextTarget) return
-
-            modifierTypeTarget?.removeAttribute('data-hover-modifier-target')
-            nextTarget?.setAttribute('data-hover-modifier-target', 'true')
-            modifierTypeTarget = nextTarget
-          }
-          const updateModifierState = (active: boolean): void => {
-            modifierActive = active
-            syncModifierTarget()
-          }
-          const handleWindowKeyDown = (event: KeyboardEvent): void => {
-            updateModifierState(event.metaKey || event.ctrlKey)
-          }
-          const handleWindowKeyUp = (event: KeyboardEvent): void => {
-            updateModifierState(event.metaKey || event.ctrlKey)
-          }
-          const handleWindowBlur = (): void => updateModifierState(false)
-          const renderResolvedHover = (): void => {
-            replaceHoverTooltipDom(
-              dom,
-              buildWorkbenchEditorHoverDom(
-                {
-                  hover: resolvedHover,
-                  diagnostics,
-                  diagnosticActions,
-                  definitionLabel: context.hoverDefinitionLabel,
-                  definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
-                  showDefinitionPreview: definitionPreviewExpanded,
-                },
-                classes
-              )
+          const render = (diagnosticActions?: readonly WorkbenchEditorHoverAction[]): HTMLElement =>
+            buildWorkbenchEditorHoverDom(
+              {
+                hover: resolvedHover,
+                diagnostics,
+                diagnosticActions,
+                definitionLabel: context.hoverDefinitionLabel,
+                definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
+              },
+              classes
             )
-            if (resolvedHover?.definitionPreview) dom.dataset.hasDefinitionPreview = 'true'
-            else delete dom.dataset.hasDefinitionPreview
-            hoveredTypeTarget = null
-            modifierTypeTarget = null
-            syncModifierTarget()
-          }
-          const scheduleResolvedHoverRender = (): void => {
-            if (previewRenderFrame !== null || destroyed) return
-            previewRenderFrame = window.requestAnimationFrame(() => {
-              previewRenderFrame = null
-              if (destroyed || !dom.isConnected) return
-              renderResolvedHover()
-              view.requestMeasure()
-            })
-          }
-          const handleTypeDefinitionPointerDown = (event: PointerEvent): void => {
-            if (event.button !== 0 || (!event.metaKey && !event.ctrlKey)) return
-            const target =
-              event.target instanceof Element
-                ? event.target.closest('[data-hover-part="type"]')
-                : null
-            if (!target || !dom.contains(target) || !resolvedHover?.definitionPreview) return
-
-            event.preventDefault()
-            event.stopPropagation()
-            if (definitionPreviewExpanded) return
-            definitionPreviewExpanded = true
-            scheduleResolvedHoverRender()
-          }
-          const handleHoverMouseMove = (event: MouseEvent): void => {
-            hoveredTypeTarget =
-              event.target instanceof Element
-                ? event.target.closest<HTMLElement>('[data-hover-part="type"]')
-                : null
-            updateModifierState(event.metaKey || event.ctrlKey)
-          }
-          const handleHoverMouseLeave = (): void => {
-            hoveredTypeTarget = null
-            syncModifierTarget()
-          }
-          dom.addEventListener('mousemove', handleHoverMouseMove)
-          dom.addEventListener('mouseleave', handleHoverMouseLeave)
-          dom.addEventListener('pointerdown', handleTypeDefinitionPointerDown, true)
-          window.addEventListener('keydown', handleWindowKeyDown, true)
-          window.addEventListener('keyup', handleWindowKeyUp, true)
-          window.addEventListener('blur', handleWindowBlur)
-          if (!resolvedHover)
-            void hoverRequest.then((hover) => {
-              if (
-                destroyed ||
-                generation !== requestGeneration ||
-                view.state.doc !== sourceDocument
-              )
-                return
-              if (!hover && !diagnosticRange) {
-                view.dispatch({ effects: closeHoverTooltips })
-                return
-              }
-              resolvedHover = hover
-              scheduleResolvedHoverRender()
-            })
+          const dom = render()
+          let diagnosticRenderFrame: Nullable<number> = null
+          let destroyed = false
           void requestActions()?.then((actions) => {
             if (destroyed || isEmpty(actions)) return
-            diagnosticActions = actions
-            scheduleResolvedHoverRender()
+            diagnosticRenderFrame = window.requestAnimationFrame(() => {
+              diagnosticRenderFrame = null
+              if (destroyed || !dom.isConnected) return
+              replaceHoverTooltipDom(dom, render(actions))
+              view.requestMeasure()
+            })
           })
 
           return {
             dom,
             destroy: () => {
               destroyed = true
-              if (previewRenderFrame !== null) {
-                window.cancelAnimationFrame(previewRenderFrame)
-                previewRenderFrame = null
+              if (diagnosticRenderFrame !== null) {
+                window.cancelAnimationFrame(diagnosticRenderFrame)
+                diagnosticRenderFrame = null
               }
-              dom.removeEventListener('mousemove', handleHoverMouseMove)
-              dom.removeEventListener('mouseleave', handleHoverMouseLeave)
-              dom.removeEventListener('pointerdown', handleTypeDefinitionPointerDown, true)
-              window.removeEventListener('keydown', handleWindowKeyDown, true)
-              window.removeEventListener('keyup', handleWindowKeyUp, true)
-              window.removeEventListener('blur', handleWindowBlur)
             },
           }
         },
       }
     },
-    { hoverTime: 240 }
+    {
+      hoverTime: WorkbenchHoverPrefetchDelayMs,
+      hideOn: (transaction) =>
+        transaction.docChanged || transaction.state.selection.ranges.some((range) => !range.empty),
+    }
   )
 }
 
@@ -842,10 +699,11 @@ export function createWorkbenchSignatureHelpExtension(
     class {
       private requestGeneration = 0
       private tooltip: HTMLElement | null = null
+      private timer: ReturnType<typeof setTimeout> | null = null
       private destroyed = false
 
       constructor(readonly view: EditorView) {
-        void this.sync()
+        this.schedule()
       }
 
       public update(update: ViewUpdate): void {
@@ -855,18 +713,27 @@ export function createWorkbenchSignatureHelpExtension(
         }
 
         if (update.docChanged || update.selectionSet) {
-          void this.sync()
+          this.schedule()
         }
       }
 
       public destroy(): void {
         this.destroyed = true
-        this.requestGeneration += 1
+        this.hide()
         this.tooltip?.remove()
         this.tooltip = null
       }
 
-      public async sync(): Promise<void> {
+      private schedule(): void {
+        this.hide()
+        if (!this.view.state.selection.main.empty) return
+        this.timer = setTimeout(() => {
+          this.timer = null
+          void this.sync()
+        }, WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS)
+      }
+
+      private async sync(): Promise<void> {
         if (this.destroyed) return
         const path = context.path
         const state = this.view.state
@@ -916,17 +783,40 @@ export function createWorkbenchSignatureHelpExtension(
         }
 
         this.tooltip.replaceChildren(buildSignatureHelpDom(signatureHelp, classes))
-        const coords = this.view.coordsAtPos(position)
-        if (!coords) return
-
-        const editorRect = this.view.dom.getBoundingClientRect()
-        this.tooltip.style.left = `${coords.left - editorRect.left}px`
-        this.tooltip.style.top = `${coords.top - editorRect.top - this.tooltip.offsetHeight - 8}px`
-        this.tooltip.style.display = 'block'
+        const tooltip = this.tooltip
+        const generation = this.requestGeneration
+        tooltip.style.visibility = 'hidden'
+        tooltip.style.display = 'block'
+        this.view.requestMeasure({
+          key: this,
+          read: (view) => {
+            const coords = view.coordsAtPos(position)
+            if (!coords) return null
+            const editor = view.dom.getBoundingClientRect()
+            const anchor = coords.left - editor.left
+            const { offsetWidth, offsetHeight } = tooltip
+            const margin = 8
+            const left =
+              anchor + offsetWidth <= editor.width - margin
+                ? anchor
+                : Math.max(margin, anchor - offsetWidth)
+            const above = coords.top - editor.top - offsetHeight - margin
+            const top = above >= 0 ? above : coords.bottom - editor.top + margin
+            return { left, top }
+          },
+          write: (placement) => {
+            if (!placement || this.requestGeneration !== generation) return
+            tooltip.style.left = `${placement.left}px`
+            tooltip.style.top = `${placement.top}px`
+            tooltip.style.visibility = ''
+          },
+        })
       }
 
       public hide(): void {
         this.requestGeneration += 1
+        if (this.timer !== null) clearTimeout(this.timer)
+        this.timer = null
         if (!this.tooltip) return
         this.tooltip.style.display = 'none'
       }

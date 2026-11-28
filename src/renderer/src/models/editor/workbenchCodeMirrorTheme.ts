@@ -5,6 +5,8 @@ import { tags } from '@lezer/highlight'
 
 import { isWorkbenchDarkTheme, type WorkbenchThemeId } from '../workbenchPreferences'
 
+import { createWorkbenchSyntaxPresentation } from './workbenchCodeMirrorSyntaxPresentation'
+
 export interface WorkbenchCodeTokenPalette {
   comment: string
   decorator: string
@@ -227,6 +229,13 @@ const workbenchCodeMirrorMidnightBlueTheme: Extension = syntaxHighlighting(
   createWorkbenchHighlightStyle('midnight-blue')
 )
 
+const deferredSyntaxThemes: Record<WorkbenchThemeId, Extension> = {
+  'light-modern': createWorkbenchSyntaxPresentation(createWorkbenchHighlightStyle('light-modern')),
+  'warm-paper': createWorkbenchSyntaxPresentation(createWorkbenchHighlightStyle('warm-paper')),
+  'dark-modern': createWorkbenchSyntaxPresentation(createWorkbenchHighlightStyle('dark-modern')),
+  'midnight-blue': createWorkbenchSyntaxPresentation(createWorkbenchHighlightStyle('midnight-blue')),
+}
+
 function diagnosticUnderlineBackground(color: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 2.5 l2 -1.5 l1 0 l2 1.5 l1 0" stroke="${color}" fill="none" stroke-width=".7"/></svg>`
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
@@ -283,7 +292,8 @@ export function getWorkbenchCodeMirrorLintTheme(theme: WorkbenchThemeId): Extens
   )
 }
 
-export function getWorkbenchCodeMirrorTheme(theme: WorkbenchThemeId): Extension {
+export function getWorkbenchCodeMirrorTheme(theme: WorkbenchThemeId, deferTyping = false): Extension {
+  if (deferTyping) return deferredSyntaxThemes[theme]
   switch (theme) {
     case 'warm-paper':
       return workbenchCodeMirrorWarmPaperTheme

@@ -185,15 +185,10 @@ function sortContextSymbols(
     .slice(0, MAX_CONTEXT_SYMBOLS)
 }
 
-export function buildWorkbenchProjectContextIndex({
-  childrenByPath,
-  openFiles,
-  indexedFiles = [],
-}: {
-  childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
-  openFiles: WorkbenchOpenFileSnapshot[]
-  indexedFiles?: WorkbenchOpenFileSnapshot[]
-}): WorkbenchProjectContextIndex {
+export function buildWorkbenchProjectContextFiles(
+  childrenByPath: Map<string, WorkbenchDirectoryEntry[]>,
+  indexedFiles: readonly WorkbenchOpenFileSnapshot[]
+): WorkbenchProjectContextFile[] {
   const fileContexts = [
     ...buildFileContextFromTree(childrenByPath),
     ...indexedFiles.map((file) => ({
@@ -202,13 +197,31 @@ export function buildWorkbenchProjectContextIndex({
       language: file.language,
     })),
   ]
-  // 打开的文件以当前编辑正文为准：不能让磁盘旧符号或旧计数盖过草稿。
-  const textFiles = new Map(indexedFiles.map((file) => [file.path, file]))
-  for (const file of openFiles) textFiles.set(file.path, file)
+  return uniqueSortedFiles(fileContexts)
+}
 
+export function buildWorkbenchProjectContextIndex({
+  childrenByPath,
+  openFiles,
+  indexedFiles = [],
+  files = buildWorkbenchProjectContextFiles(childrenByPath, indexedFiles),
+}: {
+  childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
+  openFiles: WorkbenchOpenFileSnapshot[]
+  indexedFiles?: WorkbenchOpenFileSnapshot[]
+  files?: WorkbenchProjectContextFile[]
+}): WorkbenchProjectContextIndex {
+  let symbols: WorkbenchProjectContextSymbol[] | undefined
   return {
-    files: uniqueSortedFiles(fileContexts),
-    symbols: sortContextSymbols([...textFiles.values()].flatMap(extractFileSymbols)),
+    files,
+    get symbols() {
+      if (symbols) return symbols
+      // 补全或导航需要符号时才读取草稿，按键渲染路径只更新文件快照。
+      const textFiles = new Map(indexedFiles.map((file) => [file.path, file]))
+      for (const file of openFiles) textFiles.set(file.path, file)
+      symbols = sortContextSymbols([...textFiles.values()].flatMap(extractFileSymbols))
+      return symbols
+    },
     loadedDirectoryCount: childrenByPath.size,
     indexedFileCount: indexedFiles.length,
   }

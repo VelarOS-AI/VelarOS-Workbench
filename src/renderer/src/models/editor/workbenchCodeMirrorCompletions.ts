@@ -6,10 +6,11 @@ import {
 } from '@codemirror/autocomplete'
 import { csharpCompletion } from '@codincod/codemirror-lang-csharp'
 
-import { getWorkbenchPathExtension } from '@shared/workbenchLanguageServices'
+import { getWorkbenchPathExtension, WorkbenchCppFileExtensions } from '@shared/workbenchLanguageServices'
 
 import type { WorkbenchProjectContextIndex } from '../project/workbenchProjectContextIndex'
 
+import type { WorkbenchCompletionPresentation } from './workbenchCodeMirrorCompletionPresentation'
 import {
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchTypeScriptLanguageService,
@@ -65,6 +66,24 @@ const javaLocalCompletion = ifNotIn(
   )
 )
 
+const commonCFamilyKeywords =
+  'alignas alignof auto bool break case char const continue default do double else enum extern false float for goto if inline int long nullptr register return short signed sizeof static static_assert struct switch true typedef union unsigned void volatile while'
+
+function cFamilyKeywordCompletion(keywords: string): CompletionSource {
+  return ifNotIn(
+    ['LineComment', 'BlockComment', 'String', 'RawString', 'Char', 'SystemLibString',
+      'comment', 'lineComment', 'blockComment', 'string', 'character', 'meta'],
+    completeFromList(keywords.split(' ').map((label) => ({ label, type: 'keyword' })))
+  )
+}
+
+const cLocalCompletion = cFamilyKeywordCompletion(
+  `${commonCFamilyKeywords} restrict typeof typeof_unqual _Alignas _Alignof _Atomic _BitInt _Bool _Complex _Generic _Imaginary _Noreturn _Static_assert _Thread_local thread_local`
+)
+const cppLocalCompletion = cFamilyKeywordCompletion(
+  `${commonCFamilyKeywords} and and_eq asm bitand bitor catch char8_t char16_t char32_t class compl concept const_cast consteval constexpr constinit co_await co_return co_yield decltype delete dynamic_cast explicit export friend import module mutable namespace new noexcept not not_eq operator or or_eq private protected public reinterpret_cast requires static_cast template this thread_local throw try typeid typename using virtual wchar_t xor xor_eq`
+)
+
 export function resolveWorkbenchOfflineCodeCompletion(
   path: Nullable<string>
 ): CompletionSource | null {
@@ -74,7 +93,11 @@ export function resolveWorkbenchOfflineCodeCompletion(
       ? javaLocalCompletion
       : extension === 'cs' || extension === 'csx'
         ? csharpLocalCompletion
-        : null
+        : extension === 'c'
+          ? cLocalCompletion
+          : WorkbenchCppFileExtensions.includes(extension)
+            ? cppLocalCompletion
+            : null
   if (!source) return null
   return (context) => {
     const word = context.matchBefore(/[@$\p{ID_Continue}]+/u)
@@ -90,7 +113,7 @@ export function resolveWorkbenchOfflineCodeCompletion(
 function mapSuggestionKind(kind: WorkbenchEditorSuggestionKind): string {
   switch (kind) {
     case 'file':
-      return 'text'
+      return 'file'
     case 'keyword':
       return 'keyword'
     case 'project-symbol':
@@ -141,12 +164,16 @@ export function buildWorkbenchCodeMirrorCompletionResult({
     from: request.replaceStart,
     to: request.replaceEnd,
     validFor: COMPLETION_VALID_FOR,
-    options: suggestions.map((suggestion) => ({
-      label: suggestion.label,
-      apply: suggestion.insertText,
-      type: mapSuggestionKind(suggestion.kind),
-      detail: suggestion.detail,
-      boost: usesTsLanguageService ? -2 : 0,
-    })),
+    options: suggestions.map((suggestion): WorkbenchCompletionPresentation => {
+      const hasSource = suggestion.kind === 'project-symbol' || suggestion.kind === 'file'
+      return {
+        label: suggestion.label,
+        apply: suggestion.insertText,
+        type: mapSuggestionKind(suggestion.kind),
+        detail: hasSource ? undefined : suggestion.detail,
+        workbenchSource: hasSource ? suggestion.detail : undefined,
+        boost: usesTsLanguageService ? -2 : 0,
+      }
+    }),
   }
 }

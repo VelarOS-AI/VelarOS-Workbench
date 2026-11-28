@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useMemo, useState } from 'react'
+import { type ReactElement, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { CaretDownIcon, CaretRightIcon, WarningCircleIcon } from '@phosphor-icons/react'
 import { WorkbenchProblemSeverityIcon } from '@renderer/components/editor/WorkbenchProblemSeverityIcon'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
@@ -10,6 +10,7 @@ import {
   type WorkbenchProblemLocationKind,
   type WorkbenchProblemLocationSeverity,
 } from '@renderer/models/editor/workbenchCodeInsightModel'
+import type { WorkbenchEditorFrameStore } from '@renderer/models/editor/workbenchEditorCursorStore'
 import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
@@ -33,7 +34,7 @@ interface CodeInsightPanelProps {
   languageServiceInsights?: LooseOptional<WorkbenchLanguageServiceInsights>
   projectRoot?: LooseOptional<string>
   hideHeader?: boolean
-  activeProblemId?: LooseOptional<string>
+  activeProblemStore: WorkbenchEditorFrameStore<Nullable<string>>
   onActiveProblemChange?: (problem: WorkbenchProblemLocation) => void
   /** 跳到一条问题的位置。单击带 `preview`（以预览标签打开），双击不带（普通标签，预览标签就此留下）。 */
   onGoToLocation: (
@@ -67,11 +68,16 @@ export function CodeInsightPanel({
   languageServiceInsights = null,
   projectRoot = null,
   hideHeader = false,
-  activeProblemId = null,
+  activeProblemStore,
   onActiveProblemChange,
   onGoToLocation,
 }: CodeInsightPanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
+  const activeProblemId = useSyncExternalStore(
+    activeProblemStore.subscribe,
+    activeProblemStore.getSnapshot,
+    activeProblemStore.getSnapshot
+  )
   const [collapsedFilePaths, setCollapsedFilePaths] = useState<ReadonlySet<string>>(() => new Set())
   const problemLocations = useMemo(
     () =>

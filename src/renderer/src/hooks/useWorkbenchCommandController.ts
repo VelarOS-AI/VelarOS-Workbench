@@ -245,7 +245,6 @@ export function useWorkbenchCommandController({
     setIsRunningCommand,
     setActiveRunId,
     setIsValidationStale,
-    createTerminalSession: createTerminalSessionForProject,
   })
 
   useWorkbenchCommandSuggestions({

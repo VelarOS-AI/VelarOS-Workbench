@@ -1,11 +1,16 @@
 import { WorkbenchRuntime } from '@renderer/composition/WorkbenchRuntime'
-import { installWorkbenchHost, type WorkbenchHost } from '@renderer/host/WorkbenchHost'
+import {
+  installWorkbenchHost,
+  type WorkbenchHost,
+  type WorkbenchProjectIndexOptions,
+} from '@renderer/host/WorkbenchHost'
 import { getStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
 import { AppError, Result } from '@velaros-ai/velaros/core'
 import type { Result as ResultType } from '@velaros-ai/velaros/core/result'
 
 import {
+  type WorkbenchIndexedTextFile,
   type WorkbenchIndexProjectRequest,
   type WorkbenchIndexProjectResult,
   type WorkbenchProjectAiRulesResult,
@@ -74,14 +79,19 @@ function toWorkspaceHostResult<T>(envelope: WorkbenchWorkspaceInvokeResult): Res
 }
 
 async function indexProjectWithWorkspace(
-  request: WorkbenchIndexProjectRequest
+  request: WorkbenchIndexProjectRequest,
+  { signal, onProgress }: WorkbenchProjectIndexOptions = {}
 ): Promise<ResultType<WorkbenchIndexProjectResult>> {
+  const cancelled = () =>
+    Result.fail<WorkbenchIndexProjectResult>(new AppError('CANCELLED', 'Project indexing cancelled'))
+  if (signal?.aborted) return cancelled()
   const listed = await invokeWorkspace<unknown[]>(request.projectRoot, 'project:list', {
     path: request.path ?? '.',
     recursive: true,
     maxDepth: request.maxDepth ?? 4,
     maxFiles: request.maxFiles ?? 120,
   })
+  if (signal?.aborted) return cancelled()
   if (!listed.ok) return listed as ResultType<WorkbenchIndexProjectResult>
 
   const paths = listed.data
@@ -98,23 +108,33 @@ async function indexProjectWithWorkspace(
       truncated: false,
     })
 
-  const read = await invokeWorkspace<WorkspaceReadManyResult>(request.projectRoot, 'project:read', {
-    path: paths,
-    maxChars: request.maxCharsPerFile ?? 24_000,
-    maxBytes: request.maxFileBytes ?? 160_000,
-  })
-  if (!read.ok) return read as ResultType<WorkbenchIndexProjectResult>
+  const files: WorkbenchIndexedTextFile[] = []
+  const batchSize = 12
+  onProgress?.({ scannedFiles: 0, totalFiles: paths.length })
+  for (let start = 0; start < paths.length; start += batchSize) {
+    if (signal?.aborted) return cancelled()
+    const batch = paths.slice(start, start + batchSize)
+    const read = await invokeWorkspace<WorkspaceReadManyResult>(request.projectRoot, 'project:read', {
+      path: batch,
+      maxChars: request.maxCharsPerFile ?? 24_000,
+      maxBytes: request.maxFileBytes ?? 160_000,
+    })
+    if (signal?.aborted) return cancelled()
+    if (!read.ok) return read as ResultType<WorkbenchIndexProjectResult>
 
-  const files = read.data.files
-    .filter((file) => typeof file.content === 'string')
-    .map((file) => ({
-      path: file.snapshot.path,
-      content: file.content ?? '',
-      size: file.snapshot.size,
-      modifiedAt: file.snapshot.mtimeMs,
-      totalLines: file.totalLines ?? file.content?.split('\n').length ?? 0,
-      truncated: file.truncated ?? false,
-    }))
+    for (const file of read.data.files) {
+      if (typeof file.content !== 'string') continue
+      files.push({
+        path: file.snapshot.path,
+        content: file.content,
+        size: file.snapshot.size,
+        modifiedAt: file.snapshot.mtimeMs,
+        totalLines: file.totalLines ?? file.content.split('\n').length,
+        truncated: file.truncated ?? false,
+      })
+    }
+    onProgress?.({ scannedFiles: start + batch.length, totalFiles: paths.length })
+  }
   return Result.ok({
     projectRoot: request.projectRoot,
     path: request.path ?? '.',
@@ -326,8 +346,10 @@ const standaloneWorkbenchHost: WorkbenchHost = {
             ...options,
           })
         ),
-      createWorkspaceGitBranch: async (workspaceRoot, branch) =>
-        toHostResult(await window.velarosWorkbenchGit.createBranch({ workspaceRoot, branch })),
+      createWorkspaceGitBranch: async (workspaceRoot, branch, startPoint) =>
+        toHostResult(
+          await window.velarosWorkbenchGit.createBranch({ workspaceRoot, branch, startPoint })
+        ),
       performWorkspaceGitAction: async (workspaceRoot, action, options) =>
         toHostResult(
           await window.velarosWorkbenchGit.performRemoteAction({
