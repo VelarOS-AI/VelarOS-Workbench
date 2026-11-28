@@ -339,14 +339,14 @@
 
 .treeFileIcon[data-kind='archive'],
 .commitFileIcon[data-kind='archive'] {
-  color: var(--status-violet);
+  color: var(--workbench-file-archive, var(--status-violet));
 }
 
 .treeFileIcon[data-kind='audio'],
 .treeFileIcon[data-kind='video'],
 .commitFileIcon[data-kind='audio'],
 .commitFileIcon[data-kind='video'] {
-  color: var(--destructive);
+  color: var(--workbench-file-media, var(--destructive));
 }
 
 .treeFileIcon[data-kind='typescript'],
@@ -415,19 +415,19 @@
 
 .treeFileIcon[data-kind='lock'],
 .commitFileIcon[data-kind='lock'] {
-  color: var(--status-violet);
+  color: var(--workbench-file-lock, var(--status-violet));
 }
 
 .treeFileIcon[data-kind='patch'],
 .commitFileIcon[data-kind='patch'] {
-  color: var(--status-teal);
+  color: var(--workbench-file-patch, var(--status-teal));
 }
 
 .treeFileIcon[data-kind='csv'],
 .treeFileIcon[data-kind='spreadsheet'],
 .commitFileIcon[data-kind='csv'],
 .commitFileIcon[data-kind='spreadsheet'] {
-  color: var(--status-teal);
+  color: var(--workbench-file-csv, var(--status-teal));
 }
 
 .treeFileIcon[data-kind='document'],
@@ -447,7 +447,7 @@
 
 .treeFileIcon[data-kind='image'],
 .commitFileIcon[data-kind='image'] {
-  color: var(--status-green);
+  color: var(--workbench-file-image, var(--status-green));
 }
 
 .treeFileIcon[data-kind='markdown'],
@@ -457,12 +457,12 @@
 
 .treeFileIcon[data-kind='pdf'],
 .commitFileIcon[data-kind='pdf'] {
-  color: var(--status-red);
+  color: var(--workbench-file-pdf, var(--status-red));
 }
 
 .treeFileIcon[data-kind='presentation'],
 .commitFileIcon[data-kind='presentation'] {
-  color: color-mix(in oklab, var(--status-amber) 92%, black);
+  color: color-mix(in oklab, var(--workbench-file-presentation, var(--status-amber)) 92%, black);
 }
 
 .treeFileIcon[data-kind='generic'],

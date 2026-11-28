@@ -807,12 +807,30 @@ void describe('focused Workbench language surface', () => {
       'function shadowBuiltins(undefined, NaN, Infinity, globalThis) {',
       '  return [undefined, NaN, Infinity, globalThis]',
       '}',
+      'function rotateDynamic(context) { context.rotate(1) }',
+      '/** @param {CanvasRenderingContext2D} context */',
+      'function rotateCanvas(context) { context.rotate(1) }',
       '',
     ].join('\n')
 
     try {
       await writeFile(join(projectRoot, 'main.ts'), typeScript, 'utf8')
       await writeFile(join(projectRoot, 'main.mjs'), javaScript, 'utf8')
+      const hoverRotate = (declaration: string) => {
+        const offset =
+          javaScript.indexOf('context.rotate', javaScript.indexOf(declaration)) + 'context.'.length
+        return services.getHover({
+          projectRoot,
+          path: 'main.mjs',
+          content: javaScript,
+          position: { line: 1, column: 1, offset },
+        })
+      }
+      assert.equal((await hoverRotate('function rotateDynamic')).hover, null)
+      assert.match(
+        (await hoverRotate('function rotateCanvas')).hover?.displayText ?? '',
+        /rotate\(angle: number\): void/u
+      )
       const resolved = await services.resolveLanguageService({
         projectRoot,
         path: 'main.ts',
@@ -1400,10 +1418,42 @@ void describe('focused Workbench language surface', () => {
     const hover = { displayText: `(parameter) int ${name}`, definition }
     assert.equal(hasWorkbenchLanguageHoverDetails(hover, path, line, name), false)
     assert.equal(hasWorkbenchLanguageHoverDetails({ displayText: name }, path, line, name), false)
-    assert.equal(hasWorkbenchLanguageHoverDetails({ ...hover, documentation: 'Relay timeout.' }, path, line, name), true)
-    assert.equal(hasWorkbenchLanguageHoverDetails({ ...hover, definitionPreview: { kind: 'code', text: 'record RelayEntry(int Timeout);' } }, path, line, name), true)
-    assert.equal(hasWorkbenchLanguageHoverDetails(hover, path, { number: 15, text: `var timeout = relay.${name};` }, name), true)
-    assert.equal(hasWorkbenchLanguageHoverDetails({ displayText: 'const timeout: number' }, 'app.ts', { number: 1, text: 'const timeout = readTimeout()' }, 'timeout'), true)
+    assert.equal(
+      hasWorkbenchLanguageHoverDetails(
+        { ...hover, documentation: 'Relay timeout.' },
+        path,
+        line,
+        name
+      ),
+      true
+    )
+    assert.equal(
+      hasWorkbenchLanguageHoverDetails(
+        { ...hover, definitionPreview: { kind: 'code', text: 'record RelayEntry(int Timeout);' } },
+        path,
+        line,
+        name
+      ),
+      true
+    )
+    assert.equal(
+      hasWorkbenchLanguageHoverDetails(
+        hover,
+        path,
+        { number: 15, text: `var timeout = relay.${name};` },
+        name
+      ),
+      true
+    )
+    assert.equal(
+      hasWorkbenchLanguageHoverDetails(
+        { displayText: 'const timeout: number' },
+        'app.ts',
+        { number: 1, text: 'const timeout = readTimeout()' },
+        'timeout'
+      ),
+      true
+    )
   })
 
   void test('keeps the hover interactive until a modifier-click navigation actually opens', async () => {
@@ -1540,12 +1590,20 @@ void describe('focused Workbench language surface', () => {
     ])
     const positions: number[] = []
     const edit = state.update({ changes: { from: 0, insert: '//' } })
-    const mapped = mapWorkbenchInlayHintDecorationsThroughChanges(decorations, state.doc, edit.changes)
+    const mapped = mapWorkbenchInlayHintDecorationsThroughChanges(
+      decorations,
+      state.doc,
+      edit.changes
+    )
     mapped.between(0, edit.newDoc.length, (from) => positions.push(from))
     assert.deepEqual(positions, [otherOffset + 2])
 
     const remove = state.update({ changes: { from: 0, to: state.doc.line(2).from } })
-    const afterDeletion = mapWorkbenchInlayHintDecorationsThroughChanges(decorations, state.doc, remove.changes)
+    const afterDeletion = mapWorkbenchInlayHintDecorationsThroughChanges(
+      decorations,
+      state.doc,
+      remove.changes
+    )
     assert.equal(afterDeletion.size, 1)
     assert.equal(afterDeletion.iter().from, 11)
   })

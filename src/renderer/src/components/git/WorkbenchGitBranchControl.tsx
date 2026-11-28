@@ -43,6 +43,7 @@ import {
   type WorkspaceGitBranch,
   type WorkspaceGitRemoteActionResult,
 } from '@shared/contracts/system'
+import type { WorkbenchGitBranchEdit } from '@shared/workbenchGit'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -59,6 +60,7 @@ interface WorkbenchGitBranchControlProps {
   onRepositoryChanged: () => void | Promise<void>
   /** 拉取出了冲突：打开提交面板，冲突文件列在「合并冲突」里。 */
   onOpenCommitTool: () => void
+  onInspectBranch: (workspaceRoot: string, branch: string, compare: boolean) => void
 }
 
 /** 冲突提示挂得久一点：要照着它去解决。 */
@@ -66,6 +68,7 @@ const ConflictNoticeDurationMs = 12_000
 
 /** 新建分支在跑时 `pendingBranch` 里记的值（分支名里不会有空格，和签出的分支名撞不上）。 */
 const CreatingBranch = 'create branch'
+const EditingBranch = 'edit branch'
 
 export function WorkbenchGitBranchControl({
   workspaceRoot,
@@ -76,6 +79,7 @@ export function WorkbenchGitBranchControl({
   onWorkingTreeChanged,
   onRepositoryChanged,
   onOpenCommitTool,
+  onInspectBranch,
 }: WorkbenchGitBranchControlProps): Nullable<ReactElement> {
   const { messageLatest, t, tLatest } = useStableWorkbenchMessageTranslate()
   const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
@@ -95,6 +99,7 @@ export function WorkbenchGitBranchControl({
   const [pendingBranch, setPendingBranch] = useState<Nullable<string>>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createSource, setCreateSource] = useState<Nullable<WorkbenchGitOperationBranch>>(null)
+  const [renameSource, setRenameSource] = useState<Nullable<WorkspaceGitBranch>>(null)
   const [newBranchName, setNewBranchName] = useState('')
   const [checkoutCreatedBranch, setCheckoutCreatedBranch] = useState(true)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -114,6 +119,8 @@ export function WorkbenchGitBranchControl({
 
   const running = remoteAction.running
   const creating = pendingBranch === CreatingBranch
+  const editing = pendingBranch === EditingBranch
+  const branchDialogPending = creating || editing
   // 同一时刻只做一件事：远端操作跑着时不切分支，切分支时不起远端操作。
   const locked = !!running || !!pendingBranch || !!gitOperation.pending
   // 合并、变基、拣选、撤销进行到一半：先去提交面板继续或放弃。这时只有获取远端还能用。
@@ -189,14 +196,62 @@ export function WorkbenchGitBranchControl({
     if (locked || operationBlock) return
     handleMenuOpenChange(false)
     setCreateSource(branch ? resolveWorkbenchGitListedBranch(branch) : null)
+    setRenameSource(null)
     setNewBranchName('')
     setCheckoutCreatedBranch(true)
     setCreateDialogOpen(true)
   }
 
+  function localBranchName(branch: WorkspaceGitBranch): string {
+    return branch.ref?.startsWith('refs/heads/')
+      ? branch.ref.slice('refs/heads/'.length)
+      : branch.name
+  }
+
+  function openRenameBranchDialog(branch: WorkspaceGitBranch): void {
+    if (locked || operationBlock || branch.kind === 'remote') return
+    handleMenuOpenChange(false)
+    setRenameSource(branch)
+    setNewBranchName(localBranchName(branch))
+    setCreateDialogOpen(true)
+  }
+
+  async function editLocalBranch(
+    branch: WorkspaceGitBranch,
+    edit: WorkbenchGitBranchEdit
+  ): Promise<boolean> {
+    if (locked || operationBlock || branch.kind === 'remote') return false
+    const source = localBranchName(branch)
+    if (edit.action === 'delete') {
+      if (branch.current || source === branchName) return false
+      if (!window.confirm(tLatest.current('workbench.gitBranchDeleteConfirm', { branch: source })))
+        return false
+    }
+    setPendingBranch(EditingBranch)
+    try {
+      const result = Result.unwrap(
+        await workbenchHost.kernel.workspace.editWorkspaceGitBranch(workspaceRoot, source, edit)
+      )
+      await onRefresh()
+      messageLatest.current.success({
+        title: tLatest.current(
+          edit.action === 'rename' ? 'workbench.gitBranchRenamed' : 'workbench.gitBranchDeleted',
+          { branch: result.branch }
+        ),
+      })
+      return true
+    } catch (error) {
+      showBranchActionFailure(error)
+      await onRefresh().catch(showBranchActionFailure)
+      return false
+    } finally {
+      setPendingBranch(null)
+    }
+  }
+
   function handleCreateDialogOpenChange(open: boolean): void {
     // 正在建的时候不让关：结果出来之前对话框留着。
-    if (!open && creating) return
+    if (!open && branchDialogPending) return
     setCreateDialogOpen(open)
   }
 
@@ -204,6 +259,14 @@ export function WorkbenchGitBranchControl({
     event.preventDefault()
     const name = newBranchName.trim()
     if (!name || locked || operationBlock) return
+    if (renameSource) {
+      if (
+        name !== localBranchName(renameSource) &&
+        (await editLocalBranch(renameSource, { action: 'rename', name }))
+      )
+        setCreateDialogOpen(false)
+      return
+    }
     if (checkoutCreatedBranch && warnUnsavedOpenTabs()) return
     setPendingBranch(CreatingBranch)
     try {
@@ -256,6 +319,11 @@ export function WorkbenchGitBranchControl({
     branch?: string
   ): boolean {
     if (action !== 'fetch' && warnUnsavedOpenTabs()) return false
+    if (action === 'sync')
+      return (
+        !!upstream &&
+        window.confirm(tLatest.current('workbench.gitBranchSyncConfirm', { upstream }))
+      )
     if (action === 'upload')
       return window.confirm(
         branch
@@ -287,7 +355,8 @@ export function WorkbenchGitBranchControl({
     if (locked || !confirmRemoteAction(action, branch)) return
     try {
       const result = await remoteAction.run(action, { branch, privateKeyPath: gitSshKeyPath })
-      await onRefresh()
+      if (action === 'pull' || action === 'sync') await onWorkingTreeChanged()
+      else await onRefresh()
       if (result.action.conflicts.length > 0) {
         showConflicts(result.action)
         return
@@ -350,7 +419,7 @@ export function WorkbenchGitBranchControl({
           remoteActions={describeWorkbenchGitRemoteActions(status, t, operationBlock)}
           remoteNote={describeWorkbenchGitRemoteNote(status, t, operationBlock)}
           running={running}
-          switchingBranch={creating ? null : pendingBranch}
+          switchingBranch={branchDialogPending ? null : pendingBranch}
           locked={locked}
           branchesBlocked={operationBlock}
           canIntegrate={canIntegrate}
@@ -362,22 +431,41 @@ export function WorkbenchGitBranchControl({
           onPushBranch={(branch) => void runRemoteAction('upload', branch.name)}
           onRunBranchOperation={runBranchOperation}
           onOpenCreateBranch={openCreateBranchDialog}
+          onOpenRenameBranch={openRenameBranchDialog}
+          onDeleteBranch={(branch) => void editLocalBranch(branch, { action: 'delete' })}
+          onCopyBranch={(branch) => {
+            const name = branch.kind === 'remote' ? branch.name : localBranchName(branch)
+            void navigator.clipboard.writeText(name).catch(showBranchActionFailure)
+            handleMenuOpenChange(false)
+          }}
+          onInspectBranch={(branch, compare) => {
+            handleMenuOpenChange(false)
+            onInspectBranch(workspaceRoot, branch.name, compare)
+          }}
         />
       </AnchoredPopover>
       <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
         <DialogContent className={styles.gitBranchCreateDialog}>
           <DialogHeader>
-            <DialogTitle>{t('workbench.gitBranchCreateDialogTitle')}</DialogTitle>
+            <DialogTitle>
+              {t(
+                renameSource ? 'workbench.gitBranchRename' : 'workbench.gitBranchCreateDialogTitle'
+              )}
+            </DialogTitle>
             <DialogDescription>
-              {createSource
-                ? t('workbench.gitBranchCreateFromSelectedDescription', {
-                    branch: createSource.name,
+              {renameSource
+                ? t('workbench.gitBranchRenameDescription', {
+                    branch: localBranchName(renameSource),
                   })
-                : detachedHead
-                  ? t('workbench.gitBranchCreateFromDetachedDescription', {
-                      sha: detachedHead.shortSha,
+                : createSource
+                  ? t('workbench.gitBranchCreateFromSelectedDescription', {
+                      branch: createSource.name,
                     })
-                  : t('workbench.gitBranchCreateDialogDescription', { branch: headLabel })}
+                  : detachedHead
+                    ? t('workbench.gitBranchCreateFromDetachedDescription', {
+                        sha: detachedHead.shortSha,
+                      })
+                    : t('workbench.gitBranchCreateDialogDescription', { branch: headLabel })}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -388,28 +476,30 @@ export function WorkbenchGitBranchControl({
               autoFocus
               size="sm"
               value={newBranchName}
-              disabled={creating}
+              disabled={branchDialogPending}
               placeholder={t('workbench.gitBranchCreatePlaceholder')}
               aria-label={t('workbench.gitBranchCreatePlaceholder')}
               spellCheck={false}
               onChange={(event) => setNewBranchName(event.target.value)}
             />
             <DialogFooter className={styles.gitBranchCreateFooter}>
-              <label className={styles.gitBranchCreateCheckout}>
-                <input
-                  type="checkbox"
-                  checked={checkoutCreatedBranch}
-                  disabled={creating}
-                  onChange={(event) => setCheckoutCreatedBranch(event.target.checked)}
-                />
-                <span>{t('workbench.gitBranchCheckoutCreated')}</span>
-              </label>
+              {!renameSource && (
+                <label className={styles.gitBranchCreateCheckout}>
+                  <input
+                    type="checkbox"
+                    checked={checkoutCreatedBranch}
+                    disabled={creating}
+                    onChange={(event) => setCheckoutCreatedBranch(event.target.checked)}
+                  />
+                  <span>{t('workbench.gitBranchCheckoutCreated')}</span>
+                </label>
+              )}
               <div className={styles.gitBranchCreateActions}>
                 <Button
                   variant="ghost"
                   size="sm"
                   type="button"
-                  disabled={creating}
+                  disabled={branchDialogPending}
                   onClick={() => handleCreateDialogOpenChange(false)}
                 >
                   {t('common.cancel')}
@@ -418,12 +508,19 @@ export function WorkbenchGitBranchControl({
                   size="sm"
                   type="submit"
                   className={styles.gitBranchCreateSubmit}
-                  disabled={!newBranchName.trim() || locked}
+                  disabled={
+                    !newBranchName.trim() ||
+                    locked ||
+                    (renameSource && newBranchName.trim() === localBranchName(renameSource)) ||
+                    !!operationBlock
+                  }
                 >
-                  {creating ? (
+                  {branchDialogPending ? (
                     <SpinnerGapIcon size={13} className={styles.spinIcon} />
                   ) : (
-                    t('workbench.gitBranchCreate')
+                    t(
+                      renameSource ? 'workbench.gitBranchRenameSubmit' : 'workbench.gitBranchCreate'
+                    )
                   )}
                 </Button>
               </div>

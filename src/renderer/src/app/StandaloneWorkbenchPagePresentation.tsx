@@ -19,6 +19,7 @@ import {
 } from '@phosphor-icons/react'
 import { WorkbenchAgentRail } from '@renderer/components/WorkbenchAgentRail'
 import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
+import type { WorkbenchGitBranchLogRequest } from '@renderer/models/git/workbenchGitBranchMenuModel'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { optionalWhen } from '@velaros-ai/velaros/core'
@@ -123,8 +124,7 @@ export function StandaloneWorkbenchPagePresentation({
     chrome,
     dialogs,
   } = model
-  const { translate, t, shellStyle, macTitleInset, hostPlatform, commandStatusLabel } =
-    chrome
+  const { translate, t, shellStyle, macTitleInset, hostPlatform, commandStatusLabel } = chrome
 
   const pendingFileOpenId = projectHubState.pendingFileOpen?.id
   const pendingFileOpenPath = projectHubState.pendingFileOpen?.path
@@ -147,6 +147,8 @@ export function StandaloneWorkbenchPagePresentation({
   const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
   // 「编辑运行配置」对话框同样：打开过才挂着。
   const [runConfigurationsMounted, setRunConfigurationsMounted] = useState(false)
+  const [branchLogRequest, setBranchLogRequest] =
+    useState<Nullable<WorkbenchGitBranchLogRequest>>(null)
   if (dialogs.runConfigurationsOpen && !runConfigurationsMounted) setRunConfigurationsMounted(true)
   const [chatMounted, setChatMounted] = useState(false)
   if (surface.isRightToolOpen && !chatMounted) setChatMounted(true)
@@ -315,10 +317,7 @@ export function StandaloneWorkbenchPagePresentation({
     setVelarSourcePreview(null)
   }, [activeProjectId])
 
-  useEffect(
-    () => preloadWhenIdle([LazyQuickOpen, LazyWorkbenchGitToolPanel]),
-    []
-  )
+  useEffect(() => preloadWhenIdle([LazyQuickOpen, LazyWorkbenchGitToolPanel]), [])
 
   useEffect(() => {
     if (!pendingFileOpenId || !pendingFileOpenPath || !activeProjectId) return
@@ -398,7 +397,13 @@ export function StandaloneWorkbenchPagePresentation({
       icon: <TerminalWindowIcon size={18} />,
     },
   ]
-  const editorChrome = buildStandaloneWorkbenchEditorChrome(model)
+  const editorChrome = {
+    ...buildStandaloneWorkbenchEditorChrome(model),
+    onInspectGitBranch(workspaceRoot: string, branch: string, compare: boolean) {
+      setBranchLogRequest({ workspaceRoot, branch, compare })
+      model.surface.openBottomTool('git')
+    },
+  }
   const baseEmbeddedKernelModel = buildStandaloneWorkbenchEmbeddedKernelModel(model, editorChrome)
   const { aiChanges } = model
   // 「AI 改动」对比标签：独占标签组，激活时标签栏只显示这一组，与普通文件标签隔开。
@@ -839,10 +844,14 @@ export function StandaloneWorkbenchPagePresentation({
             />
             <CommandPanel
               activeTool={surface.activeBottomTool}
-              agentConsole={model.agentConsoleSessionId ? {
-                projectRoot,
-                sessionId: model.agentConsoleSessionId,
-              } : null}
+              agentConsole={
+                model.agentConsoleSessionId
+                  ? {
+                      projectRoot,
+                      sessionId: model.agentConsoleSessionId,
+                    }
+                  : null
+              }
               workbenchRun={{
                 runSessions: workbench.runSessions,
                 activeRunSessionId: workbench.activeRunSessionId,
@@ -865,6 +874,7 @@ export function StandaloneWorkbenchPagePresentation({
                 <Suspense fallback={null}>
                   <LazyWorkbenchGitToolPanel
                     workspaceRoot={workbench.activeProject.rootPath}
+                    branchLogRequest={branchLogRequest}
                     summary={model.gitState.summary}
                     isLoading={model.gitState.isLoading}
                     error={model.gitState.error}
@@ -977,7 +987,9 @@ export function StandaloneWorkbenchPagePresentation({
             activeProject={workbench.activeProject}
             openTabs={workbench.openTabs}
             activeFilePath={workbench.selectedFilePath}
-            activeFileContent={workbench.readEditorContent(workbench.selectedFilePath) ?? workbench.editorContent}
+            activeFileContent={
+              workbench.readEditorContent(workbench.selectedFilePath) ?? workbench.editorContent
+            }
             activeFileCursor={editorNavigation.readCursorPosition()}
             recentFilePaths={model.recentFilePaths}
             projectFiles={model.projectFiles}

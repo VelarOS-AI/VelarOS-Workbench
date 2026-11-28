@@ -57,8 +57,39 @@ export function resolveWorkbenchEditorSelectionAfterClose(
 /**
  * 从当前标签持有的正文与格式收集未保存路径；之前某次写盘成功不代表现在的草稿已经落盘。
  */
-export function collectWorkbenchEditorUnsavedPaths(tabs: Iterable<WorkbenchOpenEditorTab>): string[] {
+export function collectWorkbenchEditorUnsavedPaths(
+  tabs: Iterable<WorkbenchOpenEditorTab>
+): string[] {
   return [...tabs].filter(isDirtyTab).map((tab) => tab.path)
+}
+
+export function isWorkbenchEditorTabUnmodified(tab: WorkbenchOpenEditorTab): boolean {
+  if (tab.externalChange || isDirtyTab(tab)) return false
+  const base = tab.savedModificationBase
+  return (
+    !base ||
+    (tab.content === base.content &&
+      tab.file.encoding === base.encoding &&
+      tab.file.eol === base.eol)
+  )
+}
+
+/** Collapsed untracked directories cover all their open descendant files. */
+export function collectWorkbenchEditorGitChangedPaths(
+  paths: readonly string[],
+  entries: ReadonlyArray<{ path: string; originalPath?: string }>
+): ReadonlySet<string> {
+  const changed = new Set(
+    entries.flatMap(({ path, originalPath }) => (originalPath ? [path, originalPath] : [path]))
+  )
+  return new Set(
+    paths.filter((path) => {
+      if (changed.has(path)) return true
+      for (let slash = path.indexOf('/'); slash >= 0; slash = path.indexOf('/', slash + 1))
+        if (changed.has(path.slice(0, slash + 1))) return true
+      return false
+    })
+  )
 }
 
 /** 删除已落盘：clean标签可关，等待删除期间产生的草稿留给现有已删文件恢复流程。 */

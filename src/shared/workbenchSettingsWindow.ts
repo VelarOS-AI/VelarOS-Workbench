@@ -8,15 +8,31 @@ export const WorkbenchSettingsWindowChannels = {
   ready: 'workbench-app:settings-window:ready',
   close: 'workbench-app:settings-window:close',
   exitProject: 'workbench-app:settings-window:exit-project',
-  tavilyConfigured: 'workbench-app:settings-window:tavily-configured',
-  setTavilyApiKey: 'workbench-app:settings-window:set-tavily-api-key',
+  getWebSearch: 'workbench-app:settings-window:get-web-search',
+  updateWebSearch: 'workbench-app:settings-window:update-web-search',
 } as const
+
+export type WorkbenchWebSearchProvider = 'browser' | 'tavily' | 'custom'
+
+export interface WorkbenchWebSearchSettings {
+  provider: WorkbenchWebSearchProvider
+  tavilyConfigured: boolean
+  custom: { endpoint: string } | null
+}
+
+export type WorkbenchWebSearchUpdate =
+  | { action: 'select'; provider: WorkbenchWebSearchProvider }
+  | { action: 'remove'; provider: 'tavily' | 'custom' }
+  | { action: 'save'; provider: 'tavily'; apiKey: string }
+  | { action: 'save'; provider: 'custom'; endpoint: string; apiKey: string }
 
 export interface WorkbenchSettingsWindowBridge {
   open: () => Promise<void>
   ready: () => Promise<void>
   close: () => Promise<void>
   exitProject: () => Promise<void>
-  getTavilyConfigured: () => Promise<boolean>
-  setTavilyApiKey: (apiKey: string) => Promise<WorkbenchFsCallResult<boolean>>
+  getWebSearch: () => Promise<WorkbenchWebSearchSettings>
+  updateWebSearch: (
+    update: WorkbenchWebSearchUpdate
+  ) => Promise<WorkbenchFsCallResult<WorkbenchWebSearchSettings>>
 }

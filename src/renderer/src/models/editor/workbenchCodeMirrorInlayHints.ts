@@ -57,8 +57,7 @@ function readCachedWorkbenchInlayHints(
   ranges: readonly WorkbenchLanguageServiceOffsetRange[]
 ): Nullable<readonly WorkbenchLanguageServiceInlayHint[]> {
   const entry = inlayHintCache.get(cacheKey)
-  if (!entry || entry.content !== content || !cacheCoversRanges(entry.ranges, ranges))
-    return null
+  if (!entry || entry.content !== content || !cacheCoversRanges(entry.ranges, ranges)) return null
 
   inlayHintCache.delete(cacheKey)
   inlayHintCache.set(cacheKey, entry)
@@ -175,7 +174,8 @@ export function mapWorkbenchInlayHintDecorationsThroughChanges(
   changes.iterChangedRanges((from, to, nextFrom, nextTo) => {
     const lineStart = previousDoc.lineAt(from).from
     const lastLine = previousDoc.lineAt(to)
-    const removesWholeLines = from < to && lineStart === from && lastLine.from === to && nextFrom === nextTo
+    const removesWholeLines =
+      from < to && lineStart === from && lastLine.from === to && nextFrom === nextTo
     const lineEnd = removesWholeLines ? to - 1 : lastLine.to
     retained = retained.update({
       filterFrom: lineStart,
@@ -212,14 +212,23 @@ function buildWorkbenchInlayHintLoader(runtime: WorkbenchInlayHintRuntime): Exte
       private timer: Nullable<TimerLease> = null
       private generation = 0
       private documentRefreshNotBefore = 0
+      private pointerSelection: AbortController | null = null
+      private pendingHints: {
+        generation: number
+        hints: readonly WorkbenchLanguageServiceInlayHint[]
+      } | null = null
 
       constructor(private readonly view: EditorView) {
-        this.timer = this.timers.after(0, () => {
-          this.timer = null
-          if (!this.restoreCached()) this.schedule(InitialInlayHintDelayMs)
-        }, {
-          label: 'workbench.inlayHints.restoreCached',
-        })
+        this.timer = this.timers.after(
+          0,
+          () => {
+            this.timer = null
+            if (!this.restoreCached()) this.schedule(InitialInlayHintDelayMs)
+          },
+          {
+            label: 'workbench.inlayHints.restoreCached',
+          }
+        )
       }
 
       public update(update: ViewUpdate): void {
@@ -230,9 +239,50 @@ function buildWorkbenchInlayHintLoader(runtime: WorkbenchInlayHintRuntime): Exte
           // Caret/layout changes can change the viewport on the frame after typing.
           // They must not replace the post-edit pause with the shorter scroll delay.
           this.schedule(
-            Math.max(ScrolledViewportInlayHintDelayMs, this.documentRefreshNotBefore - performance.now())
+            Math.max(
+              ScrolledViewportInlayHintDelayMs,
+              this.documentRefreshNotBefore - performance.now()
+            )
           )
         }
+      }
+
+      public startPointerSelection(event: MouseEvent): void {
+        if (event.button !== 0 || this.pointerSelection) return
+        this.pointerSelection = new AbortController()
+        const options = { signal: this.pointerSelection.signal }
+        const owner = this.view.contentDOM.ownerDocument
+        owner.addEventListener(
+          'mouseup',
+          (event) => {
+            if (event.button === 0) this.finishPointerSelection()
+          },
+          options
+        )
+        owner.addEventListener('dragend', this.finishPointerSelection, options)
+        owner.defaultView?.addEventListener('blur', this.finishPointerSelection, options)
+      }
+
+      private readonly finishPointerSelection = (): void => {
+        this.pointerSelection?.abort()
+        this.pointerSelection = null
+        const pending = this.pendingHints
+        this.pendingHints = null
+        if (pending) {
+          // Let CodeMirror finish handling the mouse gesture before changing character geometry.
+          this.timers.after(0, () => this.presentHints(pending.generation, pending.hints), {
+            label: 'workbench.inlayHints.afterPointerSelection',
+          })
+        }
+      }
+
+      private presentHints(
+        generation: number,
+        hints: readonly WorkbenchLanguageServiceInlayHint[]
+      ): void {
+        if (generation !== this.generation) return
+        if (this.pointerSelection) this.pendingHints = { generation, hints }
+        else this.view.dispatch({ effects: setWorkbenchInlayHintsEffect.of(hints) })
       }
 
       private schedule(delay: number): void {
@@ -260,7 +310,7 @@ function buildWorkbenchInlayHintLoader(runtime: WorkbenchInlayHintRuntime): Exte
           if (!cached) {
             cacheWorkbenchInlayHints(runtime.cacheKey, { content, ranges, hints })
           }
-          this.view.dispatch({ effects: setWorkbenchInlayHintsEffect.of(hints) })
+          this.presentHints(generation, hints)
         } catch (error) {
           log.debug('failed to load inferred type hints', { error })
         }
@@ -269,20 +319,25 @@ function buildWorkbenchInlayHintLoader(runtime: WorkbenchInlayHintRuntime): Exte
       private restoreCached(): boolean {
         const content = this.view.state.doc.toString()
         const ranges = buildWorkbenchInlayHintViewportRanges(this.view)
-        const hints = readCachedWorkbenchInlayHints(
-          runtime.cacheKey,
-          content,
-          ranges
-        )
-        if (hints) this.view.dispatch({ effects: setWorkbenchInlayHintsEffect.of(hints) })
+        const hints = readCachedWorkbenchInlayHints(runtime.cacheKey, content, ranges)
+        if (hints) this.presentHints(this.generation, hints)
         return hints !== null
       }
 
       public destroy(): void {
         this.generation += 1
         this.timer = null
+        this.pointerSelection?.abort()
+        this.pendingHints = null
         this.timers.dispose()
       }
+    },
+    {
+      eventObservers: {
+        mousedown(event) {
+          this.startPointerSelection(event)
+        },
+      },
     }
   )
 }

@@ -3,16 +3,10 @@ import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useSt
 import '../../styles/workbenchWindowChrome.css'
 
 /** Windows supplies the caption buttons; the non-selectable drag region uses app tokens. */
-export function WorkbenchWindowChrome({
-  children,
-  settings,
-}: {
-  children: ReactNode
-  settings: boolean
-}): ReactElement {
+export function WorkbenchWindowChrome({ children }: { children: ReactNode }): ReactElement {
   const enabled = /\bWindows\b/i.test(navigator.userAgent) && !!window.velarosWorkbenchWindowState
   const [fullScreen, setFullScreen] = useState(false)
-  const [title, setTitle] = useState(settings ? document.title : 'VelarOS WorkBench')
+  const [title, setTitle] = useState(() => document.title)
   useEffect(() => {
     if (!enabled) return undefined
     let active = true
@@ -30,17 +24,17 @@ export function WorkbenchWindowChrome({
         if (!pushed) changed(state)
       })
       .catch(console.warn)
-    if (settings) setTitle(document.title)
-    const observer = new MutationObserver(() => {
-      if (settings) setTitle(document.title)
-    })
-    observer.observe(document.querySelector('title')!, { childList: true })
+    const updateTitle = (): void => setTitle(document.title)
+    updateTitle()
+    const observer = new MutationObserver(updateTitle)
+    const titleElement = document.querySelector('title')
+    if (titleElement) observer.observe(titleElement, { childList: true })
     return () => {
       active = false
       remove()
       observer.disconnect()
     }
-  }, [enabled, settings])
+  }, [enabled])
   if (!enabled) return <>{children}</>
   return (
     <div

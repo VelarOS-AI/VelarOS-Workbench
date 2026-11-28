@@ -12,7 +12,8 @@ interface HighlightViewport {
   lastLine: number
 }
 
-const ColumnsPerStep = 16
+const ColumnsPerStep = 64
+const ReserveColumns = 16
 const OverscanLines = 6
 const ReserveLines = 1
 const InitialViewport: HighlightViewport = { columns: 192, firstLine: 1, lastLine: Infinity }
@@ -25,8 +26,11 @@ const highlightViewport = StateField.define<HighlightViewport>({
 })
 
 function matchesViewport(left: HighlightViewport, right: HighlightViewport): boolean {
-  return left.columns === right.columns && left.firstLine === right.firstLine &&
+  return (
+    left.columns === right.columns &&
+    left.firstLine === right.firstLine &&
     left.lastLine === right.lastLine
+  )
 }
 
 /** Keep paint near the screen, in bands that remain stable while scrolling. */
@@ -44,7 +48,8 @@ export const workbenchHighlightViewportExtension: Extension = [
 
       public update(update: ViewUpdate): void {
         if (
-          update.heightChanged || (update.geometryChanged && !update.docChanged) ||
+          update.heightChanged ||
+          (update.geometryChanged && !update.docChanged) ||
           update.transactions.some((transaction) => transaction.reconfigured)
         )
           this.measure()
@@ -65,25 +70,39 @@ export const workbenchHighlightViewportExtension: Extension = [
             const doc = view.state.doc
             const top = scrollTop * view.scaleY - view.documentPadding.top
             const first = doc.lineAt(view.lineBlockAtHeight(Math.max(0, top)).from).number
-            const last = doc.lineAt(view.lineBlockAtHeight(top + clientHeight * view.scaleY).to).number
+            const last = doc.lineAt(
+              view.lineBlockAtHeight(top + clientHeight * view.scaleY).to
+            ).number
             const current = readHighlightViewport(view)
-            const coversVisible = current.lastLine !== Infinity &&
+            const coversVisible =
+              current.lastLine !== Infinity &&
               current.firstLine <= Math.max(1, first - ReserveLines) &&
               current.lastLine >= Math.min(doc.lines, last + ReserveLines)
             const firstLine = coversVisible ? current.firstLine : Math.max(1, first - OverscanLines)
-            const lastLine = coversVisible ? current.lastLine : Math.min(doc.lines, last + OverscanLines)
+            const lastLine = coversVisible
+              ? current.lastLine
+              : Math.min(doc.lines, last + OverscanLines)
 
             // Leave room for glyph width variance and keep an extra band ready for scrolling.
-            const right = (clientWidth + Math.max(0, scrollLeft)) /
+            const right =
+              (clientWidth + Math.max(0, scrollLeft)) /
               Math.max(1, view.defaultCharacterWidth * 0.9)
-            const columns = view.lineWrapping || view.textDirection === Direction.RTL
-              ? Infinity
-              : (Math.ceil(right / ColumnsPerStep) + 1) * ColumnsPerStep
+            const nextColumns = (Math.ceil(right / ColumnsPerStep) + 1) * ColumnsPerStep
+            const coversRight =
+              current.columns >= right + ReserveColumns &&
+              current.columns <= nextColumns + ColumnsPerStep
+            const columns =
+              view.lineWrapping || view.textDirection === Direction.RTL
+                ? Infinity
+                : coversRight
+                  ? current.columns
+                  : nextColumns
             return { columns, firstLine, lastLine }
           },
           write: (viewport, view) => {
             this.pending = viewport
-            if (this.refresh !== null || matchesViewport(readHighlightViewport(view), viewport)) return
+            if (this.refresh !== null || matchesViewport(readHighlightViewport(view), viewport))
+              return
             // The scroll frame can paint existing marks before the next band is installed.
             this.refresh = setTimeout(() => {
               this.refresh = null
@@ -105,7 +124,8 @@ function readHighlightViewport(view: EditorView): HighlightViewport {
 export function workbenchHighlightViewportChanged(update: ViewUpdate): boolean {
   return (
     update.viewportMoved ||
-    update.startState.field(highlightViewport, false) !== update.state.field(highlightViewport, false)
+    update.startState.field(highlightViewport, false) !==
+      update.state.field(highlightViewport, false)
   )
 }
 
@@ -161,7 +181,12 @@ export function readWorkbenchHighlightRanges(view: EditorView): readonly Highlig
   const columns = view.lineWrapping ? Infinity : viewport.columns
   const visible = view.visibleRanges
   const previous = highlightRangesByView.get(view)
-  if (previous?.doc === doc && previous.viewport === viewport && previous.columns === columns && previous.visible === visible)
+  if (
+    previous?.doc === doc &&
+    previous.viewport === viewport &&
+    previous.columns === columns &&
+    previous.visible === visible
+  )
     return previous.ranges
 
   const from = doc.line(Math.min(firstLine, doc.lines)).from
@@ -171,11 +196,16 @@ export function readWorkbenchHighlightRanges(view: EditorView): readonly Highlig
     const end = Math.min(range.to, to)
     return start < end ? [{ from: start, to: end }] : []
   })
-  const ranges = previous?.doc === doc && previous.columns === columns &&
-      previous.clipped.length === clipped.length && clipped.every((range, index) =>
-        previous.clipped[index]?.from === range.from && previous.clipped[index]?.to === range.to)
-    ? previous.ranges
-    : clipWorkbenchHighlightRanges(doc, clipped, columns)
+  const ranges =
+    previous?.doc === doc &&
+    previous.columns === columns &&
+    previous.clipped.length === clipped.length &&
+    clipped.every(
+      (range, index) =>
+        previous.clipped[index]?.from === range.from && previous.clipped[index]?.to === range.to
+    )
+      ? previous.ranges
+      : clipWorkbenchHighlightRanges(doc, clipped, columns)
   highlightRangesByView.set(view, { doc, viewport, columns, visible, clipped, ranges })
   return ranges
 }

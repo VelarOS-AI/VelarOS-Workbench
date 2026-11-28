@@ -37,17 +37,24 @@ export function measureWorkbenchEditorCoveredBottom(
  * 下面那一截看不见。跳到定义、点一个问题、调试停在断点上、查找下一处，编辑器把那一行滚「进视野」，其实
  * 落在工具窗后面。
  *
- * 这里把被盖住的高度报给 CodeMirror 的 scrollMargins：凡是滚到某个位置的动作（包括跟着光标滚），目标都
- * 落在工具窗的上面。
+ * 这里把被盖住的高度报给 CodeMirror 的 scrollMargins，确保目标落在工具窗的上面。
+ * 横向拖选也用这组边距判定边缘，右边要从文字区算起，给竖向滚动条留出位置。
  */
 export function workbenchEditorCoveredScrollMargins(): Extension {
   return EditorView.scrollMargins.of((view) => {
+    const scroller = view.scrollDOM
+    const right =
+      scroller.scrollWidth > scroller.clientWidth
+        ? scroller.offsetWidth - scroller.clientWidth + 8
+        : 0
     const overlays = view.dom.ownerDocument.querySelectorAll(`[${WorkbenchEditorOverlayAttribute}]`)
-    if (overlays.length === 0) return null
-    const bottom = measureWorkbenchEditorCoveredBottom(
-      view.scrollDOM.getBoundingClientRect(),
-      [...overlays].map((overlay) => overlay.getBoundingClientRect())
-    )
-    return bottom > 0 ? { bottom } : null
+    const bottom =
+      overlays.length > 0
+        ? measureWorkbenchEditorCoveredBottom(
+            scroller.getBoundingClientRect(),
+            [...overlays].map((overlay) => overlay.getBoundingClientRect())
+          )
+        : 0
+    return bottom > 0 || right > 0 ? { bottom, right } : null
   })
 }

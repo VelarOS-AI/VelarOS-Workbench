@@ -54,6 +54,7 @@ export const WorkbenchGitChannels = {
   initialize: 'workbench-app:git:initialize',
   switchBranch: 'workbench-app:git:switch-branch',
   createBranch: 'workbench-app:git:create-branch',
+  editBranch: 'workbench-app:git:edit-branch',
   remoteAction: 'workbench-app:git:remote-action',
   cancelRemoteAction: 'workbench-app:git:cancel-remote-action',
   stashList: 'workbench-app:git:stash-list',
@@ -136,6 +137,12 @@ export interface WorkbenchGitCreateBranchRequest extends WorkbenchGitRootRequest
   branch: string
   startPoint?: string
 }
+
+export type WorkbenchGitBranchEdit = { action: 'rename'; name: string } | { action: 'delete' }
+
+export type WorkbenchGitEditBranchRequest = WorkbenchGitRootRequest & {
+  branch: string
+} & WorkbenchGitBranchEdit
 
 export interface WorkbenchGitRemoteActionRequest
   extends WorkbenchGitRootRequest, WorkspaceGitRemoteActionOptions {
@@ -272,6 +279,9 @@ export interface WorkbenchGitBridge {
   createBranch(
     request: WorkbenchGitCreateBranchRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitCreateBranchResult>>
+  editBranch(
+    request: WorkbenchGitEditBranchRequest
+  ): Promise<WorkbenchFsCallResult<{ branch: string }>>
   performRemoteAction(
     request: WorkbenchGitRemoteActionRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitActionResult>>

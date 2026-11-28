@@ -36,15 +36,19 @@ const isSettingsWindow =
   new URLSearchParams(window.location.search).get('view') === WorkbenchSettingsWindowQuery
 
 const HistoryWindow = lazy(async () => ({
-  default: (await import('./app/StandaloneWorkbenchHistoryWindow')).StandaloneWorkbenchHistoryWindow,
+  default: (await import('./app/StandaloneWorkbenchHistoryWindow'))
+    .StandaloneWorkbenchHistoryWindow,
 }))
-const isHistoryWindow = new URLSearchParams(window.location.search).get('view') === WorkbenchHistoryWindowQuery
+const isHistoryWindow =
+  new URLSearchParams(window.location.search).get('view') === WorkbenchHistoryWindowQuery
 
 ReactDOM.createRoot(rootElement).render(
   <WorkbenchRuntimeProvider runtime={workbenchRuntime}>
-    <WorkbenchWindowChrome settings={isSettingsWindow || isHistoryWindow}>
+    <WorkbenchWindowChrome>
       {isHistoryWindow ? (
-        <Suspense fallback={null}><HistoryWindow /></Suspense>
+        <Suspense fallback={null}>
+          <HistoryWindow />
+        </Suspense>
       ) : isSettingsWindow ? (
         <Suspense fallback={null}>
           <SettingsWindow />

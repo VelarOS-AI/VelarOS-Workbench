@@ -55,6 +55,7 @@ import {
   hasWorkspaceGitConflictMarkers,
   isWorkspaceGitConflictEntry,
   type WorkbenchGitBlameRequest,
+  type WorkbenchGitBranchEdit,
 } from '@shared/workbenchGit'
 import { parseWorkbenchGitBlame } from '@shared/workbenchGitBlame'
 import {
@@ -72,7 +73,10 @@ import {
   workbenchMainTextIn,
 } from '../../i18n/workbenchMainMessages'
 import { getRelativePathInsideRoot, toPortableRelativePath } from '../PathContainmentHelper'
-import { listWorkbenchProcessTree, signalWorkbenchProcesses } from '../terminal/WorkbenchProcessTree'
+import {
+  listWorkbenchProcessTree,
+  signalWorkbenchProcesses,
+} from '../terminal/WorkbenchProcessTree'
 import { decodeWorkbenchTextContent, encodeWorkbenchText } from '../TextCodec'
 
 import type {
@@ -820,6 +824,22 @@ export class WorkbenchGitService {
       branch: targetBranch,
       summary: await this.getSummary(rootPath),
     }
+  }
+
+  public async editLocalBranch(
+    workspaceRoot: string,
+    branch: string,
+    edit: WorkbenchGitBranchEdit
+  ): Promise<{ branch: string }> {
+    const rootPath = await this.resolveRoot(workspaceRoot)
+    const source = this.assertBranch(branch)
+    if (edit.action === 'rename') {
+      const name = this.assertBranch(edit.name)
+      await this.runGit(rootPath, ['branch', '--move', '--', source, name])
+      return { branch: name }
+    }
+    await this.runGit(rootPath, ['branch', '--delete', '--', source])
+    return { branch: source }
   }
 
   /**
@@ -1975,9 +1995,11 @@ export class WorkbenchGitService {
     const stop = (reason: GitStopReason): void => {
       if (stopped) return
       stopped = reason
-      termination = this.terminateGitProcess(subprocess, ownProcessGroup).catch((error: unknown) => {
-        terminationErrors.push(error)
-      })
+      termination = this.terminateGitProcess(subprocess, ownProcessGroup).catch(
+        (error: unknown) => {
+          terminationErrors.push(error)
+        }
+      )
     }
     const armInactivityTimer = (): void => {
       if (inactivityTimer) clearTimeout(inactivityTimer)
@@ -2025,7 +2047,10 @@ export class WorkbenchGitService {
         try {
           subprocess.kill('SIGKILL')
         } catch (killError) {
-          throw new AggregateError([error, killError], 'Git process tree and root termination failed')
+          throw new AggregateError(
+            [error, killError],
+            'Git process tree and root termination failed'
+          )
         }
         throw error
       }

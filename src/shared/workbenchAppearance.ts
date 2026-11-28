@@ -155,8 +155,11 @@ export function getWorkbenchColorTokens(
   const mode = dark ? 1 : 0
   const neutral = neutralScale(theme)
   const color = palettes[accent][mode]
-  const { backgroundColor: background, toolbarColor: panel, foregroundColor: ink } =
-    getWorkbenchNativeAppearance(theme)
+  const {
+    backgroundColor: background,
+    toolbarColor: panel,
+    foregroundColor: ink,
+  } = getWorkbenchNativeAppearance(theme)
   const hover = neutral[theme === 'warm-paper' ? 3 : 2]!
   const elevated = dark ? neutral[2]! : '#ffffff'
   const secondary = neutral[10]!
@@ -164,8 +167,8 @@ export function getWorkbenchColorTokens(
     [...Array.from({ length: 11 }, (_, index) => mix(neutral[9]!, secondary, index / 10)), ink],
     [background, panel, neutral[2]!]
   )
-  const accentInk = readableInk(color, [background, panel, color[3]!])
-  const solid = color[dark ? 8 : 10]!
+  const accentInk = readableInk(color, [background, panel, color[2]!, color[3]!])
+  const solid = accentInk
   const onSolid = readable(['#ffffff', '#111113'], [solid])
   const solidHover = readableSurface(color[dark ? 9 : 11]!, onSolid)
   const danger = palettes.red[mode][dark ? 8 : 10]!
@@ -295,8 +298,16 @@ export function getWorkbenchColorTokens(
     tokens[`--workbench-accent-${name}-contrast`] = readable(['#ffffff', '#111113'], [foreground])
   }
   tokens['--workbench-test-fg'] = tokens['--status-orange']!
-  // Technology identity keeps its hue while icon ink follows readable light/dark scales.
+  // Keep file-type colors on the light palette in the dark themes as well.
+  const filePalette = dark ? getWorkbenchColorTokens('light-modern', accent) : tokens
   const fileFamilies = {
+    archive: 'violet',
+    csv: 'teal',
+    document: 'blue',
+    text: 'blue',
+    generic: 'blue',
+    image: 'green',
+    pdf: 'red',
     java: 'orange',
     csharp: 'green',
     go: 'teal',
@@ -329,13 +340,14 @@ export function getWorkbenchColorTokens(
     patch: 'teal',
   } as const
   for (const [name, family] of Object.entries(fileFamilies))
-    tokens[`--workbench-file-${name}`] = tokens[`--status-${family}`]!
-  tokens['--workbench-file-vue'] = dark ? '#55c997' : '#227b5c'
-  // Solid JS/TS marks need less saturation than thin file outlines. Derive their
-  // ink from the same light/dark palettes so custom accents remain independent.
+    tokens[`--workbench-file-${name}`] = filePalette[`--status-${family}`]!
+  tokens['--workbench-file-vue'] = '#227b5c'
+  tokens['--workbench-file-media'] = filePalette['--destructive']!
+  tokens['--workbench-file-presentation'] = filePalette['--status-amber']!
+  tokens['--workbench-file-muted'] = filePalette['--workbench-text-muted']!
   for (const name of ['javascript', 'typescript'] as const) {
     const base = tokens[`--workbench-file-${name}`]!
-    tokens[`--workbench-file-${name}`] = mix(base, secondary, dark ? 0.18 : 0.14)
+    tokens[`--workbench-file-${name}`] = mix(base, filePalette['--foreground-secondary']!, 0.14)
   }
   tokens['--workbench-run-fg'] = tokens['--status-green']!
   tokens['--status-blue-selection-bg'] = palettes.blue[mode][3]!

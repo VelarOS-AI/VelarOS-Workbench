@@ -226,6 +226,7 @@ const gitBridge: WorkbenchGitBridge = {
   initialize: (request) => ipcRenderer.invoke(WorkbenchGitChannels.initialize, request),
   switchBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.switchBranch, request),
   createBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.createBranch, request),
+  editBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.editBranch, request),
   performRemoteAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.remoteAction, request),
   cancelRemoteAction: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.cancelRemoteAction, request),
@@ -329,9 +330,9 @@ const settingsWindowBridge: WorkbenchSettingsWindowBridge = {
   ready: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.ready),
   close: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.close),
   exitProject: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.exitProject),
-  getTavilyConfigured: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.tavilyConfigured),
-  setTavilyApiKey: (apiKey) =>
-    ipcRenderer.invoke(WorkbenchSettingsWindowChannels.setTavilyApiKey, apiKey),
+  getWebSearch: () => ipcRenderer.invoke(WorkbenchSettingsWindowChannels.getWebSearch),
+  updateWebSearch: (update) =>
+    ipcRenderer.invoke(WorkbenchSettingsWindowChannels.updateWebSearch, update),
 }
 
 const windowStateBridge: WorkbenchWindowStateBridge = {

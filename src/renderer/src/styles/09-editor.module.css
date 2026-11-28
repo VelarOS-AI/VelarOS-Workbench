@@ -1667,8 +1667,8 @@
 }
 
 .codeMirrorEditor :global(.cm-content:not(.cm-lineWrapping) .cm-line) {
-  /* In unwrapped code, typing on the widest line must not resize all the other lines. */
-  contain: inline-size layout style;
+  /* CodeMirror needs the widest unwrapped line to size the scrollable content. */
+  contain: layout style;
 }
 
 .codeMirrorEditor :global(.cm-line.cm-workbenchIndentGuide) {

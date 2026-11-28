@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   getWorkbenchColorTokens,
   getWorkbenchNativeAppearance,
+  isWorkbenchDarkTheme,
   type WorkbenchAccent,
   workbenchColorContrast,
   type WorkbenchThemeId,
@@ -69,11 +70,17 @@ describe('Workbench semantic color system', () => {
         expect(tokens['--workbench-bg']).toBe(getWorkbenchNativeAppearance(theme).backgroundColor)
         expect(tokens['--workbench-test-fg']).toBe(tokens['--status-orange']!)
         expect(tokens['--workbench-run-fg']).toBe(tokens['--status-green']!)
+        const filePalette = isWorkbenchDarkTheme(theme)
+          ? getWorkbenchColorTokens('light-modern', accent)
+          : tokens
         for (const [role, ink] of Object.entries(tokens)) {
           if (!role.startsWith('--workbench-file-')) continue
-          expect(workbenchColorContrast(ink, tokens['--workbench-bg']!)).toBeGreaterThanOrEqual(4.5)
+          expect(ink).toBe(filePalette[role]!)
           expect(
-            workbenchColorContrast(ink, tokens['--workbench-surface-muted']!)
+            workbenchColorContrast(ink, filePalette['--workbench-bg']!)
+          ).toBeGreaterThanOrEqual(4.5)
+          expect(
+            workbenchColorContrast(ink, filePalette['--workbench-surface-muted']!)
           ).toBeGreaterThanOrEqual(4.5)
         }
       })

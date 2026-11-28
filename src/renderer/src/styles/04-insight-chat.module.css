@@ -147,6 +147,16 @@
   position: relative;
 }
 
+/* The shared composer adds a fallback icon to model-menu toggles. */
+:global(
+  [data-tour-id='chat-model-run-menu']
+    [data-capability-placement='model-menu']
+    > button[aria-pressed]
+    > svg
+) {
+  display: none;
+}
+
 .workbenchChatEmptyState {
   position: absolute;
   inset: 0 0 var(--chat-input-dock-height, 148px);

@@ -35,10 +35,12 @@ const entry = `
 import '/src/renderer/src/styles/globalStyles.ts';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
+import {WorkbenchWindowChrome} from '/src/renderer/src/components/chrome/WorkbenchWindowChrome.tsx';
 import {EditorTabBar} from '/src/renderer/src/components/editor/EditorTabBar.tsx';
 import {WorkbenchLocalizationProvider} from '/src/renderer/src/i18n/WorkbenchLocalizationProvider.tsx';
 import styles from '/src/renderer/src/styles/workbenchPageStyles.ts';
 const noop = () => {};
+window.velarosWorkbenchWindowState = {getState: async () => ({fullScreen:false}), onChanged: () => noop};
 const tab = (path, dirty = false) => ({path, content: dirty ? 'edited' : 'text', file: {projectRoot: '/fixture', path, content: 'text', size: 4, modifiedAt: 1, totalLines: 1, truncated: false, encoding: 'utf8', eol: 'lf'}});
 window.closedTabs = []; window.unpinnedTabs = [];
 const props = {
@@ -47,7 +49,7 @@ const props = {
  onOpenTabContextMenu:noop,onRunTabContextAction:noop,onSelectOpenFile:noop,onKeepOpenFile:noop,onPinOpenFile:noop,onUnpinOpenFile:path=>window.unpinnedTabs.push(path),onMoveTabToGroup:noop,
  onCloseOpenFile:path=>window.closedTabs.push(path),onCloseOtherOpenFiles:noop,onCloseAllOpenFiles:noop,onCloseUnmodifiedOpenFiles:noop,onCloseOpenFilesToRight:noop,onRevertOpenFile:noop,onReorderOpenTabs:noop,onSaveAllOpenFiles:noop
 };
-createRoot(document.getElementById('root')).render(<WorkbenchLocalizationProvider value={{locale:'zh-CN',setLocale:async()=>{},t:key=>key}}><div className={styles.root+' '+styles.workbenchShell}><EditorTabBar {...props}/></div></WorkbenchLocalizationProvider>);
+createRoot(document.getElementById('root')).render(<WorkbenchWindowChrome><WorkbenchLocalizationProvider value={{locale:'zh-CN',setLocale:async()=>{},t:key=>key}}><div className={styles.root+' '+styles.workbenchShell}><EditorTabBar {...props}/></div></WorkbenchLocalizationProvider></WorkbenchWindowChrome>);
 `
 let app
 let server
@@ -84,7 +86,7 @@ try {
             res.end(
               await server.transformIndexHtml(
                 '/__title_tabs',
-                '<html><body><div id="root"></div><script type="module" src="/__title_tabs.tsx"></script></body></html>'
+                '<html><head><title>initial-project</title></head><body><div id="root"></div><script type="module" src="/__title_tabs.tsx"></script></body></html>'
               )
             )
           })
@@ -178,29 +180,29 @@ try {
     await expect(inactive.getByRole('tab')).toBeVisible()
     assert.deepEqual(await page.evaluate(() => window.closedTabs), ['inactive.ts'])
   })
-  await check(
-    'native window title stays fixed through project and document title changes',
-    async () => {
-      if (process.platform !== 'win32') throw new Error('This native title probe requires Windows')
+  await check('native window title and Windows caption follow the project', async () => {
+    if (process.platform !== 'win32') throw new Error('This native title probe requires Windows')
+    assert.equal(
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()),
+      'initial-project'
+    )
+    const caption = page.locator('.workbench-native-caption')
+    await expect(caption).toHaveAttribute('aria-label', 'initial-project')
+    for (const name of ['项目 B', null]) {
+      const expected = name ?? 'Fallback'
+      await app.evaluate((_electron, name) => global.setProjectTitle(name), name)
       assert.equal(
         await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()),
-        'VelarOS WorkBench'
+        expected
       )
-      for (const name of ['project-b', null]) {
-        await app.evaluate((_electron, name) => global.setProjectTitle(name), name)
-        assert.equal(
-          await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()),
-          'VelarOS WorkBench'
-        )
-      }
-      await page.evaluate(() => (document.title = 'renderer-project-title'))
-      await expect
-        .poll(() =>
-          app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle())
-        )
-        .toBe('VelarOS WorkBench')
+      await page.evaluate((title) => (document.title = title), expected)
+      await expect(caption).toHaveAttribute('aria-label', expected)
     }
-  )
+    await page.evaluate(() => (document.title = 'renderer-project-title'))
+    await expect
+      .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()))
+      .toBe('Fallback')
+  })
   console.info(
     `${passed} Electron checks passed (real component/styles; isolated title function, not full app).`
   )

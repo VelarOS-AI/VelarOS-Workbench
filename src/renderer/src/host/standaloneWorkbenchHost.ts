@@ -83,7 +83,9 @@ async function indexProjectWithWorkspace(
   { signal, onProgress }: WorkbenchProjectIndexOptions = {}
 ): Promise<ResultType<WorkbenchIndexProjectResult>> {
   const cancelled = () =>
-    Result.fail<WorkbenchIndexProjectResult>(new AppError('CANCELLED', 'Project indexing cancelled'))
+    Result.fail<WorkbenchIndexProjectResult>(
+      new AppError('CANCELLED', 'Project indexing cancelled')
+    )
   if (signal?.aborted) return cancelled()
   const listed = await invokeWorkspace<unknown[]>(request.projectRoot, 'project:list', {
     path: request.path ?? '.',
@@ -114,11 +116,15 @@ async function indexProjectWithWorkspace(
   for (let start = 0; start < paths.length; start += batchSize) {
     if (signal?.aborted) return cancelled()
     const batch = paths.slice(start, start + batchSize)
-    const read = await invokeWorkspace<WorkspaceReadManyResult>(request.projectRoot, 'project:read', {
-      path: batch,
-      maxChars: request.maxCharsPerFile ?? 24_000,
-      maxBytes: request.maxFileBytes ?? 160_000,
-    })
+    const read = await invokeWorkspace<WorkspaceReadManyResult>(
+      request.projectRoot,
+      'project:read',
+      {
+        path: batch,
+        maxChars: request.maxCharsPerFile ?? 24_000,
+        maxBytes: request.maxFileBytes ?? 160_000,
+      }
+    )
     if (signal?.aborted) return cancelled()
     if (!read.ok) return read as ResultType<WorkbenchIndexProjectResult>
 
@@ -349,6 +355,10 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       createWorkspaceGitBranch: async (workspaceRoot, branch, startPoint) =>
         toHostResult(
           await window.velarosWorkbenchGit.createBranch({ workspaceRoot, branch, startPoint })
+        ),
+      editWorkspaceGitBranch: async (workspaceRoot, branch, edit) =>
+        toHostResult(
+          await window.velarosWorkbenchGit.editBranch({ workspaceRoot, branch, ...edit })
         ),
       performWorkspaceGitAction: async (workspaceRoot, action, options) =>
         toHostResult(

@@ -8,14 +8,20 @@ import {
   type CompletionSource,
   completionStatus,
   currentCompletions,
+  moveCompletionSelection,
+  selectedCompletionIndex,
+  setSelectedCompletion,
 } from '@codemirror/autocomplete'
 import { syntaxTree } from '@codemirror/language'
 import { type EditorState, Prec } from '@codemirror/state'
-import { Direction, EditorView, keymap } from '@codemirror/view'
+import { Direction, EditorView, keymap, ViewPlugin } from '@codemirror/view'
 
 import type { WorkbenchLanguageServiceDisplayPart } from '@shared/contracts/workbench'
 
-import { appendWorkbenchEditorHoverText, type WorkbenchEditorHoverPartStyle } from './workbenchEditorHoverHighlight'
+import {
+  appendWorkbenchEditorHoverText,
+  type WorkbenchEditorHoverPartStyle,
+} from './workbenchEditorHoverHighlight'
 
 /** Custom Completion field for the right-aligned return type column. */
 export const WORKBENCH_COMPLETION_RETURN_TYPE = 'workbenchReturnType'
@@ -57,11 +63,98 @@ export interface WorkbenchCompletionPresentation extends Completion {
   hideWhenAlreadyTyped?: boolean
 }
 
-export const workbenchCompletionKeys = Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }]))
+const selectNextCompletion = moveCompletionSelection(true)
+const selectPreviousCompletion = moveCompletionSelection(false)
 
-export function isWorkbenchJavaScriptMemberCompletion({ state, pos }: Pick<CompletionContext, 'state' | 'pos'>): boolean {
+export const workbenchCompletionKeys = [
+  Prec.highest(
+    EditorView.domEventHandlers({
+      keydown(event, view) {
+        if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+          return false
+        // Completion navigation takes precedence over editor modes such as Vim insert mode.
+        if (event.key === 'ArrowDown') return selectNextCompletion(view)
+        if (event.key === 'ArrowUp') return selectPreviousCompletion(view)
+        return false
+      },
+    })
+  ),
+  Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }])),
+]
+
+export const workbenchCompletionPointerSelection = ViewPlugin.fromClass(
+  class {
+    private readonly container: HTMLElement
+
+    constructor(private readonly view: EditorView) {
+      this.container = view.dom.parentElement ?? view.dom
+      this.container.addEventListener('pointermove', this.selectOption)
+    }
+
+    public destroy(): void {
+      this.container.removeEventListener('pointermove', this.selectOption)
+    }
+
+    private readonly selectOption = (event: PointerEvent): void => {
+      if (event.pointerType === 'touch' || event.buttons || !(event.target instanceof Element))
+        return
+      const row = event.target.closest<HTMLElement>('.cm-tooltip-autocomplete [role="option"]')
+      const list = row?.parentElement
+      if (!row || !list || this.view.contentDOM.getAttribute('aria-controls') !== list.id) return
+      // The list is virtualized. Each option ID includes its index in the complete list.
+      const index = Number(row.id.slice(list.id.length + 1))
+      if (
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index === selectedCompletionIndex(this.view.state) ||
+        index >= currentCompletions(this.view.state).length
+      )
+        return
+      this.view.dispatch({ effects: setSelectedCompletion(index) })
+    }
+  }
+)
+
+export function isWorkbenchJavaScriptMemberCompletion({
+  state,
+  pos,
+}: Pick<CompletionContext, 'state' | 'pos'>): boolean {
   const { from } = state.doc.lineAt(pos)
   return /(?<!\.)\.[ \t]*[\p{ID_Continue}$]*$/u.test(state.sliceDoc(Math.max(from, pos - 256), pos))
+}
+
+export function isWorkbenchCompletionSnippet(option: Completion): boolean {
+  return option.type === 'keyword' && typeof option.apply === 'function'
+}
+
+/** Collect the JS language's snippets and lexical suggestions into the Workbench list. */
+export async function mergeWorkbenchJavaScriptFallbacks(
+  context: CompletionContext,
+  local: CompletionResult | null
+): Promise<CompletionResult | null> {
+  const sources = context.state.languageDataAt<CompletionSource>('autocomplete', context.pos)
+  const available = await Promise.all(sources.map((source) => source(context)))
+  const fallback = local ?? available.find((result) => result !== null)
+  if (!fallback) return null
+
+  const options = [...fallback.options]
+  const labels = new Set(options.map((option) => option.label.toLowerCase()))
+  for (const result of available) {
+    if (
+      !result ||
+      result === fallback ||
+      result.from !== fallback.from ||
+      (result.to ?? context.pos) !== (fallback.to ?? context.pos)
+    )
+      continue
+    for (const option of result.options) {
+      const label = option.label.toLowerCase()
+      if (labels.has(label) && !isWorkbenchCompletionSnippet(option)) continue
+      options.push(option)
+      labels.add(label)
+    }
+  }
+  return { ...fallback, options }
 }
 
 export function hideUnchangedWorkbenchCompletions(source: CompletionSource): CompletionSource {
@@ -89,15 +182,15 @@ export function hideUnchangedWorkbenchCompletions(source: CompletionSource): Com
   }
 }
 
-export function readWorkbenchCompletionReturnType(
-  completion: Completion
-): string | undefined {
+export function readWorkbenchCompletionReturnType(completion: Completion): string | undefined {
   return (completion as WorkbenchCompletionPresentation)[WORKBENCH_COMPLETION_RETURN_TYPE]
 }
 
 export function workbenchCompletionOptionClass(completion: Completion): string {
   const item: WorkbenchCompletionPresentation = completion
-  return item.workbenchDeprecated ? 'cm-workbenchCompletionOption cm-workbenchCompletionDeprecated' : 'cm-workbenchCompletionOption'
+  return item.workbenchDeprecated
+    ? 'cm-workbenchCompletionOption cm-workbenchCompletionDeprecated'
+    : 'cm-workbenchCompletionOption'
 }
 
 export const workbenchCompletionAddToOptions: Array<{
@@ -126,7 +219,11 @@ interface WorkbenchCompletionPreview {
   source?: string
 }
 
-function appendCompletionCode(container: HTMLElement, fallbackText: string, parts?: readonly WorkbenchLanguageServiceDisplayPart[]): void {
+function appendCompletionCode(
+  container: HTMLElement,
+  fallbackText: string,
+  parts?: readonly WorkbenchLanguageServiceDisplayPart[]
+): void {
   appendWorkbenchEditorHoverText(container, {
     parts,
     fallbackText,
@@ -186,18 +283,17 @@ export function createWorkbenchCompletionInfo(
   dom.className = 'cm-workbenchCompletionPreview'
   dom.hidden = true
   let destroyed = false
-  const show = async () => {
-    const details = await resolve?.()
-    if (destroyed) return
+  const show = (details?: WorkbenchCompletionPreview) => {
     const signature = details?.signature?.trim() || preview.signature?.trim()
     const documentation = details?.documentation?.trim() || preview.documentation?.trim()
     const source = details?.source || preview.source
     if (!signature && !documentation && !source) return
+    dom.replaceChildren()
 
     if (signature) {
       const code = document.createElement('code')
       code.className = 'cm-workbenchCompletionSignature'
-      appendCompletionCode(code, signature, details?.signatureParts)
+      appendCompletionCode(code, signature, details?.signatureParts ?? preview.signatureParts)
       dom.append(code)
     }
     if (documentation) {
@@ -214,11 +310,32 @@ export function createWorkbenchCompletionInfo(
     }
     dom.hidden = false
   }
-  const timer = setTimeout(() => void show(), 240)
-  return { dom, destroy: () => { destroyed = true; clearTimeout(timer) } }
+  show()
+  const timer = resolve
+    ? setTimeout(() => {
+        void resolve().then(
+          (details) => {
+            if (!destroyed && details) show(details)
+          },
+          () => undefined
+        )
+      }, 240)
+    : null
+  return {
+    dom,
+    destroy: () => {
+      destroyed = true
+      if (timer !== null) clearTimeout(timer)
+    },
+  }
 }
 
-interface CompletionRect { left: number; right: number; top: number; bottom: number }
+interface CompletionRect {
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
 
 export function positionWorkbenchCompletionInfo(
   view: EditorView,
@@ -246,5 +363,7 @@ export function positionWorkbenchCompletionInfo(
   const below = (space.bottom - list.bottom) / view.scaleY - gap
   if (Math.max(above, below) < 70) return { style: 'display: none' }
   const edge = below >= above ? 'top' : 'bottom'
-  return { style: `${edge}: calc(100% + ${gap}px); left: 0; width: 100%; max-height: ${Math.max(above, below)}px` }
+  return {
+    style: `${edge}: calc(100% + ${gap}px); left: 0; width: 100%; max-height: ${Math.max(above, below)}px`,
+  }
 }

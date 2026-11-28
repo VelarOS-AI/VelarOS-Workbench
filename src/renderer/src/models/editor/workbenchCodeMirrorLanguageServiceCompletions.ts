@@ -33,10 +33,15 @@ import {
   type WorkbenchLanguageServiceCompletionTextEdit,
   type WorkbenchLanguageServiceRange,
 } from '@shared/contracts/workbench'
-import { getWorkbenchPathExtension, WorkbenchCppFileExtensions, workbenchLspCompletionKind } from '@shared/workbenchLanguageServices'
+import {
+  getWorkbenchPathExtension,
+  WorkbenchCppFileExtensions,
+  workbenchLspCompletionKind,
+} from '@shared/workbenchLanguageServices'
 
 import {
   createWorkbenchCompletionInfo,
+  isWorkbenchCompletionSnippet,
   isWorkbenchJavaScriptMemberCompletion,
   WORKBENCH_COMPLETION_RETURN_TYPE,
   type WorkbenchCompletionPresentation,
@@ -108,50 +113,89 @@ function completionWordStart(state: EditorState, position: number, character: Re
   return start
 }
 
-const ConsoleMethodBoosts = new Map([['log', 40], ['warn', 26], ['error', 25], ['info', 24], ['debug', 23]])
+const ConsoleMethodBoosts = new Map([
+  ['log', 40],
+  ['warn', 26],
+  ['error', 25],
+  ['info', 24],
+  ['debug', 23],
+])
 
 function readCompletionMethodBoosts(state: EditorState, from: number): ReadonlyMap<string, number> {
   const line = state.doc.lineAt(from)
-  const receiver = state.sliceDoc(line.from, from).match(/([\p{ID_Start}_$][\p{ID_Continue}$]*)\s*\??\.\s*$/u)?.[1]
+  const receiver = state
+    .sliceDoc(line.from, from)
+    .match(/([\p{ID_Start}_$][\p{ID_Continue}$]*)\s*\??\.\s*$/u)?.[1]
   if (!receiver) return new Map()
 
   const boosts = new Map(receiver === 'console' ? ConsoleMethodBoosts : undefined)
   const escapedReceiver = receiver.replaceAll('$', '\\$')
-  const call = new RegExp(`(?<![\\p{ID_Continue}$])${escapedReceiver}\\s*\\??\\.\\s*([\\p{ID_Start}_$][\\p{ID_Continue}$]*)\\s*\\(`, 'gu')
-  const nearby = state.sliceDoc(Math.max(0, from - 32_768), Math.min(state.doc.length, from + 32_768))
+  const call = new RegExp(
+    `(?<![\\p{ID_Continue}$])${escapedReceiver}\\s*\\??\\.\\s*([\\p{ID_Start}_$][\\p{ID_Continue}$]*)\\s*\\(`,
+    'gu'
+  )
+  const nearby = state.sliceDoc(
+    Math.max(0, from - 32_768),
+    Math.min(state.doc.length, from + 32_768)
+  )
   for (const match of nearby.matchAll(call)) {
     const method = match[1]!
-    const base = receiver === 'console' ? ConsoleMethodBoosts.get(method) ?? 0 : 0
+    const base = receiver === 'console' ? (ConsoleMethodBoosts.get(method) ?? 0) : 0
     boosts.set(method, Math.min(base + 8, (boosts.get(method) ?? base) + 2))
   }
   return boosts
 }
 
 function isCallableCompletionName(type: string, text: string): boolean {
-  return (type === 'function' || type === 'method') &&
-    /^(?:(?:\?\.|\.)|(?:[\p{ID_Start}_$][\p{ID_Continue}$]*\.))*[\p{ID_Start}_$][\p{ID_Continue}$]*$/u.test(text)
+  return (
+    (type === 'function' || type === 'method') &&
+    /^(?:(?:\?\.|\.)|(?:[\p{ID_Start}_$][\p{ID_Continue}$]*\.))*[\p{ID_Start}_$][\p{ID_Continue}$]*$/u.test(
+      text
+    )
+  )
 }
 
 function shouldInsertCall(state: EditorState, start: number, type: string, text: string): boolean {
   if (!isCallableCompletionName(type, text)) return false
-  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(start, 1); node; node = node.parent) {
+  for (
+    let node: SyntaxNode | null = syntaxTree(state).resolveInner(start, 1);
+    node;
+    node = node.parent
+  ) {
     if (node.name === 'ImportDeclaration' || node.name === 'ExportGroup') return false
   }
   const prefix = state.sliceDoc(state.doc.lineAt(start).from, start)
-  return !/^\s*(?:import\b(?!\s*\()|from\s+\S+\s+import\b|using\b|export\s+(?:type\s+)?[{*])/u.test(prefix)
+  return !/^\s*(?:import\b(?!\s*\()|from\s+\S+\s+import\b|using\b|export\s+(?:type\s+)?[{*])/u.test(
+    prefix
+  )
 }
 
-function completionInsertion(state: EditorState, start: number, end: number, type: string, text: string) {
+function completionInsertion(
+  state: EditorState,
+  start: number,
+  end: number,
+  type: string,
+  text: string
+) {
   if (!shouldInsertCall(state, start, type, text)) return { text, cursorOffset: 0 }
   const existingOpening = state.sliceDoc(end, state.doc.lineAt(end).to).match(/^[ \t]*\(/u)?.[0]
-  return existingOpening ? { text, cursorOffset: existingOpening.length } : { text: `${text}()`, cursorOffset: -1 }
+  return existingOpening
+    ? { text, cursorOffset: existingOpening.length }
+    : { text: `${text}()`, cursorOffset: -1 }
 }
 
 function addTrackedCompletionPair(state: EditorState, nameChanges: ChangeSet, cursor: number) {
-  const afterName = state.update({ changes: nameChanges, selection: EditorSelection.cursor(cursor) }).state
+  const afterName = state.update({
+    changes: nameChanges,
+    selection: EditorSelection.cursor(cursor),
+  }).state
   const pair = insertBracket(afterName, '(')
   if (!pair) return null
-  return { changes: nameChanges.compose(pair.changes), selection: pair.state.selection, effects: pair.effects }
+  return {
+    changes: nameChanges.compose(pair.changes),
+    selection: pair.state.selection,
+    effects: pair.effects,
+  }
 }
 
 function applyPlainCallableCompletion(
@@ -165,7 +209,10 @@ function applyPlainCallableCompletion(
   const state = view.state
   const { main } = state.selection
   const annotations = [pickedCompletion.of(completion), Transaction.userEvent.of('input.complete')]
-  if (state.selection.ranges.length === 1 && completionInsertion(state, from, to, type, text).cursorOffset === -1) {
+  if (
+    state.selection.ranges.length === 1 &&
+    completionInsertion(state, from, to, type, text).cursorOffset === -1
+  ) {
     const name = state.changes({ from, to, insert: text })
     const tracked = addTrackedCompletionPair(state, name, name.mapPos(to, 1))
     if (tracked) {
@@ -178,9 +225,12 @@ function applyPlainCallableCompletion(
     const start = range.from + from - main.from
     const end = to === main.from ? range.to : range.from + to - main.from
     if (
-      start < 0 || end > state.doc.length || start > end ||
+      start < 0 ||
+      end > state.doc.length ||
+      start > end ||
       (range !== main && from !== to && state.sliceDoc(start, end) !== typed)
-    ) return { range }
+    )
+      return { range }
     const insertion = completionInsertion(state, start, end, type, text)
     return {
       changes: { from: start, to: end, insert: insertion.text },
@@ -215,7 +265,11 @@ function mapLanguageServiceCompletionType(kind: string | undefined, path: string
   if (lspKind) return lspKind
 
   const normalized = kind.toLowerCase()
-  if (/^(?:tag|parameter|constructor|enum-member|snippet|file|folder|color|value|event|operator)$/u.test(normalized))
+  if (
+    /^(?:tag|parameter|constructor|enum-member|snippet|file|folder|color|value|event|operator)$/u.test(
+      normalized
+    )
+  )
     return normalized
   if (normalized.includes('keyword') || normalized.includes('scriptelementkind.keyword'))
     return 'keyword'
@@ -353,7 +407,8 @@ function applyLateCompletionEdits(
 function ensureCompletionResolution(
   prepared: WorkbenchPreparedCompletion
 ): Promise<Nullable<WorkbenchCompletionResolution>> {
-  const resolveData = prepared.item.resolve ?? (prepared.item.resolvePreview ? { name: prepared.item.label } : null)
+  const resolveData =
+    prepared.item.resolve ?? (prepared.item.resolvePreview ? { name: prepared.item.label } : null)
   const resolve = prepared.request.resolve
   if (!resolveData || !resolve) return Promise.resolve(null)
   if (prepared.resolution) return prepared.resolution.promise
@@ -447,16 +502,20 @@ function applyWorkbenchLanguageServiceCompletion(
       scrollIntoView: true,
     })
   } else {
-    const { text, cursorOffset } = item.isSnippet || item.retrigger
-      ? { text: converted?.text ?? insert, cursorOffset: 0 }
-      : completionInsertion(state, start, end, type, insert)
-    const buildChanges = (insertText: string) => state.changes([
-      ...extraEdits.filter((edit) => edit.to <= start),
-      { from: start, to: end, insert: insertText },
-      ...extraEdits.filter((edit) => edit.to > start),
-    ])
+    const { text, cursorOffset } =
+      item.isSnippet || item.retrigger
+        ? { text: converted?.text ?? insert, cursorOffset: 0 }
+        : completionInsertion(state, start, end, type, insert)
+    const buildChanges = (insertText: string) =>
+      state.changes([
+        ...extraEdits.filter((edit) => edit.to <= start),
+        { from: start, to: end, insert: insertText },
+        ...extraEdits.filter((edit) => edit.to > start),
+      ])
     const nameChanges = cursorOffset === -1 ? buildChanges(insert) : null
-    const tracked = nameChanges ? addTrackedCompletionPair(state, nameChanges, nameChanges.mapPos(end, 1)) : null
+    const tracked = nameChanges
+      ? addTrackedCompletionPair(state, nameChanges, nameChanges.mapPos(end, 1))
+      : null
     acceptChanges = tracked?.changes ?? buildChanges(text)
     view.dispatch({
       changes: acceptChanges,
@@ -511,9 +570,10 @@ function toCodeMirrorCompletion(
   const prepared: WorkbenchPreparedCompletion = { item, type, request, range, resolution: null }
   const callableName = isCallableCompletionName(type, insert)
   const source = item.source ?? item.resolve?.source
-  const signature = item.detail?.startsWith('(') || item.detail?.startsWith('<')
-    ? `${item.label}${item.detail}${item.returnType ? `: ${item.returnType}` : ''}`
-    : item.detail ?? (item.returnType ? `${item.label}: ${item.returnType}` : undefined)
+  const signature =
+    item.detail?.startsWith('(') || item.detail?.startsWith('<')
+      ? `${item.label}${item.detail}${item.returnType ? `: ${item.returnType}` : ''}`
+      : (item.detail ?? (item.returnType ? `${item.label}: ${item.returnType}` : undefined))
   const canResolvePreview = request.resolve && (item.resolve || item.resolvePreview)
   const plain =
     !range &&
@@ -532,18 +592,24 @@ function toCodeMirrorCompletion(
     workbenchDeprecated: item.deprecated,
     boost: type === 'method' || type === 'function' ? boost : undefined,
     hideWhenAlreadyTyped:
-      !item.isSnippet && !item.resolve && !item.retrigger && !item.additionalTextEdits?.length &&
+      !item.isSnippet &&
+      !item.resolve &&
+      !item.retrigger &&
+      !item.additionalTextEdits?.length &&
       (range ? insert === request.doc.sliceString(range.from, range.to) : insert === label),
     sortText: item.sortText,
-    info: type !== 'keyword' && (canResolvePreview || signature || item.documentation || source)
-      ? () => createWorkbenchCompletionInfo(
-          { signature, documentation: item.documentation, source },
-          canResolvePreview ? () => ensureCompletionResolution(prepared) : undefined
-        )
-      : undefined,
+    info:
+      type !== 'keyword' && (canResolvePreview || signature || item.documentation || source)
+        ? () =>
+            createWorkbenchCompletionInfo(
+              { signature, documentation: item.documentation, source },
+              canResolvePreview ? () => ensureCompletionResolution(prepared) : undefined
+            )
+        : undefined,
     apply: plain
       ? callableName
-        ? (view, completion, from, to) => applyPlainCallableCompletion(view, completion, from, to, type, insert)
+        ? (view, completion, from, to) =>
+            applyPlainCallableCompletion(view, completion, from, to, type, insert)
         : insert
       : (view, completion, from, to) =>
           applyWorkbenchLanguageServiceCompletion(view, completion, from, to, prepared),
@@ -601,12 +667,13 @@ export function buildWorkbenchLanguageServiceCompletionResult({
     return option
   })
   // 本地索引的候选与语言服务的共用同一个替换起点才合进来（HTML 的本地候选不合）。
-  const memberOnly = usesWorkbenchTypeScriptLanguageService(path) &&
+  const memberOnly =
+    usesWorkbenchTypeScriptLanguageService(path) &&
     isWorkbenchJavaScriptMemberCompletion({ state, pos: position })
   if (localResult?.from === from && !memberOnly && !usesWorkbenchHtmlLanguageService(path)) {
     for (const option of localResult.options) {
       const key = option.label.toLowerCase()
-      if (seen.has(key)) continue
+      if (seen.has(key) && !isWorkbenchCompletionSnippet(option)) continue
       seen.add(key)
       options.push(option)
     }

@@ -105,12 +105,14 @@ import { createWorkbenchBasicSyntaxExtension } from '@renderer/models/editor/wor
 import {
   hideUnchangedWorkbenchCompletions,
   isWorkbenchJavaScriptMemberCompletion,
+  mergeWorkbenchJavaScriptFallbacks,
   positionWorkbenchCompletionInfo,
   WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS,
   WORKBENCH_COMPLETION_UPDATE_SYNC_TIME_MS,
   workbenchCompletionAddToOptions,
   workbenchCompletionKeys,
   workbenchCompletionOptionClass,
+  workbenchCompletionPointerSelection,
   workbenchHideCompletionWhileTyping,
 } from '@renderer/models/editor/workbenchCodeMirrorCompletionPresentation'
 import {
@@ -548,6 +550,7 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   closeBrackets(),
   workbenchHideCompletionWhileTyping,
   workbenchCompletionKeys,
+  workbenchCompletionPointerSelection,
   workbenchCodeMirrorDirectInput,
   autocompletion({
     activateOnTyping: true,
@@ -769,19 +772,25 @@ function createWorkbenchCompletionSource({
     context.addEventListener('abort', () => undefined, { onDocChange: true })
     const selection = context.state.selection.main
     const content = context.state.doc.toString()
-    const useMemberService = path && usesWorkbenchTypeScriptLanguageService(path) &&
-      isWorkbenchJavaScriptMemberCompletion(context)
-    const localResult = useMemberService ? null : offlineCompletion
-      ? await offlineCompletion(context)
-      : buildWorkbenchCodeMirrorCompletionResult({
-          path,
-          language,
-          content,
-          selectionStart: selection.from,
-          selectionEnd: selection.to,
-          explicit: context.explicit,
-          projectContextIndex: getProjectContextIndex(),
-        })
+    const useTypeScriptService = usesWorkbenchTypeScriptLanguageService(path)
+    const useMemberService = useTypeScriptService && isWorkbenchJavaScriptMemberCompletion(context)
+    const fallback = useMemberService
+      ? null
+      : offlineCompletion
+        ? await offlineCompletion(context)
+        : buildWorkbenchCodeMirrorCompletionResult({
+            path,
+            language,
+            content,
+            selectionStart: selection.from,
+            selectionEnd: selection.to,
+            explicit: context.explicit,
+            projectContextIndex: getProjectContextIndex(),
+          })
+    const localResult =
+      useTypeScriptService && !useMemberService
+        ? await mergeWorkbenchJavaScriptFallbacks(context, fallback)
+        : fallback
 
     if (!path || !usesWorkbenchBuiltinLanguageService(path)) return localResult || null
     if (!shouldRequestWorkbenchLanguageServiceCompletions(context, path)) return localResult || null
@@ -1226,7 +1235,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const containerRef = useRef<HTMLDivElement>(null)
     const contextMenuRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
-    const lastEmittedContentRef = useRef<Nullable<{ doc: EditorState['doc']; content: string }>>(null)
+    const lastEmittedContentRef =
+      useRef<Nullable<{ doc: EditorState['doc']; content: string }>>(null)
     const definitionRequestGenerationRef = useRef(0)
     const fileOwnerTokenRef = useRef<Nullable<object>>(null)
     const renameActionRef = useRef<Nullable<WorkbenchRenameAction>>(null)
@@ -1471,8 +1481,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
     const completionExtension = useMemo(() => {
       const autocomplete = hideUnchangedWorkbenchCompletions(completionSource)
-      return EditorState.languageData.of(() => [{ autocomplete }])
-    }, [completionSource])
+      // One source owns the JS/TS popup, including syntax fallbacks. Parallel sources
+      // can show duplicate items and leave the list temporarily disabled during queries.
+      return usesWorkbenchTypeScriptLanguageService(path)
+        ? autocompletion({ override: [autocomplete] })
+        : EditorState.languageData.of(() => [{ autocomplete }])
+    }, [completionSource, path])
     const lintExtension = useMemo(
       // linter 自身已有请求防抖，挂载扩展不会同步启动语言服务。这里必须立即挂载，
       // 否则繁忙项目拿不到 idle 时隙时，错误下划线和悬浮提示会永久缺席。
@@ -2534,9 +2548,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       container: HTMLDivElement
     ): WorkbenchEditorInstanceExtensions => {
       const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {
-        const typing = update.docChanged && update.transactions.some((transaction) =>
-          transaction.isUserEvent('input.type') || transaction.isUserEvent('delete')
-        )
+        const typing =
+          update.docChanged &&
+          update.transactions.some(
+            (transaction) =>
+              transaction.isUserEvent('input.type') || transaction.isUserEvent('delete')
+          )
         if (update.docChanged) {
           const draft = commentDraftRef.current
           if (draft) {
@@ -2858,12 +2875,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const current = compartmentValuesRef.current
       const language = findWorkbenchCodeMirrorLanguage(current.fullLanguage)
       const previousFeatures = languageServiceCompartment.get(state)
-      const syntax = language && state.facet(languageFacet) === language
-        ? current.fullLanguage
-        : current.basicLanguage
-      const features = previousFeatures && previousFeatures !== PendingLanguageServiceExtensions
-        ? current.languageService
-        : PendingLanguageServiceExtensions
+      const syntax =
+        language && state.facet(languageFacet) === language
+          ? current.fullLanguage
+          : current.basicLanguage
+      const features =
+        previousFeatures && previousFeatures !== PendingLanguageServiceExtensions
+          ? current.languageService
+          : PendingLanguageServiceExtensions
       const wanted: Array<[Compartment, Extension]> = [
         [vimCompartment, current.vim],
         [editorMetricsCompartment, current.editorMetrics],
@@ -3250,28 +3269,32 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         reconfigureCompartment(view, languageServiceCompartment, languageServiceExtensions)
       let cancelSyntaxIdle = (): void => undefined
       let cancelSemanticIdle = (): void => undefined
-      const syntaxLease = fullSyntaxReady ? null : progressiveLoadTimers.after(
-        FullSyntaxActivationDelayMs,
-        () => {
-          if (!ownsView()) return
-          cancelSyntaxIdle = requestWorkbenchEditorIdleTask(() => {
-            if (!ownsView()) return
-            reconfigureCompartment(view, languageCompartment, languageExtension)
-          })
-        },
-        { label: 'workbench.editor.activateFullSyntax' }
-      )
-      const semanticLease = featuresReady ? null : progressiveLoadTimers.after(
-        SemanticFeaturesActivationDelayMs,
-        () => {
-          if (!ownsView()) return
-          cancelSemanticIdle = requestWorkbenchEditorIdleTask(() => {
-            if (!ownsView()) return
-            reconfigureCompartment(view, languageServiceCompartment, languageServiceExtensions)
-          })
-        },
-        { label: 'workbench.editor.activateSemanticFeatures' }
-      )
+      const syntaxLease = fullSyntaxReady
+        ? null
+        : progressiveLoadTimers.after(
+            FullSyntaxActivationDelayMs,
+            () => {
+              if (!ownsView()) return
+              cancelSyntaxIdle = requestWorkbenchEditorIdleTask(() => {
+                if (!ownsView()) return
+                reconfigureCompartment(view, languageCompartment, languageExtension)
+              })
+            },
+            { label: 'workbench.editor.activateFullSyntax' }
+          )
+      const semanticLease = featuresReady
+        ? null
+        : progressiveLoadTimers.after(
+            SemanticFeaturesActivationDelayMs,
+            () => {
+              if (!ownsView()) return
+              cancelSemanticIdle = requestWorkbenchEditorIdleTask(() => {
+                if (!ownsView()) return
+                reconfigureCompartment(view, languageServiceCompartment, languageServiceExtensions)
+              })
+            },
+            { label: 'workbench.editor.activateSemanticFeatures' }
+          )
 
       return () => {
         syntaxLease?.cancel()

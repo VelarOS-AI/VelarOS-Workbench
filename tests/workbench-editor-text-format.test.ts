@@ -227,7 +227,7 @@ void describe('Workbench editor text format', () => {
     // 与 VS Code 同序：行列、缩进、编码、换行符。
     assert.match(
       statusBar,
-      /\{t\('workbench\.cursorPosition', cursorPosition\)\}\n\s*<\/Text>\n\s*\{!!indentation && \(\n\s*<StatusBarIndentation[\s\S]*?\/>\n\s*\)\}\n\s*\{!!textFormat && <StatusBarTextFormat/u
+      /<StatusBarCursor store=\{cursorStore\} \/>\n\s*\{!!indentation && \(\n\s*<StatusBarIndentation[\s\S]*?\/>\n\s*\)\}\n\s*\{!!textFormat && <StatusBarTextFormat/u
     )
     assert.match(
       statusBar,

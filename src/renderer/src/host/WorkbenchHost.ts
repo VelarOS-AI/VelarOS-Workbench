@@ -123,6 +123,7 @@ import {
   type WorkspaceGitStashAction,
   type WorkspaceGitStashOptions,
 } from '@shared/contracts/workspaceGit'
+import type { WorkbenchGitBranchEdit } from '@shared/workbenchGit'
 import type {
   WorkbenchGitBlameRequest,
   WorkbenchGitCancelRemoteActionResult,
@@ -349,6 +350,11 @@ export interface WorkbenchWorkspaceKernelPort {
     branch: string,
     startPoint?: string
   ): Promise<Result<SystemWorkspaceGitCreateBranchResult>>
+  editWorkspaceGitBranch(
+    workspaceRoot: string,
+    branch: string,
+    edit: WorkbenchGitBranchEdit
+  ): Promise<Result<{ branch: string }>>
   performWorkspaceGitAction(
     workspaceRoot: string,
     action: SystemWorkspaceGitActionRequest['action'],

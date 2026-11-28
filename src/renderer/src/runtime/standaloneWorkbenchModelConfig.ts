@@ -18,6 +18,11 @@ export interface StandaloneWorkbenchModelConfig {
 }
 
 const ModelConfigStorageKey = 'velaros-workbench-app:model-config'
+type ModelProviderProfile = Pick<
+  StandaloneWorkbenchModelConfig,
+  'model' | 'completionModel' | 'baseURL'
+>
+const modelProviderProfiles = new Map<string, ModelProviderProfile>()
 const ModelCredentialRevisionKey = 'velaros-workbench-app:model-credential-revision'
 const LegacyPreferencesStorageKey = 'velaros.workbench.preferences.v1'
 export const StandaloneWorkbenchCompletionDisabledOptionValue = 'workbench:none'
@@ -114,20 +119,44 @@ function consumeLegacyAiCompletionEnabled(): boolean | undefined {
 }
 
 function persistNonSecretModelConfig(config: StandaloneWorkbenchModelConfig): void {
+  const profile = {
+    model: config.model,
+    completionModel: config.completionModel,
+    baseURL: config.baseURL,
+  }
+  modelProviderProfiles.set(config.provider, profile)
   if (typeof window === 'undefined') return
 
   try {
+    const stored = JSON.parse(window.localStorage.getItem(ModelConfigStorageKey) ?? '{}')
+    const profiles = { ...stored?.profiles, [config.provider]: profile }
     window.localStorage.setItem(
       ModelConfigStorageKey,
       JSON.stringify({
         provider: config.provider,
-        model: config.model,
-        completionModel: config.completionModel,
-        baseURL: config.baseURL,
+        ...profile,
+        profiles,
       })
     )
   } catch {
     // 设置仍对当前进程生效；非敏感偏好持久化失败不阻断聊天。
+  }
+}
+
+function readModelProviderProfile(provider: ChatProviderId): Partial<ModelProviderProfile> {
+  if (currentConfig.provider === provider) return currentConfig
+  if (typeof window === 'undefined') return modelProviderProfiles.get(provider) ?? {}
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(ModelConfigStorageKey) ?? '{}')
+    const profile = stored?.profiles?.[provider]
+    return {
+      model: typeof profile?.model === 'string' ? profile.model : undefined,
+      completionModel:
+        typeof profile?.completionModel === 'string' ? profile.completionModel : undefined,
+      baseURL: typeof profile?.baseURL === 'string' ? profile.baseURL : undefined,
+    }
+  } catch {
+    return modelProviderProfiles.get(provider) ?? {}
   }
 }
 
@@ -205,14 +234,20 @@ export function selectStandaloneWorkbenchModelProvider(
 ): void {
   if (!isStandaloneWorkbenchModelProviderSelectable(providerId)) return
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
-  const model = defaults?.model ?? provider.defaultModel
+  if (currentConfig.provider === provider.id) return
+  persistNonSecretModelConfig(currentConfig)
+  const profile = readModelProviderProfile(provider.id)
+  const model = profile.model ?? defaults?.model ?? provider.defaultModel
   apiKeyHydrationRequest += 1
   applyStandaloneWorkbenchModelConfig(
     {
       provider: provider.id,
       model,
-      completionModel: defaults?.completionModel ?? (model || provider.completionModel),
-      baseURL: provider.defaultBaseURL,
+      completionModel:
+        profile.completionModel ?? defaults?.completionModel ?? (model || provider.completionModel),
+      baseURL: provider.baseURLConfigurable
+        ? (profile.baseURL ?? provider.defaultBaseURL)
+        : provider.defaultBaseURL,
       apiKey: '',
     },
     false
@@ -241,13 +276,19 @@ export function selectStandaloneWorkbenchAgentModel(providerId: string, model: s
   if (!isStandaloneWorkbenchModelProviderSelectable(providerId)) return
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const providerChanged = currentConfig.provider !== provider.id
-  if (providerChanged) apiKeyHydrationRequest += 1
+  if (providerChanged) {
+    persistNonSecretModelConfig(currentConfig)
+    apiKeyHydrationRequest += 1
+  }
+  const profile = readModelProviderProfile(provider.id)
   applyStandaloneWorkbenchModelConfig(
     {
       provider: provider.id,
       model: resolveStandaloneWorkbenchProviderModel(provider.id, model, 'agent'),
-      completionModel: providerChanged ? provider.completionModel : currentConfig.completionModel,
-      baseURL: providerChanged ? provider.defaultBaseURL : currentConfig.baseURL,
+      completionModel: profile.completionModel ?? provider.completionModel,
+      baseURL: provider.baseURLConfigurable
+        ? (profile.baseURL ?? provider.defaultBaseURL)
+        : provider.defaultBaseURL,
       apiKey: providerChanged ? '' : currentConfig.apiKey,
     },
     false

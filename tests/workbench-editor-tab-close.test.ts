@@ -7,7 +7,9 @@ import { describe, test } from 'bun:test'
 import { isWorkbenchEditorTabAutosavable } from '../src/renderer/src/models/editor/workbenchEditorAutosave'
 import { mergeWorkbenchEditorSavedTab } from '../src/renderer/src/models/editor/workbenchEditorSaving'
 import {
+  collectWorkbenchEditorGitChangedPaths,
   collectWorkbenchEditorTabsToRight,
+  isWorkbenchEditorTabUnmodified,
   popWorkbenchClosedEditorTab,
   pushWorkbenchClosedEditorTabs,
   resolveWorkbenchEditorDeletedEntry,
@@ -32,6 +34,37 @@ function sliceBetween(source: string, start: string, end: string): string {
 const tabs = ['a.ts', 'b.ts', 'c.ts', 'd.ts']
 
 void describe('closing editor tabs', () => {
+  void test('keeps auto-saved edits and Git changes when closing unmodified files', () => {
+    const file = {
+      projectRoot: '/project',
+      path: 'src/app.ts',
+      content: 'original',
+      size: 8,
+      modifiedAt: 1,
+      totalLines: 1,
+      truncated: false,
+      encoding: 'utf-8',
+      eol: 'lf',
+    } as const
+    const clean = { path: file.path, content: file.content, file }
+    const draft = { ...clean, content: 'edited' }
+    const saved = mergeWorkbenchEditorSavedTab(draft, draft, { ...file, content: draft.content })
+    const reverted = { ...saved, content: file.content }
+    assert.equal(isWorkbenchEditorTabUnmodified(clean), true)
+    assert.equal(isDirtyTab(saved), false)
+    assert.equal(isWorkbenchEditorTabUnmodified(saved), false)
+    assert.equal(
+      isWorkbenchEditorTabUnmodified(mergeWorkbenchEditorSavedTab(reverted, reverted, file)),
+      true
+    )
+    assert.deepEqual(
+      collectWorkbenchEditorGitChangedPaths(
+        ['src/app.ts', 'src/before.ts', 'new/child.js', 'newer/other.js'],
+        [{ path: 'src/app.ts', originalPath: 'src/before.ts' }, { path: 'new/' }]
+      ),
+      new Set(['src/app.ts', 'src/before.ts', 'new/child.js'])
+    )
+  })
   void test('selects the nearest tab to the left of the closed current tab, else the right one', () => {
     assert.equal(resolveWorkbenchEditorSelectionAfterClose(tabs, new Set(['c.ts']), 'c.ts'), 'b.ts')
     assert.equal(resolveWorkbenchEditorSelectionAfterClose(tabs, new Set(['a.ts']), 'a.ts'), 'b.ts')
@@ -95,7 +128,9 @@ void describe('closing editor tabs', () => {
     const converted = makeTab('src/lib/converted.ts')
     const clean = makeTab('src/lib/clean.ts')
     const outside = makeTab('src/library.ts')
-    const current = new Map([direct, nested, converted, clean, outside].map((tab) => [tab.path, tab]))
+    const current = new Map(
+      [direct, nested, converted, clean, outside].map((tab) => [tab.path, tab])
+    )
     assert.equal([...current.values()].some(isDirtyTab), false)
     const deletion = Promise.withResolvers<string[]>()
     const afterDeletion = deletion.promise.then((deletedPaths) =>
@@ -117,7 +152,10 @@ void describe('closing editor tabs', () => {
     assert.deepEqual(fileResult.closingPaths, [])
     assert.deepEqual(directoryResult.closingPaths, [clean.path])
     const retained = [...fileResult.retainedTabs, ...directoryResult.retainedTabs]
-    assert.deepEqual(retained.map((tab) => tab.path), [direct.path, nested.path, converted.path])
+    assert.deepEqual(
+      retained.map((tab) => tab.path),
+      [direct.path, nested.path, converted.path]
+    )
     assert.equal(retained[0].file, direct.file)
     assert.equal(retained[0].content, 'new direct draft')
     assert.equal(retained[1].content, 'new nested draft')
@@ -147,7 +185,11 @@ void describe('closing editor tabs', () => {
     const shortcuts = readSource('src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts')
 
     // 用户关掉的每个标签都记下（文件树里删掉 / 挪走的不算），换项目时清空。
-    const commitClose = sliceBetween(controller, 'const commitCloseOpenFiles', 'const requestCloseOpenFiles')
+    const commitClose = sliceBetween(
+      controller,
+      'const commitCloseOpenFiles',
+      'const requestCloseOpenFiles'
+    )
     assert.match(commitClose, /pushWorkbenchClosedEditorTabs\(/u)
     assert.doesNotMatch(
       sliceBetween(controller, 'const handleDeletedEntryPath', 'const commitCloseOpenFiles'),
@@ -188,11 +230,21 @@ void describe('closing editor tabs', () => {
     // 不保存：丢掉改动直接关；保存：存不下的（冲突、失败）留着，其余关掉。
     assert.match(resolving, /choice === 'discard'[\s\S]*?commitCloseOpenFiles\(request\.paths\)/u)
     assert.match(resolving, /saveTabsBeforeClose\(request\.dirtyPaths\)/u)
-    assert.match(resolving, /collectWorkbenchEditorUnsavedPaths\(openTabsByPathLatest\.current\.values\(\)\)/u)
-    assert.match(resolving, /commitCloseOpenFiles\(request\.paths\.filter\(\(path\) => !unsavedPaths\.has\(path\)\)\)/u)
+    assert.match(
+      resolving,
+      /collectWorkbenchEditorUnsavedPaths\(openTabsByPathLatest\.current\.values\(\)\)/u
+    )
+    assert.match(
+      resolving,
+      /commitCloseOpenFiles\(request\.paths\.filter\(\(path\) => !unsavedPaths\.has\(path\)\)\)/u
+    )
 
     // 磁盘上已被删掉的文件，保存就是按标签内容重新建出来。
-    const saving = sliceBetween(controller, 'const saveTabsBeforeClose', 'const resolveCloseRequest')
+    const saving = sliceBetween(
+      controller,
+      'const saveTabsBeforeClose',
+      'const resolveCloseRequest'
+    )
     assert.match(saving, /externalChange\?\.status === 'deleted'/u)
     assert.match(saving, /restoreDeletedTab\(tab\)/u)
 
@@ -210,12 +262,23 @@ void describe('closing editor tabs', () => {
     const tabBar = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')
     const dialog = readSource('src/renderer/src/components/editor/EditorUnsavedChangesDialog.tsx')
 
-    assert.match(presentation, /<EditorUnsavedChangesDialog[\s\S]*?request=\{workbench\.closeRequest\}/u)
-    assert.match(presentation, /onResolve=\{\(choice\) => void workbench\.resolveCloseRequest\(choice\)\}/u)
+    assert.match(
+      presentation,
+      /<EditorUnsavedChangesDialog[\s\S]*?request=\{workbench\.closeRequest\}/u
+    )
+    assert.match(
+      presentation,
+      /onResolve=\{\(choice\) => void workbench\.resolveCloseRequest\(choice\)\}/u
+    )
     for (const choice of ['save', 'discard', 'cancel']) {
       assert.match(dialog, new RegExp(`onResolve\\('${choice}'\\)`, 'u'), choice)
     }
-    for (const key of ['unsavedCloseSave', 'unsavedCloseSaveAll', 'unsavedCloseDiscard', 'common.cancel']) {
+    for (const key of [
+      'unsavedCloseSave',
+      'unsavedCloseSaveAll',
+      'unsavedCloseDiscard',
+      'common.cancel',
+    ]) {
       assert.match(dialog, new RegExp(key.replace('.', '\\.'), 'u'), key)
     }
     // 被删掉的文件的「关闭标签页」不再只给没改动的标签；有改动就走上面的确认。

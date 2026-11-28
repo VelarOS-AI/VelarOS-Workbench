@@ -26,7 +26,10 @@ import {
 import { keepFocusOutsideTreeAfterRename } from '@renderer/models/files/workbenchTreeRenameFocus'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import { isWorkbenchTreeRoot } from '@renderer/models/shared/workbenchUtils'
-import { getWorkbenchJetBrainsFileIcon, getWorkbenchJetBrainsIcon } from '@renderer/models/workbenchJetBrainsIcons'
+import {
+  getWorkbenchJetBrainsFileIcon,
+  getWorkbenchJetBrainsIcon,
+} from '@renderer/models/workbenchJetBrainsIcons'
 import type { NodeRendererProps } from 'react-arborist'
 
 import { StyleUtils } from '@velaros-ai/ui'
@@ -71,7 +74,6 @@ function arboristTreeRowOuterStyle(
 }
 
 export interface FileTreeRowRuntime {
-  darkIcons: boolean
   collapseDirectoryLabel: string
   expandDirectoryLabel: string
   /** 符号链接行的提示：指向哪、在不在工程里。 */
@@ -94,7 +96,6 @@ export const FileTreeRow = memo(function FileTreeRow({
   if (!runtime) throw new AppError('INVARIANT', '文件树行缺少运行时上下文')
 
   const {
-    darkIcons,
     collapseDirectoryLabel,
     expandDirectoryLabel,
     describeSymlink,
@@ -114,9 +115,10 @@ export const FileTreeRow = memo(function FileTreeRow({
   const isTreeRoot = isWorkbenchTreeRoot(entry)
   const isTestFile = entry.type === 'file' && isWorkbenchTestFilePath(entry.path)
   const isTestDirectory = entry.type === 'directory' && isWorkbenchTestDirectoryPath(entry.path)
-  const fileIcon = entry.type === 'file' && !isTestFile
-    ? getWorkbenchJetBrainsFileIcon(entry.name, fileKind)
-    : null
+  const fileIcon =
+    entry.type === 'file' && !isTestFile
+      ? getWorkbenchJetBrainsFileIcon(entry.name, fileKind)
+      : null
 
   useEffect(() => {
     if (!node.isEditing) return
@@ -214,7 +216,7 @@ export const FileTreeRow = memo(function FileTreeRow({
           >
             {fileIcon ? (
               <img
-                src={getWorkbenchJetBrainsIcon(fileIcon, darkIcons)}
+                src={getWorkbenchJetBrainsIcon(fileIcon, false)}
                 data-tree-icon={fileIcon}
                 width={15}
                 height={15}

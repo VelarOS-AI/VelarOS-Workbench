@@ -16,7 +16,7 @@ const executable = ts.transpile(declaration.getText(ast), {
 })
 
 for (const platform of ['win32', 'darwin', 'linux']) {
-  test(`window title preserves ${platform} policy for project changes and no project`, () => {
+  test(`window title uses the project name on ${platform} and falls back when absent`, () => {
     for (const fallback of ['VelarOS Workbench', 'VelarOS Workbench Dev']) {
       const context = vm.createContext({
         process: { platform },
@@ -27,7 +27,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
         context.projectName = name
         assert.equal(
           vm.runInContext('getWorkbenchWindowTitle(projectName)', context),
-          platform === 'win32' ? 'VelarOS WorkBench' : (name ?? fallback)
+          name || fallback
         )
       }
     }

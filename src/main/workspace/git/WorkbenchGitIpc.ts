@@ -16,6 +16,7 @@ import {
   type WorkbenchGitCommitRequest,
   type WorkbenchGitCreateBranchRequest,
   type WorkbenchGitDiffRequest,
+  type WorkbenchGitEditBranchRequest,
   type WorkbenchGitFileActionRequest,
   type WorkbenchGitFileAtCommitRequest,
   type WorkbenchGitHunkActionRequest,
@@ -128,6 +129,12 @@ export function registerWorkbenchGitIpc(
     callWithEnvelope(() => {
       const request = parseCreateBranch(input)
       return service.createBranch(request.workspaceRoot, request.branch, request.startPoint)
+    })
+  )
+  ipcMain.handle(WorkbenchGitChannels.editBranch, (_event, input: unknown) =>
+    callWithEnvelope(() => {
+      const { workspaceRoot, branch, ...edit } = parseEditBranch(input)
+      return service.editLocalBranch(workspaceRoot, branch, edit)
     })
   )
   ipcMain.handle(WorkbenchGitChannels.remoteAction, (_event, input: unknown) =>
@@ -326,6 +333,16 @@ function parseCreateBranch(input: unknown): WorkbenchGitCreateBranchRequest {
     branch: input['branch'] as string,
     startPoint: optionalWhen(isString, input['startPoint']),
   }
+}
+
+function parseEditBranch(input: unknown): WorkbenchGitEditBranchRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'branch'])) return invalidRequest()
+  const { workspaceRoot, branch, action, name } = input
+  if (action === 'delete')
+    return { workspaceRoot: workspaceRoot as string, branch: branch as string, action }
+  if (action === 'rename' && typeof name === 'string')
+    return { workspaceRoot: workspaceRoot as string, branch: branch as string, action, name }
+  return invalidRequest()
 }
 
 function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {

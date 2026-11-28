@@ -167,7 +167,7 @@ void describe('Workbench commit panel', () => {
     const hook = readSource('src/renderer/src/hooks/useWorkbenchGitLog.ts')
     assert.match(
       panel,
-      /useWorkbenchGitLog\(\{\s*workspaceRoot,\s*branch: logBranch,\s*enabled: isRepository,\s*revision,?\s*\}\)/
+      /useWorkbenchGitLog\(\{\s*workspaceRoot,\s*branch: comparing \? `HEAD\.\.\$\{logRevision\}` : logRevision,\s*enabled: isRepository,\s*revision,?\s*\}\)/
     )
     assert.doesNotMatch(`${panel}\n${hook}`, /setLogLoading\(true\)|setIsLoading\(true\)/)
     assert.match(hook, /isLoading: enabled && !current,/)

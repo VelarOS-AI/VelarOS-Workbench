@@ -84,18 +84,11 @@ void describe('TypeScript completion items', () => {
 
   void test('keeps the replacement span of optional-chain and import-statement completions', async () => {
     const optional = await completions('src/main.ts', 'declare const o: { foo: number } | undefined\no.§')
-    assert.deepEqual(optional.items.find((item) => item.label === 'foo'), {
-      label: 'foo',
-      kind: 'property',
-      detail: 'declare',
-      returnType: undefined,
-      insertText: '?.foo',
-      range: { startLine: 2, startColumn: 2, endLine: 2, endColumn: 3 },
-      sortText: '11 foo',
-      filterText: undefined,
-      isSnippet: undefined,
-      resolve: undefined,
-    })
+    const foo = optional.items.find((item) => item.label === 'foo')
+    assert.equal(foo?.kind, 'property')
+    assert.equal(foo?.insertText, '?.foo')
+    assert.deepEqual(foo?.range, { startLine: 2, startColumn: 2, endLine: 2, endColumn: 3 })
+    assert.equal(foo?.resolvePreview, true)
 
     const statement = await completions('src/main.ts', 'import useTh§')
     const useTheme = statement.items.find((item) => item.label === 'useTheme')

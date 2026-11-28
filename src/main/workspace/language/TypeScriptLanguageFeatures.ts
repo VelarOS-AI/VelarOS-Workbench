@@ -28,7 +28,10 @@ const VueModuleResolutionHost: ts.ModuleResolutionHost = {
   ...ts.sys,
   fileExists(fileName) {
     const componentPath = vueSourcePathForDeclaration(fileName)
-    return ts.sys.fileExists(fileName) || (componentPath !== undefined && ts.sys.fileExists(componentPath))
+    return (
+      ts.sys.fileExists(fileName) ||
+      (componentPath !== undefined && ts.sys.fileExists(componentPath))
+    )
   },
 }
 
@@ -584,7 +587,9 @@ export function buildTypeScriptHoverResult({
   const quickInfo = service.getQuickInfoAtPosition(fileName, offset)
   if (!quickInfo) return null
 
-  const displayText = displayPartsToText(quickInfo.displayParts)
+  const quickInfoText = displayPartsToText(quickInfo.displayParts)
+  // An unresolved member on an any receiver produces no signature at all, just "any".
+  const displayText = quickInfoText.trim() === 'any' ? '' : quickInfoText
   const compilerDocumentation = displayPartsToText(quickInfo.documentation)
   const fallbackDocumentation = compilerDocumentation
     ? null
@@ -592,7 +597,7 @@ export function buildTypeScriptHoverResult({
   const documentation = compilerDocumentation || fallbackDocumentation?.documentation || ''
   if (!displayText && !documentation) return null
 
-  const displayParts = mapDisplayParts(quickInfo.displayParts)
+  const displayParts = displayText ? mapDisplayParts(quickInfo.displayParts) : []
   const documentationParts = mapDisplayParts(quickInfo.documentation)
 
   return {

@@ -19,7 +19,7 @@ import {
 import type { WorkbenchThemeId } from '../src/renderer/src/models/workbenchPreferences'
 
 void test('horizontal highlighting leaves off-screen marks out and preserves bidirectional and short lines', () => {
-  const doc = Text.of(['a'.repeat(800), 'short', 'שלום ' + 'z'.repeat(500), 'b'.repeat(600)])
+  const doc = Text.of(['a'.repeat(800), 'short', `שלום ${  'z'.repeat(500)}`, 'b'.repeat(600)])
   const visible = [{ from: 0, to: doc.length }]
   assert.deepEqual(clipWorkbenchHighlightRanges(doc, visible, 200), [
     { from: 0, to: 200 },

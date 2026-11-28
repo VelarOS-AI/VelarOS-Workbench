@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.4.54",
+  "version": "0.4.55",
   "private": true,
   "license": "Apache-2.0",
   "description": "VelarOS Workbench standalone Electron IDE.",
@@ -52,8 +52,8 @@
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-markdown-languageservice": "^0.5.0",
     "vscode-uri": "^3.1.0",
-    "@velaros-ai/velaros": "https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.29/velaros-ai-velaros-0.12.16.tgz",
-    "@velaros-ai/capabilities": "https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.29/velaros-ai-capabilities-0.12.16.tgz",
+    "@velaros-ai/velaros": "https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.30/velaros-ai-velaros-0.12.17.tgz",
+    "@velaros-ai/capabilities": "https://github.com/VelarOS-AI/VelarOS-Platform/releases/download/v0.7.30/velaros-ai-capabilities-0.12.17.tgz",
     "@vue/language-server": "2.2.12"
   },
   "devDependencies": {

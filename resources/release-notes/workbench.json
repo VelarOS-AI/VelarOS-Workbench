@@ -3,6 +3,34 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.55",
+      "releasedAt": "2026-11-28",
+      "title": {
+        "zh": "项目窗口、代码补全与搜索设置",
+        "en": "Project windows, code completion, and search settings"
+      },
+      "added": {
+        "zh": ["新增兼容 Tavily Search API 的自定义搜索，支持在设置中验证接口。"],
+        "en": [
+          "Add custom search using the Tavily Search API, with connection verification in Settings."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "修复长行的横向滚动和拖动选择，以及补全列表的上下键导航和文档切换。",
+          "让窗口标题显示项目名，关闭未修改文件时保留已自动保存的改动。",
+          "统一深浅主题的文件图标，以及设置色块与界面主操作的主题色。",
+          "可在设置中更换默认模型和验证密钥，将思考过程选项放入模型菜单。"
+        ],
+        "en": [
+          "Fix horizontal scrolling and drag selection on long lines, plus completion keyboard navigation and documentation updates.",
+          "Show the project name in window titles and keep auto-saved edits when closing unmodified files.",
+          "Keep file icons consistent across light and dark themes and match primary actions to the accent swatch.",
+          "Make the default model editable, add API key verification, and place the reasoning display setting in the model menu."
+        ]
+      }
+    },
+    {
       "version": "0.4.54",
       "releasedAt": "2026-11-28",
       "title": {

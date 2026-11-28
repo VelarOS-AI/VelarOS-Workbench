@@ -1229,3 +1229,13 @@
   border-radius: 50%;
   background: var(--workbench-theme-color);
 }
+.workbenchSettingsModelKeyControl {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+}
+
+.workbenchSettingsModelKeyControl input {
+  min-width: 0;
+}

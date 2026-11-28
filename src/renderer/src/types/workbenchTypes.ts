@@ -1,4 +1,8 @@
-import { type WorkbenchDirectoryEntry, type WorkbenchImagePreview, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchImagePreview,
+  type WorkbenchReadFileResult,
+} from '@shared/contracts/workbench'
 import type {
   WorkbenchTextEncoding,
   WorkbenchTextEol,
@@ -21,6 +25,8 @@ export interface WorkbenchOpenEditorTab {
   file: WorkbenchReadFileResult
   /** 编辑缓冲：去掉 BOM、换行统一为 LF 的正文。 */
   content: string
+  /** 第一次保存本标签的改动前的版本，用于判断已自动保存的改动。 */
+  savedModificationBase?: Pick<WorkbenchReadFileResult, 'content' | 'encoding' | 'eol'>
   /**
    * 用户明确选的格式转换（转换为 UTF-8、换换行符），保存时按它写；保存成功前一直算未保存。
    * 没有时按 `file` 上的编码与换行符原样写回。

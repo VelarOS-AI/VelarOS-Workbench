@@ -58,11 +58,13 @@ function readSource(path: string): string {
 
 /** 目录下全部源码文件（相对仓库根）。 */
 function listSourceFiles(directory: string): string[] {
-  return readdirSync(resolvePath(process.cwd(), directory), { withFileTypes: true }).flatMap((entry) => {
-    const path = posix.join(directory, entry.name)
-    if (entry.isDirectory()) return listSourceFiles(path)
-    return /\.tsx?$/u.test(entry.name) ? [path] : []
-  })
+  return readdirSync(resolvePath(process.cwd(), directory), { withFileTypes: true }).flatMap(
+    (entry) => {
+      const path = posix.join(directory, entry.name)
+      if (entry.isDirectory()) return listSourceFiles(path)
+      return /\.tsx?$/u.test(entry.name) ? [path] : []
+    }
+  )
 }
 
 /** 去掉注释的源码：钉「代码里有没有这一句」时不被注释里的说明骗到。 */
@@ -93,7 +95,9 @@ void describe('vim: what the layer assumes about the package', () => {
       null,
     ])
 
-    const normal = ctrlEntries.filter((entry) => entry.context !== 'insert' && entry.type !== 'idle')
+    const normal = ctrlEntries.filter(
+      (entry) => entry.context !== 'insert' && entry.type !== 'idle'
+    )
     assert.deepEqual(
       [...new Set(normal.map((entry) => entry.key))].sort(),
       [...WorkbenchVimNormalModeKeys].sort()
@@ -118,7 +122,10 @@ void describe('vim: what the layer assumes about the package', () => {
       /const key = Vim\.vimKeyFromEvent\(e, vim\);\s*CodeMirror\.signal\(this\.cm, 'inputEvent', \{ type: "handleKey", key \}\);\s*if \(!key\)\s*return;/u
     )
     // 用掉的键不再往下传：后面的按键处理收不到（所以归属要在这一步定）。
-    assert.match(vimAdapter, /if \(result\) \{[\s\S]{0,120}e\.preventDefault\(\);\s*e\.stopPropagation\(\);/u)
+    assert.match(
+      vimAdapter,
+      /if \(result\) \{[\s\S]{0,120}e\.preventDefault\(\);\s*e\.stopPropagation\(\);/u
+    )
     // 普通模式里没用到的单个字符、macOS 上没用到的 ⌥+字符会被吞掉。
     assert.match(
       vimCore,
@@ -155,7 +162,10 @@ void describe('vim: what the layer assumes about the package', () => {
     assert.match(vimAdapter, /"cm-fat-cursor cm-cursor-primary"/u)
     assert.match(vimAdapter, /this\.cursorLayer\.className = "cm-cursorLayer cm-vimCursorLayer";/u)
     // 只读的文件：包自己不改正文、不进插入模式。
-    assert.match(vimAdapter, /function dispatchChange\(cm, transaction\) \{\s*var view = cm\.cm6;\s*if \(view\.state\.readOnly\)\s*return;/u)
+    assert.match(
+      vimAdapter,
+      /function dispatchChange\(cm, transaction\) \{\s*var view = cm\.cm6;\s*if \(view\.state\.readOnly\)\s*return;/u
+    )
   })
 })
 
@@ -187,7 +197,18 @@ void describe('vim: who gets a key', () => {
   void test('keys without Ctrl, Alt or the command key always go to Vim', () => {
     for (const platform of KeymapTestPlatforms)
       for (const context of Contexts)
-        for (const chord of ['J', 'Shift+G', 'Escape', 'Enter', 'Tab', 'ArrowDown', 'Backspace', 'Shift+;', 'F8', 'Shift+F12'])
+        for (const chord of [
+          'J',
+          'Shift+G',
+          'Escape',
+          'Enter',
+          'Tab',
+          'ArrowDown',
+          'Backspace',
+          'Shift+;',
+          'F8',
+          'Shift+F12',
+        ])
           assert.equal(owner(chord, platform, context), 'vim', `${platform} ${context} ${chord}`)
   })
 
@@ -217,22 +238,79 @@ void describe('vim: who gets a key', () => {
           assert.equal(owner(chord, platform, context), 'vim', `${platform} ${context} ${chord}`)
 
         // 全局快捷键表上的键照常：默认键里与 Vim 撞的只有 Ctrl+P。
-        for (const chord of ['Ctrl+P', 'Ctrl+Shift+P', 'Ctrl+Shift+F', 'Ctrl+S', 'Ctrl+Shift+S', 'Ctrl+\\', 'Ctrl+1', 'Alt+ArrowLeft', 'Ctrl+Enter'])
-          assert.equal(owner(chord, platform, context), 'workbench', `${platform} ${context} ${chord}`)
+        for (const chord of [
+          'Ctrl+P',
+          'Ctrl+Shift+P',
+          'Ctrl+Shift+F',
+          'Ctrl+S',
+          'Ctrl+Shift+S',
+          'Ctrl+\\',
+          'Ctrl+1',
+          'Alt+ArrowLeft',
+          'Ctrl+Enter',
+        ])
+          assert.equal(
+            owner(chord, platform, context),
+            'workbench',
+            `${platform} ${context} ${chord}`
+          )
         // Vim 没有命令的编辑器命令照常。
-        for (const chord of ['Ctrl+G', 'Ctrl+L', 'Ctrl+H', 'Ctrl+Z', 'Ctrl+/', 'Ctrl+]', 'Ctrl+M', 'Ctrl+Shift+K', 'Ctrl+Alt+L', 'Alt+Z', 'Alt+Enter', 'Shift+Alt+ArrowDown', 'Alt+ArrowUp'])
-          assert.equal(owner(chord, platform, context), 'workbench', `${platform} ${context} ${chord}`)
+        for (const chord of [
+          'Ctrl+G',
+          'Ctrl+L',
+          'Ctrl+H',
+          'Ctrl+Z',
+          'Ctrl+/',
+          'Ctrl+]',
+          'Ctrl+M',
+          'Ctrl+Shift+K',
+          'Ctrl+Alt+L',
+          'Alt+Z',
+          'Alt+Enter',
+          'Shift+Alt+ArrowDown',
+          'Alt+ArrowUp',
+        ])
+          assert.equal(
+            owner(chord, platform, context),
+            'workbench',
+            `${platform} ${context} ${chord}`
+          )
         // Ctrl+W：这里没有窗口命令，放给应用菜单的「关闭编辑器」。
-        assert.equal(owner('Ctrl+W', platform, context), 'workbench', `${platform} ${context} Ctrl+W`)
+        assert.equal(
+          owner('Ctrl+W', platform, context),
+          'workbench',
+          `${platform} ${context} Ctrl+W`
+        )
       }
   })
 
   void test('Windows and Linux, insert mode: only the Vim insert keys go to Vim', () => {
     for (const platform of NonApple) {
-      for (const chord of ['Ctrl+C', 'Ctrl+D', 'Ctrl+O', 'Ctrl+R', 'Ctrl+T', 'Ctrl+U', 'Ctrl+W', 'Ctrl+['])
+      for (const chord of [
+        'Ctrl+C',
+        'Ctrl+D',
+        'Ctrl+O',
+        'Ctrl+R',
+        'Ctrl+T',
+        'Ctrl+U',
+        'Ctrl+W',
+        'Ctrl+[',
+      ])
         assert.equal(owner(chord, platform, 'insert'), 'vim', `${platform} insert ${chord}`)
       // 别的照常：全局快捷键，和 Vim 在插入模式里不用的编辑器命令。
-      for (const chord of ['Ctrl+P', 'Ctrl+S', 'Ctrl+F', 'Ctrl+I', 'Ctrl+Space', 'Ctrl+Y', 'Ctrl+Z', 'Ctrl+G', 'Ctrl+/', 'Ctrl+]', 'Alt+Z'])
+      for (const chord of [
+        'Ctrl+P',
+        'Ctrl+S',
+        'Ctrl+F',
+        'Ctrl+I',
+        'Ctrl+Space',
+        'Ctrl+Y',
+        'Ctrl+Z',
+        'Ctrl+G',
+        'Ctrl+/',
+        'Ctrl+]',
+        'Alt+Z',
+      ])
         assert.equal(owner(chord, platform, 'insert'), 'workbench', `${platform} insert ${chord}`)
       // 不是编辑器命令、Vim 也不用的键留给 Vim 看（它不认就原样放过去：全选、粘贴照常）。
       for (const chord of ['Ctrl+A', 'Ctrl+V', 'Ctrl+X'])
@@ -243,14 +321,36 @@ void describe('vim: who gets a key', () => {
   void test('macOS: the command keys stay with the workbench, the Ctrl keys with Vim', () => {
     for (const context of Contexts) {
       // ⌘ 键 Vim 都不用：是全局快捷键、编辑器命令的放行，其余给 Vim 看（它不认，原样放过去）。
-      for (const chord of ['Mod+P', 'Mod+Shift+P', 'Mod+S', 'Mod+F', 'Mod+D', 'Mod+/', 'Mod+Z', 'Mod+Enter', 'Mod+Alt+L'])
+      for (const chord of [
+        'Mod+P',
+        'Mod+Shift+P',
+        'Mod+S',
+        'Mod+F',
+        'Mod+D',
+        'Mod+/',
+        'Mod+Z',
+        'Mod+Enter',
+        'Mod+Alt+L',
+      ])
         assert.equal(owner(chord, Mac, context), 'workbench', `${context} ${chord}`)
       // 工作台在 macOS 上用 Control 的那几个：全局的后退 / 前进、跳到行、调用层次。
       for (const chord of ['Ctrl+Minus', 'Ctrl+Shift+Minus', 'Ctrl+G', 'Ctrl+Alt+H', 'Ctrl+L'])
         assert.equal(owner(chord, Mac, context), 'workbench', `${context} ${chord}`)
     }
     for (const context of ['normal', 'visual'] as const) {
-      for (const chord of ['Ctrl+D', 'Ctrl+F', 'Ctrl+B', 'Ctrl+U', 'Ctrl+R', 'Ctrl+V', 'Ctrl+O', 'Ctrl+I', 'Ctrl+A', 'Ctrl+[', 'Ctrl+Space'])
+      for (const chord of [
+        'Ctrl+D',
+        'Ctrl+F',
+        'Ctrl+B',
+        'Ctrl+U',
+        'Ctrl+R',
+        'Ctrl+V',
+        'Ctrl+O',
+        'Ctrl+I',
+        'Ctrl+A',
+        'Ctrl+[',
+        'Ctrl+Space',
+      ])
         assert.equal(owner(chord, Mac, context), 'vim', `${context} ${chord}`)
       // ⌃T 是重构；普通模式、可视模式里 Vim 不用它。
       assert.equal(owner('Ctrl+T', Mac, context), 'workbench')
@@ -266,7 +366,16 @@ void describe('vim: who gets a key', () => {
   void test('macOS: Option keys that are editor commands are not swallowed by normal mode', () => {
     for (const context of Contexts) {
       // ⌥Z 自动换行、⇧⌥A 块注释、⇧⌥M Tab 键移动焦点、⇧⌥O 整理 import、⌥↩ 快速修复、⌥↑ 上移行。
-      for (const chord of ['Alt+Z', 'Shift+Alt+A', 'Shift+Alt+M', 'Shift+Alt+O', 'Alt+Enter', 'Alt+ArrowUp', 'Shift+Alt+ArrowDown', 'Alt+F7'])
+      for (const chord of [
+        'Alt+Z',
+        'Shift+Alt+A',
+        'Shift+Alt+M',
+        'Shift+Alt+O',
+        'Alt+Enter',
+        'Alt+ArrowUp',
+        'Shift+Alt+ArrowDown',
+        'Alt+F7',
+      ])
         assert.equal(owner(chord, Mac, context), 'workbench', `${context} ${chord}`)
       // 不是编辑器命令的 ⌥+字符仍归 Vim：普通模式里吞掉（不打出字符），插入模式里照常打字。
       for (const chord of ['Alt+Q', 'Alt+8', 'Shift+Alt+K'])
@@ -276,7 +385,11 @@ void describe('vim: who gets a key', () => {
 
   void test('the editor commands whose keys Vim takes: what is lost in normal mode, and in every mode', () => {
     /** 这组键在这个模式下是 Vim 的命令（不只是先给 Vim 看一眼）。 */
-    const taken = (chord: string, platform: KeymapTestPlatform, context: WorkbenchVimKeyContext): boolean => {
+    const taken = (
+      chord: string,
+      platform: KeymapTestPlatform,
+      context: WorkbenchVimKeyContext
+    ): boolean => {
       const vimKey = vimPackage.Vim.vimKeyFromEvent(
         keymapTestEventFor(chord, platform) as unknown as KeyboardEvent
       )
@@ -284,12 +397,15 @@ void describe('vim: who gets a key', () => {
       return !!vimKey && keys.includes(vimKey) && owner(chord, platform, context) === 'vim'
     }
     /** 每一组键在这些模式下都被 Vim 占着的命令。 */
-    const lost = (platform: KeymapTestPlatform, contexts: readonly WorkbenchVimKeyContext[]): string[] =>
+    const lost = (
+      platform: KeymapTestPlatform,
+      contexts: readonly WorkbenchVimKeyContext[]
+    ): string[] =>
       WORKBENCH_EDITOR_KEYMAP_COMMANDS.filter((command) => {
         const chords = getWorkbenchEditorCommandChords(command, 'vim', platform)
         return (
-          chords.length > 0
-          && chords.every((chord) => contexts.every((context) => taken(chord, platform, context)))
+          chords.length > 0 &&
+          chords.every((chord) => contexts.every((context) => taken(chord, platform, context)))
         )
       })
 
@@ -334,19 +450,27 @@ void describe('vim: who gets a key', () => {
       if (platform !== Mac) assert.equal(owner('Ctrl+P', platform, 'normal', keymap), 'vim')
     }
     // 不带修饰键的全局快捷键（Esc 关右侧面板）不抢 Vim 的键。
-    for (const platform of KeymapTestPlatforms) assert.equal(owner('Escape', platform, 'normal'), 'vim')
+    for (const platform of KeymapTestPlatforms)
+      assert.equal(owner('Escape', platform, 'normal'), 'vim')
   })
 
   void test('the layer decides inside Vim.vimKeyFromEvent, and leaves prompt keys alone', () => {
     const seen: string[] = []
     const vim = {
-      vimKeyFromEvent: (event: KeymapTestKeyEvent, state?: { insertMode?: boolean; visualMode?: boolean }) => {
+      vimKeyFromEvent: (
+        event: KeymapTestKeyEvent,
+        state?: { insertMode?: boolean; visualMode?: boolean }
+      ) => {
         seen.push(`${event.key}:${state ? 'editor' : 'prompt'}`)
         return vimPackage.Vim.vimKeyFromEvent(event as unknown as KeyboardEvent)
       },
     }
     let keymap = VimKeymap[Windows]
-    installWorkbenchVimKeyOwnership(vim, () => keymap, () => Windows)
+    installWorkbenchVimKeyOwnership(
+      vim,
+      () => keymap,
+      () => Windows
+    )
 
     const press = (chord: string, state?: { insertMode?: boolean; visualMode?: boolean }) =>
       vim.vimKeyFromEvent(keymapTestEventFor(chord, Windows), state)
@@ -360,13 +484,26 @@ void describe('vim: who gets a key', () => {
     assert.equal(press('J', {}), 'j')
     // 包认不出名字的键（只按了修饰键）原样是空。
     assert.equal(
-      vim.vimKeyFromEvent({ key: 'Control', code: 'ControlLeft', ctrlKey: true, altKey: false, metaKey: false, shiftKey: false }, {}),
+      vim.vimKeyFromEvent(
+        {
+          key: 'Control',
+          code: 'ControlLeft',
+          ctrlKey: true,
+          altKey: false,
+          metaKey: false,
+          shiftKey: false,
+        },
+        {}
+      ),
       undefined
     )
     // 没有编辑器状态的调用不归这一层管。
     assert.equal(press('Ctrl+P'), '<C-p>')
     // 用的是此刻的键位：设置改了马上跟上。
-    keymap = resolveWorkbenchKeyboardShortcutMap({ preset: 'vim', overrides: { 'quick-open': 'Ctrl+E' } }, Windows)
+    keymap = resolveWorkbenchKeyboardShortcutMap(
+      { preset: 'vim', overrides: { 'quick-open': 'Ctrl+E' } },
+      Windows
+    )
     assert.equal(press('Ctrl+P', {}), '<C-p>')
     assert.equal(press('Ctrl+E', {}), undefined)
     assert.ok(seen.includes('d:editor') && seen.includes('p:prompt'))
@@ -524,7 +661,7 @@ void describe('vim: the mode in the status bar', () => {
     // 用的是状态栏别的项同一个样式；排在行列前面（行列、缩进、编码、换行符那一串的顺序不动）。
     assert.match(
       statusBar,
-      /\{!!vimMode && \(\s*<Text\s+truncate\s+tone="caption"\s+className=\{styles\.statusBarItem\}\s+title=\{t\('workbench\.vimModeTitle'\)\}[\s\S]*?\{formatWorkbenchEditorVimMode\(vimMode\)\}\s*<\/Text>\s*\)\}\s*<Text truncate tone="caption" className=\{styles\.statusBarItem\}>\s*\{t\('workbench\.cursorPosition', cursorPosition\)\}/u
+      /\{!!vimMode && \(\s*<Text\s+truncate\s+tone="caption"\s+className=\{styles\.statusBarItem\}\s+title=\{t\('workbench\.vimModeTitle'\)\}[\s\S]*?\{formatWorkbenchEditorVimMode\(vimMode\)\}\s*<\/Text>\s*\)\}\s*<StatusBarCursor store=\{cursorStore\} \/>/u
     )
     for (const locale of ['zh-CN', 'en-US'] as const)
       assert.notEqual(
@@ -542,7 +679,9 @@ void describe('vim: loaded only for the Vim preset, only in the file editor', ()
     assert.deepEqual(importers, ['src/renderer/src/models/editor/workbenchEditorVimLayer.ts'])
 
     const layer = readCode('src/renderer/src/models/editor/workbenchEditorVimLayer.ts')
-    const mentions = [...layer.matchAll(/^.*@replit\/codemirror-vim.*$/gmu)].map((match) => match[0].trim())
+    const mentions = [...layer.matchAll(/^.*@replit\/codemirror-vim.*$/gmu)].map((match) =>
+      match[0].trim()
+    )
     assert.deepEqual(mentions, [
       "type VimPackage = typeof import('@replit/codemirror-vim')",
       "layer ??= import('@replit/codemirror-vim')",
@@ -560,14 +699,20 @@ void describe('vim: loaded only for the Vim preset, only in the file editor', ()
     const hook = 'src/renderer/src/hooks/useWorkbenchEditorVim.ts'
     const importers = sources.filter(
       (path) =>
-        /workbenchEditorVimLayer['"]/u.test(readCode(path))
-        && path !== 'src/renderer/src/models/editor/workbenchEditorVimLayer.ts'
+        /workbenchEditorVimLayer['"]/u.test(readCode(path)) &&
+        path !== 'src/renderer/src/models/editor/workbenchEditorVimLayer.ts'
     )
     assert.deepEqual(importers, [hook])
     const code = readCode(hook)
     // 值只经动态 import 拿；静态的只有类型。
-    assert.match(code, /void import\('\.\.\/models\/editor\/workbenchEditorVimLayer'\)\s*\.then\(\(module\) => module\.loadWorkbenchEditorVimLayer\(\)\)/u)
-    assert.match(code, /import type \{\s*WorkbenchEditorVimHost,\s*WorkbenchEditorVimLayer,\s*\} from '\.\.\/models\/editor\/workbenchEditorVimLayer'/u)
+    assert.match(
+      code,
+      /void import\('\.\.\/models\/editor\/workbenchEditorVimLayer'\)\s*\.then\(\(module\) => module\.loadWorkbenchEditorVimLayer\(\)\)/u
+    )
+    assert.match(
+      code,
+      /import type \{\s*WorkbenchEditorVimHost,\s*WorkbenchEditorVimLayer,\s*\} from '\.\.\/models\/editor\/workbenchEditorVimLayer'/u
+    )
     assert.equal(code.match(/workbenchEditorVimLayer'/gu)?.length, 2)
     // 没选 Vim 方案不加载。
     assert.match(code, /if \(!enabled \|\| layer\) return/u)
@@ -596,7 +741,10 @@ void describe('vim: loaded only for the Vim preset, only in the file editor', ()
       /const buildFileExtensions = [\s\S]*?return \[\s*(?:\/\/[^\n]*\n\s*)*vimCompartment\.of\(current\.vim\),\s*instance\.keymap,/u
     )
     assert.match(editor, /\[vimCompartment, current\.vim\],/u)
-    assert.match(editor, /reconfigureCompartment\(viewRef\.current, vimCompartment, vimExtension\)/u)
+    assert.match(
+      editor,
+      /reconfigureCompartment\(viewRef\.current, vimCompartment, vimExtension\)/u
+    )
     // 文件编辑器只有这两处：编辑区，和轻量预览标签。差异、文件历史、提交信息框用的不是它。
     assert.deepEqual(
       sources.filter((path) => /<(?:Lazy)?CodeMirrorEditor\b/u.test(readCode(path))),
@@ -615,10 +763,17 @@ void describe('vim: loaded only for the Vim preset, only in the file editor', ()
     ]) {
       const code = readCode(path)
       assert.match(code, /from '@renderer\/models\/editor\/workbenchEditorVim'/u, path)
-      assert.doesNotMatch(code, /workbenchEditorVimLayer|workbenchEditorVimKeys|useWorkbenchEditorVim/u, path)
+      assert.doesNotMatch(
+        code,
+        /workbenchEditorVimLayer|workbenchEditorVimKeys|useWorkbenchEditorVim/u,
+        path
+      )
     }
     // 模式的那个文件自己不引别的。
-    assert.doesNotMatch(readCode('src/renderer/src/models/editor/workbenchEditorVim.ts'), /^import /mu)
+    assert.doesNotMatch(
+      readCode('src/renderer/src/models/editor/workbenchEditorVim.ts'),
+      /^import /mu
+    )
   })
 })
 
@@ -626,11 +781,18 @@ void describe('vim: :w, :q, :wq and :wa in the editor', () => {
   void test(':w is the normal save of the editor; the rest is handed to the page', () => {
     const editor = readSource('src/renderer/src/components/editor/CodeMirrorEditor.tsx')
     // 保存只有一份：⌘S 与 `:w` 走的是同一个函数（保存时格式化、收拾空白都在里面）。
-    assert.equal(editor.match(/const saveFromEditor = async \(view: EditorView\): Promise<void> => \{/gu)?.length, 1)
+    assert.equal(
+      editor.match(/const saveFromEditor = async \(view: EditorView\): Promise<void> => \{/gu)
+        ?.length,
+      1
+    )
     assert.match(editor, /save: \(view\) => \{\s*void saveFromEditor\(view\)\s*return true\s*\},/u)
     assert.match(editor, /save: \(view\) => void saveFromEditor\(view\),/u)
     assert.match(editor, /quit: \(\) => callbacksRef\.current\.onVimCommand\?\.\('quit'\),/u)
-    assert.match(editor, /saveAll: \(\) => callbacksRef\.current\.onVimCommand\?\.\('write-all'\),/u)
+    assert.match(
+      editor,
+      /saveAll: \(\) => callbacksRef\.current\.onVimCommand\?\.\('write-all'\),/u
+    )
     // `:wq`：保存等待期间仍须属于原文件owner；切走再切回同路径也不恢复旧关闭。
     assert.match(
       editor,
@@ -644,7 +806,10 @@ void describe('vim: :w, :q, :wq and :wa in the editor', () => {
       panel.indexOf('function handleEditorVimCommand('),
       panel.indexOf('// 两组都记下每一次请求')
     )
-    assert.match(handler, /if \(command === 'write-all'\) \{\s*onSaveAllOpenFiles\(\)\s*return\s*\}/u)
+    assert.match(
+      handler,
+      /if \(command === 'write-all'\) \{\s*onSaveAllOpenFiles\(\)\s*return\s*\}/u
+    )
     // 关标签就是 ⌘W 走的那个函数：固定的标签不关，没保存的改动先问。
     assert.match(handler, /if \(command === 'quit'\) \{\s*closeActiveEditorTab\(\)\s*return\s*\}/u)
     assert.match(handler, /setCloseAfterSavePath\(selectedFilePath\)/u)
@@ -653,7 +818,10 @@ void describe('vim: :w, :q, :wq and :wa in the editor', () => {
       /if \(!closeAfterSavePath \|\| isSavingFile\) return\s*setCloseAfterSavePath\(null\)\s*if \(closeAfterSavePath === selectedFilePath && !hasUnsavedChanges\) closeActiveEditorTab\(\)/u
     )
     // 轻量预览标签：等它这次保存的结果，存下了才关。
-    assert.match(handler, /if \(saved !== false && current\?\.item\.id === closingId\) current\.onClose\(\)/u)
+    assert.match(
+      handler,
+      /if \(saved !== false && current\?\.item\.id === closingId\) current\.onClose\(\)/u
+    )
     assert.match(panel, /lightTabSaveRef\.current = Promise\.resolve\(lightTab\.onSave\(\)\)/u)
     assert.equal(panel.match(/onVimCommand=\{handleEditorVimCommand\}/gu)?.length, 2)
 

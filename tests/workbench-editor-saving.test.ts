@@ -79,7 +79,9 @@ void describe('editor saving', () => {
     assert.deepEqual(currentTab.textConversion, { encoding: 'utf-8', eol: 'lf' })
     assert.deepEqual(collectWorkbenchEditorUnsavedPaths([currentTab]), [opened.path])
 
-    const queued = resolveWorkbenchEditorSaveTab(secondRequest, [{ base: opened, saved: firstSaved }])
+    const queued = resolveWorkbenchEditorSaveTab(secondRequest, [
+      { base: opened, saved: firstSaved },
+    ])
     assert.equal(queued.file, firstSaved)
     assert.deepEqual(queued.textConversion, { encoding: 'utf-8', eol: 'lf' })
     const secondWrite = Promise.withResolvers<WorkbenchReadFileResult>()
@@ -146,10 +148,7 @@ void describe('editor saving', () => {
     assert.match(saveAll, /saveEditorTabs\(dirtyTabs\)/u)
     assert.doesNotMatch(saveAll, /content: saved\.content|setEditorContent\(/u)
     assert.match(controller, /applySavedFile\(saved, tab, \{ silent: true \}\)/u)
-    assert.match(
-      controller,
-      /mergeWorkbenchEditorSavedTab\(currentTab, requestedTab, saved\)/u
-    )
+    assert.match(controller, /mergeWorkbenchEditorSavedTab\(currentTab, requestedTab, saved\)/u)
     // 同一文件的写盘排队，后一次以前一次存下的快照为准。
     assert.match(controller, /runSerializedSave\(requestedTab\.path/u)
     assert.match(controller, /resolveWorkbenchEditorSaveTab\(requestedTab, trail\)/u)
@@ -162,9 +161,9 @@ void describe('editor saving', () => {
       controller.indexOf('const applyLanguageServiceFileChanges')
     )
 
-    assert.match(typing, /updateOpenTabContent\(file, content\)/u)
+    assert.match(typing, /updateOpenTabContent\(file, content, defer\)/u)
     assert.doesNotMatch(typing, /rememberOpenFile/u)
     // 选过的格式转换跟着正文走；上次保存被拒的说明一改就作废。
-    assert.match(controller, /\{ \.\.\.currentTab, content, unencodableSaveError: undefined \}/u)
+    assert.match(controller, /\{ \.\.\.previous, content, unencodableSaveError: undefined \}/u)
   })
 })

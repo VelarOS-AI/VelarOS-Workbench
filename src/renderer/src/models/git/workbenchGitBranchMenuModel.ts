@@ -10,6 +10,12 @@ type Translate = WorkbenchI18nContextValue['t']
 
 export type WorkbenchGitBranchNamespace = 'local' | 'remote'
 
+export interface WorkbenchGitBranchLogRequest {
+  workspaceRoot: string
+  branch: string
+  compare: boolean
+}
+
 /**
  * 分支列表里的一层：一个分支（没有下一层），或者一个装着下一层的目录（`feature/login` 里的 `feature`）。
  * 不会两样都是：git 不允许 `feature` 和 `feature/login` 同时存在。
@@ -30,7 +36,7 @@ type WorkbenchGitBranchControlStatus = Pick<
 >
 
 export interface WorkbenchGitRemoteActionItem {
-  action: 'pull' | 'upload' | 'fetch'
+  action: 'pull' | 'upload' | 'fetch' | 'sync'
   label: string
   /** 动作说明；按不了时给出原因。 */
   hint: string
@@ -196,6 +202,13 @@ export function describeWorkbenchGitRemoteActions(
       label: t('workbench.gitFetch'),
       hint: t('workbench.gitFetchHint'),
       disabled: false,
+      count: 0,
+    },
+    {
+      action: 'sync',
+      label: t('workbench.gitSync'),
+      hint: needsUpstream(t('workbench.gitBranchSyncHint', { upstream: upstream ?? '' })),
+      disabled: !!unavailable || !upstream,
       count: 0,
     },
   ]

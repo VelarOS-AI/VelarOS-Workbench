@@ -35,15 +35,12 @@
   color: var(--workbench-text);
 }
 
-.gitBranchMenuPanel[data-topbar-panel='picker'][data-slot='popover-content']:has(
-    .gitBranchMenuDetails
-  ) {
-  width: min(528px, calc(100vw - 16px));
-  min-width: 0;
-  max-width: calc(100vw - 16px);
+.gitBranchMenuPanel[data-topbar-panel='picker'][data-slot='popover-content'] {
+  overflow: visible;
 }
 
 .gitBranchMenu {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -326,30 +323,37 @@
 }
 
 .gitBranchMenuDetails {
-  display: flex;
-  min-width: 0;
-  flex: 0 0 min(224px, 48%);
-  flex-direction: column;
-  gap: var(--topbar-panel-gap);
-  padding: 0 var(--topbar-panel-gap) var(--topbar-panel-gap) var(--topbar-panel-padding);
-  border-left: 1px solid var(--workbench-border);
+  position: absolute;
+  z-index: 1;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: var(--topbar-panel-padding);
+  visibility: hidden;
+  border: 1px solid var(--workbench-border);
+  border-radius: var(--ui-radius-control);
+  background: var(--workbench-surface);
+  box-shadow: var(--shadow-lg);
 }
 
-.gitBranchMenuDetailsName {
-  flex-shrink: 0;
-  overflow: hidden;
-  padding: 0 var(--topbar-panel-item-padding);
-  border-bottom: 1px solid var(--workbench-border);
-  font-size: var(--topbar-panel-font-size);
-  font-weight: 600;
-  line-height: calc(var(--topbar-panel-row-height) + 2 * var(--topbar-panel-padding) - 1px);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.gitBranchMenuDetails::before {
+  position: absolute;
+  inset: 0 100% 0 auto;
+  width: 9px;
+  content: '';
+}
+
+.gitBranchMenuDetails[data-side='left']::before {
+  inset-inline: 100% auto;
 }
 
 .gitBranchMenuDetailsList {
-  max-height: var(--topbar-panel-list-max-height);
+  max-height: calc(100dvh - 16px - 2 * (1px + var(--topbar-panel-padding)));
   overflow-y: auto;
+}
+
+.gitBranchMenuSeparator {
+  margin: var(--topbar-panel-gap) 0;
+  border-top: 1px solid var(--workbench-border);
 }
 
 .gitBranchMenuCommand {

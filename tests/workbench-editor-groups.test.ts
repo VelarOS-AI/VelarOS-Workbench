@@ -925,7 +925,10 @@ void describe('split editor wiring', () => {
       adapter,
       /if \(activePath\) void workbench\.saveSelectedFile\(content, activePath\)/u
     )
-    assert.match(adapter, /if \(activePath\) workbench\.setEditorContent\(content, activePath, defer\)/u)
+    assert.match(
+      adapter,
+      /if \(activePath\) workbench\.setEditorContent\(content, activePath, defer\)/u
+    )
     assert.match(adapter, /if \(activePath\) workbench\.toggleSelectedFileEditMode\(activePath\)/u)
     assert.match(
       adapter,
@@ -938,7 +941,7 @@ void describe('split editor wiring', () => {
     )
     assert.match(
       adapter,
-      /onCloseUnmodifiedOpenFiles: \(\) => workbench\.closeUnmodifiedOpenFiles\(group\.index\)/u
+      /onCloseUnmodifiedOpenFiles: \(\) => void workbench\.closeUnmodifiedOpenFiles\(group\.index\)/u
     )
     assert.match(
       controller,
@@ -1061,7 +1064,8 @@ void describe('project context from editor files', () => {
         {
           path: 'src/edited.ts',
           language: 'TypeScript',
-          content: 'const removedName = 1\nconst sharedName = removedName\nsharedName\nsharedName\n',
+          content:
+            'const removedName = 1\nconst sharedName = removedName\nsharedName\nsharedName\n',
         },
         {
           path: 'src/closed.ts',
@@ -1078,25 +1082,34 @@ void describe('project context from editor files', () => {
       ],
     })
 
-    assert.equal(index.symbols.some((symbol) => symbol.label === 'removedName'), false)
-    assert.deepEqual(index.symbols.find((symbol) => symbol.label === 'sharedName'), {
-      label: 'sharedName',
-      path: 'src/edited.ts',
-      language: 'TypeScript',
-      count: 3,
-      kind: 'declaration',
-      line: 3,
-      column: 7,
-    })
-    assert.deepEqual(index.symbols.find((symbol) => symbol.label === 'addedName'), {
-      label: 'addedName',
-      path: 'src/edited.ts',
-      language: 'TypeScript',
-      count: 2,
-      kind: 'declaration',
-      line: 4,
-      column: 7,
-    })
+    assert.equal(
+      index.symbols.some((symbol) => symbol.label === 'removedName'),
+      false
+    )
+    assert.deepEqual(
+      index.symbols.find((symbol) => symbol.label === 'sharedName'),
+      {
+        label: 'sharedName',
+        path: 'src/edited.ts',
+        language: 'TypeScript',
+        count: 3,
+        kind: 'declaration',
+        line: 3,
+        column: 7,
+      }
+    )
+    assert.deepEqual(
+      index.symbols.find((symbol) => symbol.label === 'addedName'),
+      {
+        label: 'addedName',
+        path: 'src/edited.ts',
+        language: 'TypeScript',
+        count: 2,
+        kind: 'declaration',
+        line: 4,
+        column: 7,
+      }
+    )
     assert.equal(
       index.symbols.find((symbol) => symbol.label === 'retainedName')?.path,
       'src/closed.ts'
@@ -1137,10 +1150,14 @@ void describe('saved editor tab layout', () => {
       version: 1,
       expandedPaths: ['.', 'src'],
     })
-    saveWorkbenchProjectSessionSnapshot('project-a', {
-      ...first,
-      cursorByPath: { 'src/b.ts': { line: 9, column: 4 } },
-    }, storage)
+    saveWorkbenchProjectSessionSnapshot(
+      'project-a',
+      {
+        ...first,
+        cursorByPath: { 'src/b.ts': { line: 9, column: 4 } },
+      },
+      storage
+    )
     assert.deepEqual(readWorkbenchProjectSession('project-a', storage)?.cursorByPath, {
       'src/b.ts': { line: 9, column: 4 },
     })

@@ -143,6 +143,7 @@ void describe('Workbench Git branch menu model', () => {
         ['pull', 'Pull', false, 3],
         ['upload', 'Push', false, 2],
         ['fetch', 'Fetch Remotes', false, 0],
+        ['sync', 'Sync', false, 0],
       ]
     )
     assert.match(tracking[0]?.hint ?? '', /origin\/main/u)
@@ -152,7 +153,7 @@ void describe('Workbench Git branch menu model', () => {
     const fresh = describeWorkbenchGitRemoteActions(unpublished, english)
     assert.deepEqual(
       fresh.map((item) => item.disabled),
-      [true, false, false]
+      [true, false, false, true]
     )
     assert.equal(fresh[0]?.hint, english('workbench.gitNoUpstreamHint'))
     assert.equal(fresh[1]?.hint, english('workbench.gitPublishHint'))
@@ -165,7 +166,7 @@ void describe('Workbench Git branch menu model', () => {
     const headless = describeWorkbenchGitRemoteActions(detached, chinese)
     assert.deepEqual(
       headless.map((item) => item.disabled),
-      [true, true, false]
+      [true, true, false, true]
     )
     for (const item of headless.slice(0, 2)) assert.match(item.hint, /1a2b3c4/u)
     assert.match(describeWorkbenchGitRemoteNote(detached, chinese) ?? '', /1a2b3c4/u)
@@ -188,14 +189,14 @@ void describe('Workbench Git branch menu model', () => {
     const actions = describeWorkbenchGitRemoteActions(detached, english, block)
     assert.deepEqual(
       actions.map((item) => item.disabled),
-      [true, true, false]
+      [true, true, false, true]
     )
     for (const item of actions.slice(0, 2)) assert.equal(item.hint, block)
     assert.equal(describeWorkbenchGitRemoteNote(detached, english, block), block)
     // 在分支上合并到一半也一样：有上游也不给拉取、推送。
     assert.deepEqual(
       describeWorkbenchGitRemoteActions(onBranch, english, block).map((item) => item.disabled),
-      [true, true, false]
+      [true, true, false, true]
     )
     assert.equal(describeWorkbenchGitRemoteNote(onBranch, english, block), block)
   })
@@ -284,6 +285,10 @@ void describe('Workbench Git branch menu', () => {
       onPushBranch: noop,
       onRunBranchOperation: noop,
       onOpenCreateBranch: noop,
+      onOpenRenameBranch: noop,
+      onDeleteBranch: noop,
+      onCopyBranch: noop,
+      onInspectBranch: noop,
       ...props,
     })
     return renderToStaticMarkup(
@@ -310,15 +315,15 @@ void describe('Workbench Git branch menu', () => {
     const markup = render({ selectedBranch: local('main') })
     const all = buttons(markup)
     const actions = all.filter((button) => /data-action=/u.test(button.tag))
-    assert.equal(actions.length, 3)
+    assert.equal(actions.length, 4)
     assert.ok(markup.indexOf('<input') < markup.indexOf('data-action='))
     assert.deepEqual(
       actions.map((button) => button.label),
-      ['', 'Pull', 'Push']
+      ['', 'Pull', 'Push', 'Sync']
     )
     assert.deepEqual(
       actions.map((button) => /aria-label="([^"]+)"/u.exec(button.tag)?.[1]),
-      ['Fetch Remotes', 'Pull', 'Push']
+      ['Fetch Remotes', 'Pull', 'Push', 'Sync']
     )
     const searchActions = buttons(markup.slice(0, markup.indexOf('Local branches'))).filter(
       (button) => /data-action=/u.test(button.tag)
@@ -328,7 +333,15 @@ void describe('Workbench Git branch menu', () => {
     const details = markup.slice(markup.lastIndexOf('<section'))
     assert.deepEqual(
       buttons(details).map((button) => button.label),
-      ['New branch from here', 'Pull', 'Push']
+      [
+        'New branch from here',
+        'Pull',
+        'Push',
+        'Sync',
+        'View commit history',
+        'Copy branch name',
+        'Rename branch',
+      ]
     )
     for (const button of actions) {
       assert.doesNotMatch(button.tag, /aria-disabled|\bdisabled\b/u)
@@ -358,7 +371,8 @@ void describe('Workbench Git branch menu', () => {
       ['pull', 'pull', undefined, local('main')],
       ['upload', 'upload', undefined, local('main')],
       ['fetch', 'fetch', undefined, local('main')],
-      ['sync', 'fetch', undefined, local('main')],
+      ['sync', 'sync', undefined, local('main')],
+      ['sync', 'fetch', undefined, null],
       ['upload', 'upload', 'docs', local('docs')],
       ['upload', 'fetch', 'docs', local('main')],
       ['pull', 'fetch', undefined, null],
@@ -417,6 +431,12 @@ void describe('Workbench Git branch menu', () => {
         ...(selectedBranch.kind === 'local' ? [english('workbench.gitUpload')] : []),
         english('workbench.gitMergeIntoCurrent'),
         english('workbench.gitRebaseCurrentOnto'),
+        english('workbench.gitBranchShowLog'),
+        english('workbench.gitBranchCompare'),
+        english('workbench.gitBranchCopyName'),
+        ...(selectedBranch.kind === 'local'
+          ? [english('workbench.gitBranchRename'), english('workbench.gitBranchDelete')]
+          : []),
       ])
     }
   })
@@ -449,7 +469,7 @@ void describe('Workbench Git branch menu', () => {
       all
         .filter((button) => /data-action=/u.test(button.tag))
         .map((button) => /aria-disabled="true"/u.test(button.tag)),
-      [false, true, true]
+      [false, true, true, true]
     )
     assert.ok(markup.includes('A merge is in progress.'))
     for (const button of all.filter((button) => button.label.startsWith('New branch'))) {

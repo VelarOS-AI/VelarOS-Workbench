@@ -599,7 +599,9 @@ void describe('named run configurations', () => {
     assert.match(toolbar, /role="menu"\s+aria-label=\{placeholder\}\s+onKeyDown=\{handleMenuKeyDown\}/u)
     assert.match(toolbar, /if \(!input\) \{\s+handleWorkbenchMenuKeyDown\(event\)/u)
     // 菜单里的每个按钮都是菜单项（输入框旁的「保存」是表单自己的提交按钮）。
-    const menu = toolbar.slice(toolbar.indexOf('ref={menuPanelRef}'), toolbar.indexOf('</AnchoredPopover>'))
+    const menuStart = toolbar.indexOf('aria-label={placeholder}')
+    assert.notEqual(menuStart, -1)
+    const menu = toolbar.slice(menuStart, toolbar.indexOf('</AnchoredPopover>', menuStart))
     const buttons = [...menu.matchAll(/<button\s[^>]*>/gu)].map((match) => match[0])
     assert.match(menu, /role="menuitem"\s+className=\{styles.runActionRowButton\}\s+title=\{runTitle\}/u)
     assert.deepEqual(

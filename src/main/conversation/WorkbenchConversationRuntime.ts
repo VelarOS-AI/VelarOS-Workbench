@@ -111,7 +111,8 @@ interface WorkbenchConversationRuntimeOptions {
   memory?(workspace: string): Promise<ConversationMemory>
   /** 网上查资料（`velaros:web`）的无头页面；搜索引擎按这一轮请求里的设置。不给就不挂这个模块。 */
   webPages?: Pick<WebSpacePort, 'openPage' | 'resolveRedirect'>
-  tavilyApiKey?: WebSpacePort['tavilyApiKey']
+  searchApi?: WebSpacePort['searchApi']
+  fetchSearchApi?: WebSpacePort['fetchSearchApi']
   /**
    * Agent 浏览器：每一轮交给模型这个会话的受控页面，一轮结束（不论成败）不再给它开后台页面，会话删了就离站。
    * 不给就不挂浏览器模块。
@@ -435,7 +436,8 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       let handle: ConversationControlHandle
       try {
         const openControl =
-          this.options.control ?? (async (control) => (await this.loadSession()).openControl(control))
+          this.options.control ??
+          (async (control) => (await this.loadSession()).openControl(control))
         handle = await openControl({
           sessionId: ref.sessionId,
           dataDir: this.storage.path(ref.projectRoot, ref.sessionId),
@@ -570,7 +572,8 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
             ? (url, redirectSignal) => webPages.resolveRedirect!(url, redirectSignal)
             : undefined,
           searchEngine: () => request.webSearchEngine,
-          tavilyApiKey: this.options.tavilyApiKey,
+          searchApi: this.options.searchApi,
+          fetchSearchApi: this.options.fetchSearchApi,
         },
         instructions: buildHostInstructions({
           locale: request.locale,

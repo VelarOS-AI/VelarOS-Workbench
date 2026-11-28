@@ -13,7 +13,7 @@ import {
 } from 'electron'
 
 import { createElectronBrowserRuntime } from '@velaros-ai/capabilities/browser/electron'
-import { isString, Log } from '@velaros-ai/velaros/core'
+import { Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 import { createShellEnvironment } from '@velaros-ai/velaros/execution/local'
 import type { ModelRuntimeCompositionApi } from '@velaros-ai/velaros/model'
@@ -68,7 +68,7 @@ import { setWorkbenchSystemLanguageSource } from './i18n/workbenchMainLocale'
 import { WorkbenchModelCredentialStore } from './model/WorkbenchModelCredentialStore'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
 import { fetchThroughWorkbenchSystemProxy } from './model/WorkbenchSystemHttpTransport'
-import { WorkbenchTavilySettings } from './model/WorkbenchTavilySettings'
+import { WorkbenchWebSearchSettingsService } from './model/WorkbenchWebSearchSettings'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -237,9 +237,7 @@ function resolveWorkbenchDataRootDir(): string {
 }
 
 function getWorkbenchWindowTitle(projectName: Nullable<string>): string {
-  return process.platform === 'win32'
-    ? 'VelarOS WorkBench'
-    : (projectName ?? WorkbenchApplicationName)
+  return projectName || WorkbenchApplicationName
 }
 
 function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
@@ -295,7 +293,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
   installWorkbenchWindowState(window)
   windowCloseGuard.install(window)
 
-  // main 统一控制标题：Windows 固定产品名，其他平台跟随项目；禁止页面标题覆盖。
+  // 原生窗口标题跟随项目枢纽，页面标题不能覆盖它。
   window.on('page-title-updated', (event) => {
     event.preventDefault()
   })
@@ -414,10 +412,10 @@ if (hasSingleInstanceLock)
     // 本机 shell 宿主全应用共用：Agent 起的后台任务才能活过一轮运行；交互式命令跑在 node-pty 的真终端里。
     const shellHosts = new WorkbenchShellHostRegistry(shellEnvironment, loadWorkbenchShellTerminal)
     const syncAgentEdits = languageSyncOnAgentEdits(providers.language)
-    // 长期记忆按项目划分；Tavily 连接配置在应用内共用。
+    // 长期记忆按项目划分，网页搜索连接在应用内共用。
     const memory = new WorkbenchMemoryService(providers.parts.storagePaths.getMemoryDir())
     const webPages = new WorkbenchWebSearchPages()
-    const tavilySettings = new WorkbenchTavilySettings(
+    const webSearchSettings = new WorkbenchWebSearchSettingsService(
       new WorkbenchModelCredentialStore(join(dataRootDir, 'web-search')),
       fetchThroughWorkbenchSystemProxy
     )
@@ -447,7 +445,8 @@ if (hasSingleInstanceLock)
       shells: shellHosts,
       dataDir: providers.parts.storagePaths.getConversationRuntimeDir(),
       configure: createWorkbenchConversationConfiguration({
-        resolve: async (...args) => (await getModelComposition()).agentModelResolver.resolve(...args),
+        resolve: async (...args) =>
+          (await getModelComposition()).agentModelResolver.resolve(...args),
       }),
       environment: () => WorkbenchHostEnvironment,
       runChanges: providers.chatRunChanges,
@@ -457,7 +456,8 @@ if (hasSingleInstanceLock)
         (await providers.workspace.projectRules(projectRoot)).files,
       memory: (workspace) => memory.forRun(workspace),
       webPages,
-      tavilyApiKey: () => tavilySettings.getApiKey(),
+      searchApi: () => webSearchSettings.getApiConnection(),
+      fetchSearchApi: fetchThroughWorkbenchSystemProxy,
       browser: browserService,
     })
     // 外部引擎（本机装好的 Claude Code 与 Codex 命令行）：会话选了它们时由它们执行。
@@ -589,16 +589,14 @@ if (hasSingleInstanceLock)
         throw new AppError('PERMISSION', 'Web search settings require the main settings frame.')
       settingsWindows.assertSettingsWindow(event.sender)
     }
-    ipcMain.handle(WorkbenchSettingsWindowChannels.tavilyConfigured, async (event) => {
+    ipcMain.handle(WorkbenchSettingsWindowChannels.getWebSearch, (event) => {
       assertSearchSettingsSender(event)
-      return Boolean(await tavilySettings.getApiKey())
+      return webSearchSettings.getSettings()
     })
-    ipcMain.handle(WorkbenchSettingsWindowChannels.setTavilyApiKey, (event, value: unknown) =>
+    ipcMain.handle(WorkbenchSettingsWindowChannels.updateWebSearch, (event, value: unknown) =>
       callWithEnvelope(async () => {
         assertSearchSettingsSender(event)
-        if (!isString(value) || value.length > 512)
-          throw new AppError('VALIDATION', 'Invalid Tavily API key.')
-        return tavilySettings.setApiKey(value.trim())
+        return webSearchSettings.update(value)
       })
     )
     const historyWindows = new WorkbenchHistoryWindows({
@@ -688,8 +686,8 @@ if (hasSingleInstanceLock)
       shutdownStarted = true
       settingsWindows.dispose()
       ipcMain.removeHandler(WorkbenchSettingsWindowChannels.ready)
-      ipcMain.removeHandler(WorkbenchSettingsWindowChannels.tavilyConfigured)
-      ipcMain.removeHandler(WorkbenchSettingsWindowChannels.setTavilyApiKey)
+      ipcMain.removeHandler(WorkbenchSettingsWindowChannels.getWebSearch)
+      ipcMain.removeHandler(WorkbenchSettingsWindowChannels.updateWebSearch)
       historyWindows.dispose()
       event.preventDefault()
       // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker
@@ -791,7 +789,8 @@ function dispatchExternalPaths(paths: readonly string[]): void {
 function resolveRequestedExecutable(path: string): Nullable<string> {
   const currentExecutablePath = resolve(process.execPath)
   const requestedExecutablePath = resolve(path)
-  const normalize = (path: string): string => process.platform === 'win32' ? path.toLowerCase() : path
+  const normalize = (path: string): string =>
+    process.platform === 'win32' ? path.toLowerCase() : path
   if (normalize(requestedExecutablePath) === normalize(currentExecutablePath)) return null
   if (normalize(basename(requestedExecutablePath)) !== normalize(basename(currentExecutablePath)))
     return null

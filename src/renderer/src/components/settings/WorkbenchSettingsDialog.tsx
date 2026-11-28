@@ -20,7 +20,10 @@ import {
   UserCircleIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchProductAnalytics } from '@renderer/hooks/useWorkbenchProductAnalytics'
-import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchProviderModelCatalog'
+import {
+  loadWorkbenchProviderModelCatalog,
+  useWorkbenchProviderModelCatalog,
+} from '@renderer/hooks/useWorkbenchProviderModelCatalog'
 import { useWorkbenchUpdate } from '@renderer/hooks/useWorkbenchUpdate'
 import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
 import { formatWorkbenchEditorCommandHint } from '@renderer/models/editor/workbenchEditorKeymap'
@@ -49,6 +52,7 @@ import {
   listStandaloneWorkbenchVisibleModelProviderPresets,
 } from '@renderer/runtime/standaloneWorkbenchModelCatalog'
 import {
+  getStandaloneWorkbenchModelConfig,
   selectStandaloneWorkbenchModel,
   selectStandaloneWorkbenchModelProvider,
   StandaloneWorkbenchCompletionDisabledOptionValue,
@@ -102,7 +106,7 @@ import {
   WorkbenchSettingsPill,
 } from './WorkbenchSettingsParts'
 import { WorkbenchSettingsUpdateAction } from './WorkbenchSettingsUpdateAction'
-import { WorkbenchTavilySettings } from './WorkbenchTavilySettings'
+import { WorkbenchWebSearchSettings } from './WorkbenchWebSearchSettings'
 
 type WorkbenchSettingsSectionId = 'appearance' | 'editor' | 'ai' | 'system' | 'account'
 
@@ -246,6 +250,8 @@ export function WorkbenchSettingsDialog({
   )
   const [modelBaseURLDraft, setModelBaseURLDraft] = useState(modelConfig.baseURL)
   const [modelApiKeyDraft, setModelApiKeyDraft] = useState(modelConfig.apiKey)
+  const [isVerifyingModelKey, setIsVerifyingModelKey] = useState(false)
+  const modelKeyVerification = useRef(0)
   const dialogRef = useRef<HTMLDivElement>(null)
   const modelOptions = createStandaloneWorkbenchProviderModelOptions(
     activeProviderModelCatalog?.models ?? [],
@@ -350,8 +356,14 @@ export function WorkbenchSettingsDialog({
   useEffect(() => {
     if (!open) return
     setModelBaseURLDraft(modelConfig.baseURL)
+  }, [modelConfig.baseURL, modelConfig.provider, open])
+  useEffect(() => {
     setModelApiKeyDraft(modelConfig.apiKey)
-  }, [modelConfig.apiKey, modelConfig.baseURL, modelConfig.provider, open])
+  }, [modelConfig.apiKey, modelConfig.provider, open])
+  useEffect(() => {
+    modelKeyVerification.current += 1
+    setIsVerifyingModelKey(false)
+  }, [modelConfig.provider, open])
 
   useEffect(() => {
     if (!open) return
@@ -488,6 +500,41 @@ export function WorkbenchSettingsDialog({
   function commitModelApiKeyDraft(): void {
     if (modelApiKeyDraft === modelConfig.apiKey) return
     updateStandaloneWorkbenchModelConfig({ apiKey: modelApiKeyDraft })
+  }
+
+  async function verifyModelApiKey(): Promise<void> {
+    const provider = modelConfig.provider
+    const apiKey = modelApiKeyDraft.trim()
+    const baseURL = modelBaseURLDraft.trim()
+    const request = ++modelKeyVerification.current
+    setIsVerifyingModelKey(true)
+    try {
+      const catalog = await loadWorkbenchProviderModelCatalog(
+        { provider, apiKey, baseURL, purpose: 'chat' },
+        true
+      )
+      if (catalog.error || catalog.source !== 'remote')
+        throw new Error('Provider did not verify the connection')
+      if (
+        request !== modelKeyVerification.current ||
+        getStandaloneWorkbenchModelConfig().provider !== provider
+      )
+        return
+      updateStandaloneWorkbenchModelConfig({ apiKey, baseURL })
+      messageLatest.current.success({
+        title: tLatest.current('workbench.settingsModelKeyVerified'),
+      })
+    } catch {
+      if (
+        request === modelKeyVerification.current &&
+        getStandaloneWorkbenchModelConfig().provider === provider
+      )
+        messageLatest.current.error({
+          title: tLatest.current('workbench.settingsModelKeyVerificationFailed'),
+        })
+    } finally {
+      if (request === modelKeyVerification.current) setIsVerifyingModelKey(false)
+    }
   }
 
   function handleModelConnectionDraftKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -843,6 +890,21 @@ export function WorkbenchSettingsDialog({
         )}
         {managedSelectionVisible && (
           <>
+            <SettingRow title={t('workbench.settingsChatDefaultModel')}>
+              <Select
+                size="sm"
+                className={styles.workbenchSettingsSelectTrigger}
+                value={modelConfig.model}
+                options={modelOptions}
+                disabled={selectedManagedProviderDisabled || modelOptions.length === 0}
+                searchable={modelOptions.length > 12}
+                searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
+                emptyMessage={t('workbench.settingsModelSearchEmpty')}
+                onChange={(model) =>
+                  selectStandaloneWorkbenchModel(modelConfig.provider, model, 'agent')
+                }
+              />
+            </SettingRow>
             <SettingRow
               title={t('workbench.settingsAiCompletionModel')}
               description={t('workbench.settingsAiCompletionModelHint')}
@@ -871,9 +933,9 @@ export function WorkbenchSettingsDialog({
               key={modelConfig.provider}
               title={t('workbench.settingsConnection')}
               description={t('workbench.settingsConnectionDescription')}
-              defaultOpen={!modelProviderPreset.apiKeyOptional && !modelConfig.apiKey.trim()}
+              defaultOpen={modelProviderPreset.baseURLConfigurable || !modelConfig.apiKey.trim()}
             >
-              {managedSelectionVisible && modelProviderPreset.baseURLConfigurable && (
+              {modelProviderPreset.baseURLConfigurable && (
                 <SettingRow
                   title={t('workbench.settingsModelBaseUrl')}
                   description={t('workbench.settingsModelBaseUrlDescription')}
@@ -891,23 +953,40 @@ export function WorkbenchSettingsDialog({
                   />
                 </SettingRow>
               )}
-              {managedSelectionVisible && !modelProviderPreset.apiKeyOptional && (
-                <SettingRow
-                  title={t('workbench.settingsModelApiKey')}
-                  description={t('workbench.settingsModelApiKeyDescription')}
-                >
+              <SettingRow
+                title={t('workbench.settingsModelApiKey')}
+                description={t('workbench.settingsModelApiKeyDescription')}
+              >
+                <div className={styles.workbenchSettingsModelKeyControl}>
                   <Input
                     size="sm"
                     type="password"
                     autoComplete="off"
                     value={modelApiKeyDraft}
+                    disabled={isVerifyingModelKey}
                     placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
                     onChange={(event) => setModelApiKeyDraft(event.currentTarget.value)}
                     onBlur={commitModelApiKeyDraft}
                     onKeyDown={handleModelConnectionDraftKeyDown}
                   />
-                </SettingRow>
-              )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      isVerifyingModelKey ||
+                      !modelApiKeyDraft.trim() ||
+                      (modelProviderPreset.baseURLConfigurable && !modelBaseURLDraft.trim())
+                    }
+                    onClick={() => void verifyModelApiKey()}
+                  >
+                    {t(
+                      isVerifyingModelKey
+                        ? 'workbench.settingsModelKeyVerifying'
+                        : 'workbench.settingsTavilyVerify'
+                    )}
+                  </Button>
+                </div>
+              </SettingRow>
             </SettingsDisclosure>
           )}
       </div>
@@ -1216,7 +1295,7 @@ export function WorkbenchSettingsDialog({
           description={t('workbench.settingsWebSearchSummary')}
         >
           <div className={styles.workbenchSettingsSectionPanel}>
-            <WorkbenchTavilySettings />
+            <WorkbenchWebSearchSettings />
             <SettingRow
               title={t('workbench.settingsWebSearchEngine')}
               description={t('workbench.settingsWebSearchEngineDescription')}

@@ -563,10 +563,6 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     enabled: true,
     keymap: workbenchKeymap.keymap,
   })
-  useEffect(() => {
-    document.title = project.name
-  }, [project.name])
-
   // 鼠标侧键：后退键（按钮 3）、前进键（按钮 4）与快捷键一样走编辑区的后退 / 前进。
   const navigateBackLatest = useLatest(editorNavigation.goBack)
   const navigateForwardLatest = useLatest(editorNavigation.goForward)
@@ -1105,7 +1101,11 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
     }
 
     surface.openBottomTool(tool)
-    if (tool === 'terminal' && workbench.terminalSessions.length === 0 && !terminalOpening.current) {
+    if (
+      tool === 'terminal' &&
+      workbench.terminalSessions.length === 0 &&
+      !terminalOpening.current
+    ) {
       terminalOpening.current = true
       void workbench.createTerminalSession().finally(() => {
         terminalOpening.current = false
@@ -1181,7 +1181,10 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
 
   const openSettings = useMemoizedFn((): void => {
     void window.velarosWorkbenchSettingsWindow.open().catch((error: unknown) => {
-      translate.messageLatest.current.error({ title: translate.tLatest.current('workbench.settingsTitle'), description: AppError.getMessage(error) })
+      translate.messageLatest.current.error({
+        title: translate.tLatest.current('workbench.settingsTitle'),
+        description: AppError.getMessage(error),
+      })
     })
   })
 

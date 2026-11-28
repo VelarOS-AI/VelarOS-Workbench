@@ -15,12 +15,36 @@ import {
   type WorkbenchThemeId,
 } from '../src/renderer/src/models/workbenchPreferences'
 import type { StorageLike } from '../src/renderer/src/support/localStorageJsonStore'
+import { getWorkbenchColorTokens, type WorkbenchAccent } from '../src/shared/workbenchAppearance'
 
 function source(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 }
 
 describe('Workbench appearance preferences', () => {
+  test('matches the selected accent to primary controls and keeps file colors on the light palette', () => {
+    const accents: WorkbenchAccent[] = [
+      'blue',
+      'violet',
+      'rose',
+      'orange',
+      'amber',
+      'green',
+      'teal',
+      'slate',
+    ]
+    for (const accent of accents) {
+      const light = getWorkbenchColorTokens('light-modern', accent)
+      const dark = getWorkbenchColorTokens('dark-modern', accent)
+      for (const palette of [light, dark, getWorkbenchColorTokens('warm-paper', accent)]) {
+        expect(palette['--primary']).toBe(palette[`--workbench-accent-${accent}`])
+        expect(palette['--workbench-accent-solid']).toBe(palette['--primary'])
+      }
+      for (const [name, value] of Object.entries(light)) {
+        if (name.startsWith('--workbench-file-')) expect(dark[name as `--${string}`]).toBe(value)
+      }
+    }
+  })
   test('offers two neutral themes and two visually distinct color themes', () => {
     expect(normalizeWorkbenchPreferences({ theme: 'light-modern' }).theme).toBe('light-modern')
     expect(normalizeWorkbenchPreferences({ theme: 'dark-modern' }).theme).toBe('dark-modern')

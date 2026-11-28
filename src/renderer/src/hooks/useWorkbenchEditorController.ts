@@ -37,7 +37,9 @@ import {
   type WorkbenchEditorSaveSummary,
 } from '@renderer/models/editor/workbenchEditorSaving'
 import {
+  collectWorkbenchEditorGitChangedPaths,
   collectWorkbenchEditorUnsavedPaths,
+  isWorkbenchEditorTabUnmodified,
   popWorkbenchClosedEditorTab,
   pushWorkbenchClosedEditorTabs,
   resolveWorkbenchEditorDeletedEntry,
@@ -170,8 +172,9 @@ export function useWorkbenchEditorController({
   // 开着的文件的正文与磁盘快照，按路径存；标签栏上怎么排、每组显示哪个、当前组是哪个在标签布局里。
   // 两边的路径始终是同一批：加、关、改名都在同一轮里一起改。
   // 正文与格式的实际 owner 立即接纳每次修改；异步保存/关闭不等待 React 提交才看到新草稿。
-  const [openTabsByPath, openTabsByPathLatest, setOpenTabsSnapshot] =
-    useWorkbenchEditorSnapshot(() => new Map<string, WorkbenchOpenEditorTab>())
+  const [openTabsByPath, openTabsByPathLatest, setOpenTabsSnapshot] = useWorkbenchEditorSnapshot(
+    () => new Map<string, WorkbenchOpenEditorTab>()
+  )
   const setOpenTabsByPath = useMemoizedFn(
     (update: SetStateAction<Map<string, WorkbenchOpenEditorTab>>, defer = false): void => {
       const current = openTabsByPathLatest.current
@@ -282,6 +285,7 @@ export function useWorkbenchEditorController({
         path: file.path,
         file,
         content,
+        savedModificationBase: currentTab?.savedModificationBase,
         textConversion,
         externalChange,
       })
@@ -295,7 +299,11 @@ export function useWorkbenchEditorController({
    * 选过的格式转换跟着正文走；上次保存被拒的说明针对的是旧正文，一改就作废。
    * 正文一改，预览标签就留下：有改动的标签不会被下一次预览顶替掉。
    */
-  function updateOpenTabContent(file: WorkbenchReadFileResult, content: string, defer = false): void {
+  function updateOpenTabContent(
+    file: WorkbenchReadFileResult,
+    content: string,
+    defer = false
+  ): void {
     keepOpenFile(file.path)
     const current = openTabsByPathLatest.current
     const previous = current.get(file.path)
@@ -309,13 +317,15 @@ export function useWorkbenchEditorController({
   }
 
   /** 编辑器里的输入：改的是那个编辑器正在显示的文件（`path`，另一组的编辑器也经这里）；不给就是当前文件。 */
-  const updateEditorContent = useMemoizedFn((content: string, path?: string, defer = false): void => {
-    const targetPath = path ?? selectedFilePathRef.current
-    const file = targetPath ? openTabsByPathLatest.current.get(targetPath)?.file : undefined
-    if (!file || !isWorkbenchFileEditable(file, chosenEditModes.get(file.path))) return
+  const updateEditorContent = useMemoizedFn(
+    (content: string, path?: string, defer = false): void => {
+      const targetPath = path ?? selectedFilePathRef.current
+      const file = targetPath ? openTabsByPathLatest.current.get(targetPath)?.file : undefined
+      if (!file || !isWorkbenchFileEditable(file, chosenEditModes.get(file.path))) return
 
-    updateOpenTabContent(file, content, defer)
-  })
+      updateOpenTabContent(file, content, defer)
+    }
+  )
   const readEditorContent = useMemoizedFn((path: Nullable<string>): string | undefined =>
     path ? openTabsByPathLatest.current.get(path)?.content : undefined
   )
@@ -578,7 +588,14 @@ export function useWorkbenchEditorController({
         tab.externalChange?.status === 'modified' ? tab.externalChange.diskFile : null
       return [
         diskFile
-          ? { path, file: diskFile, content: diskFile.content }
+          ? {
+              ...tab,
+              file: diskFile,
+              content: diskFile.content,
+              externalChange: undefined,
+              textConversion: undefined,
+              unencodableSaveError: undefined,
+            }
           : {
               ...tab,
               content: tab.file.content,
@@ -839,7 +856,9 @@ export function useWorkbenchEditorController({
     const targetPaths = paths.filter((path) => openTabsByPathLatest.current.has(path))
     if (isEmpty(targetPaths)) return
 
-    const dirtyPaths = targetPaths.filter((path) => isDirtyTab(openTabsByPathLatest.current.get(path)!))
+    const dirtyPaths = targetPaths.filter((path) =>
+      isDirtyTab(openTabsByPathLatest.current.get(path)!)
+    )
     if (isEmpty(dirtyPaths)) {
       commitCloseOpenFiles(targetPaths)
       return
@@ -866,12 +885,39 @@ export function useWorkbenchEditorController({
     requestCloseOpenFiles(listWorkbenchEditorUnpinnedTabs(layoutRef.current, groupIndex))
   })
 
-  const closeUnmodifiedOpenFiles = useMemoizedFn((groupIndex?: number): void => {
-    commitCloseOpenFiles(
-      listWorkbenchEditorUnpinnedTabs(layoutRef.current, groupIndex).filter((path) => {
-        const tab = openTabsByPathLatest.current.get(path)
-        return !!tab && !isDirtyTab(tab)
+  const closeUnmodifiedOpenFiles = useMemoizedFn(async (groupIndex?: number): Promise<void> => {
+    const project = activeProjectRef.current
+    if (!project) return
+    const openTabs = openTabsByPathLatest.current
+    const candidates = listWorkbenchEditorUnpinnedTabs(layoutRef.current, groupIndex).filter(
+      (path) => {
+        const tab = openTabs.get(path)
+        return !!tab && isWorkbenchEditorTabUnmodified(tab)
+      }
+    )
+    if (isEmpty(candidates)) return
+
+    const git = await workbenchHost.kernel.workspace.getWorkspaceGitSummary(project.rootPath)
+    if (activeProjectRef.current?.id !== project.id) return
+    if (!git.ok && git.error.code !== 'NOT_FOUND') {
+      messageLatest.current.warning({
+        title: tLatest.current('workbench.gitReloadFailed'),
+        description: git.error.message,
       })
+      return
+    }
+    const changed = collectWorkbenchEditorGitChangedPaths(
+      candidates,
+      git.ok ? (git.data.status?.entries ?? []) : []
+    )
+    const stillUnpinned = new Set(listWorkbenchEditorUnpinnedTabs(layoutRef.current, groupIndex))
+    commitCloseOpenFiles(
+      candidates.filter(
+        (path) =>
+          stillUnpinned.has(path) &&
+          openTabsByPathLatest.current.get(path) === openTabs.get(path) &&
+          !changed.has(path)
+      )
     )
   })
 

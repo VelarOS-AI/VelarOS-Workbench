@@ -40,6 +40,7 @@ import {
   type WorkspaceGitStashAction,
 } from '@shared/contracts/workspaceGit'
 
+import type { WorkbenchGitBranchLogRequest } from '../../models/git/workbenchGitBranchMenuModel'
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchContextMenu, type WorkbenchContextMenuItem } from '../chrome/WorkbenchContextMenu'
 
@@ -52,6 +53,7 @@ import { WorkbenchGitReloadLink } from './WorkbenchGitReloadLink'
 
 interface WorkbenchGitToolPanelProps {
   workspaceRoot: string
+  branchLogRequest?: Nullable<WorkbenchGitBranchLogRequest>
   summary: Nullable<SystemWorkspaceGitSummary>
   isLoading: boolean
   error: Nullable<string>
@@ -105,6 +107,7 @@ const StashActionSuccessTitleKeys: Record<WorkspaceGitStashAction, string> = {
  */
 export function WorkbenchGitToolPanel({
   workspaceRoot,
+  branchLogRequest = null,
   summary,
   isLoading,
   error,
@@ -116,9 +119,11 @@ export function WorkbenchGitToolPanel({
 }: WorkbenchGitToolPanelProps): ReactElement {
   const { t, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   /** null 跟随当前分支；显式选中的空串表示全部分支。 */
-  const [logSelection, setLogSelection] = useState<
-    Nullable<{ workspaceRoot: string; branch: string }>
-  >(null)
+  const [logSelection, setLogSelection] =
+    useState<Nullable<Omit<WorkbenchGitBranchLogRequest, 'compare'> & { compare?: boolean }>>(
+      branchLogRequest
+    )
+  const [lastLogRequest, setLastLogRequest] = useState(branchLogRequest)
   const [logSearch, setLogSearch] = useState('')
   const [selectedCommitSha, setSelectedCommitSha] = useState<Nullable<string>>(null)
   /** 选中的贮藏：选着它时右侧看的是它，不是日志里选中的提交。 */
@@ -130,17 +135,26 @@ export function WorkbenchGitToolPanel({
   const branches = useMemo(() => summary?.branches ?? [], [summary?.branches])
   const currentBranch = branches.find((branch) => branch.current)?.name ?? null
   const selectedBranch = logSelection?.workspaceRoot === workspaceRoot ? logSelection.branch : null
-  const isSelectionAvailable =
-    selectedBranch === '' || branches.some((branch) => branch.name === selectedBranch)
+  const selectedRef = branches.find((branch) => branch.name === selectedBranch)
+  const isSelectionAvailable = selectedBranch === '' || !!selectedRef
   const logBranch = (isSelectionAvailable ? selectedBranch : currentBranch) ?? ''
+  const comparing = !!selectedRef && !!logSelection?.compare
+  const logRevision = selectedRef?.ref ?? logBranch
   const log = useWorkbenchGitLog({
     workspaceRoot,
-    branch: logBranch,
+    branch: comparing ? `HEAD..${logRevision}` : logRevision,
     enabled: isRepository,
     revision,
   })
   const stashList = useWorkbenchGitStashes({ workspaceRoot, enabled: isRepository, revision })
   const [contextMenu, setContextMenu] = useState<Nullable<GitContextMenuState>>(null)
+  if (branchLogRequest !== lastLogRequest) {
+    setLastLogRequest(branchLogRequest)
+    setLogSelection(branchLogRequest)
+    setSelectedCommitSha(null)
+    setSelectedStashSha(null)
+    setLogSearch('')
+  }
   /** 进行到一半的合并、变基、拣选或撤销。 */
   const operation = summary?.operation ?? null
   const conflictCount = summary?.status?.conflictedFiles ?? 0
@@ -385,7 +399,11 @@ export function WorkbenchGitToolPanel({
                   onClick={() => setLogSelection(logBranch ? { workspaceRoot, branch: '' } : null)}
                 >
                   {logBranch ? <GitBranchIcon size={12} /> : <GitForkIcon size={12} />}
-                  <span>{logBranch || t('workbench.gitLogAllBranches')}</span>
+                  <span>
+                    {comparing
+                      ? t('workbench.gitBranchCompareScope', { branch: logBranch })
+                      : logBranch || t('workbench.gitLogAllBranches')}
+                  </span>
                 </button>
                 <span className={styles.gitLogCount}>
                   {log.isLoadingMore && <SpinnerGapIcon size={11} className={styles.spinIcon} />}
@@ -446,9 +464,7 @@ export function WorkbenchGitToolPanel({
                         key={action}
                         size="sm"
                         variant={action === 'drop' ? 'destructiveOutline' : 'outline'}
-                        disabled={
-                          !!pendingStashAction || (action !== 'drop' && hasUnsavedOpenTabs)
-                        }
+                        disabled={!!pendingStashAction || (action !== 'drop' && hasUnsavedOpenTabs)}
                         title={t(StashActionHintKeys[action])}
                         onClick={() => void runStashAction(selectedStash, action)}
                       >

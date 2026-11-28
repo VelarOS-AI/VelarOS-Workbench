@@ -39,7 +39,13 @@ export function StandaloneWorkbenchApp(): ReactElement {
   const [externalProjectDropActive, setExternalProjectDropActive] = useState(false)
   const externalDragDepthRef = useRef(0)
   const localization = useStandaloneWorkbenchLocalization()
+  const projectName =
+    projectHub.kind === 'ready' ? projectHub.state.currentProject?.name : undefined
   const isWelcomeReady = projectHub.kind === 'ready' && !projectHub.state.currentProject
+
+  useEffect(() => {
+    document.title = projectName || 'VelarOS Workbench'
+  }, [projectName])
 
   useEffect(() => {
     if (isWelcomeReady) return preloadWhenIdle([LazyWorkbenchWorkspaceShell])

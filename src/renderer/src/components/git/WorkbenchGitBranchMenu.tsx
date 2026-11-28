@@ -2,7 +2,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactElement,
   type RefObject,
+  useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,16 +12,22 @@ import {
 import {
   ArrowDownIcon,
   ArrowLineUpIcon,
+  ArrowsClockwiseIcon,
   ArrowUpIcon,
   CaretDownIcon,
   CaretRightIcon,
+  ClockCounterClockwiseIcon,
   CloudArrowDownIcon,
+  CopyIcon,
   FolderIcon,
   GitBranchIcon,
+  GitDiffIcon,
   GitMergeIcon,
   type Icon,
+  PencilSimpleIcon,
   PlusIcon,
   SpinnerGapIcon,
+  TrashIcon,
 } from '@phosphor-icons/react'
 import {
   describeWorkbenchGitRemoteActionCancel,
@@ -46,6 +54,7 @@ const RemoteActionIcons: Record<WorkbenchGitRemoteActionItem['action'], Icon> = 
   pull: ArrowDownIcon,
   upload: ArrowUpIcon,
   fetch: CloudArrowDownIcon,
+  sync: ArrowsClockwiseIcon,
 }
 
 /** 分支行的缩进：每进一层目录多这么多。 */
@@ -53,6 +62,8 @@ const BranchIndentStepPx = 14
 const BranchRowPaddingPx = 6
 
 const MenuItemSelector = 'input, [data-git-menu-item]:not(:disabled)'
+const SubmenuGap = 8
+const SubmenuViewportInset = 8
 
 interface WorkbenchGitBranchMenuProps {
   branches: readonly WorkspaceGitBranch[]
@@ -81,6 +92,10 @@ interface WorkbenchGitBranchMenuProps {
   onPushBranch: (branch: WorkspaceGitBranch) => void
   onRunBranchOperation: (action: 'merge' | 'rebase', branch: WorkspaceGitBranch) => void
   onOpenCreateBranch: (branch?: WorkspaceGitBranch) => void
+  onOpenRenameBranch: (branch: WorkspaceGitBranch) => void
+  onDeleteBranch: (branch: WorkspaceGitBranch) => void
+  onCopyBranch: (branch: WorkspaceGitBranch) => void
+  onInspectBranch: (branch: WorkspaceGitBranch, compare: boolean) => void
 }
 
 export function WorkbenchGitBranchMenu({
@@ -104,10 +119,17 @@ export function WorkbenchGitBranchMenu({
   onPushBranch,
   onRunBranchOperation,
   onOpenCreateBranch,
+  onOpenRenameBranch,
+  onDeleteBranch,
+  onCopyBranch,
+  onInspectBranch,
 }: WorkbenchGitBranchMenuProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const detailsId = useId()
+  const menuRef = useRef<HTMLDivElement>(null)
   const detailsRef = useRef<HTMLElement>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(hoverTimer.current), [])
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set())
   const searching = !!search.trim()
   const branchesLocked = locked || !!branchesBlocked
@@ -135,11 +157,75 @@ export function WorkbenchGitBranchMenu({
   const selectedCurrent =
     !!selected && !selectedRemote && (selected.current || selected.name === currentBranch)
   const runningInDetails =
-    (running?.action === 'pull' && selectedCurrent) ||
+    ((running?.action === 'pull' || running?.action === 'sync') && selectedCurrent) ||
     (running?.action === 'upload' &&
       !!selected &&
       !selectedRemote &&
       (running.branch ? running.branch === selected.name : selectedCurrent))
+
+  useLayoutEffect(() => {
+    const menu = menuRef.current
+    const details = detailsRef.current
+    const row = menu?.querySelector('[data-selected="true"]')
+    const panel = menu?.parentElement
+    const view = menu?.ownerDocument.defaultView
+    if (!menu || !details || !row || !panel || !view) return
+
+    const position = (): void => {
+      const origin = menu.getBoundingClientRect()
+      const bounds = panel.getBoundingClientRect()
+      const anchor = row.getBoundingClientRect()
+      const list = row.closest(`.${styles.gitBranchMenuList}`)?.getBoundingClientRect()
+      const { width, height } = details.getBoundingClientRect()
+      const right = bounds.right + SubmenuGap
+      const left = bounds.left - SubmenuGap - width
+      const maxX = view.innerWidth - width - SubmenuViewportInset
+      const x = right <= maxX || left < SubmenuViewportInset ? right : left
+      const maxY = view.innerHeight - height - SubmenuViewportInset
+      details.style.left = `${Math.max(SubmenuViewportInset, Math.min(x, maxX)) - origin.left}px`
+      details.style.top = `${Math.max(SubmenuViewportInset, Math.min(anchor.top, maxY)) - origin.top}px`
+      details.style.visibility =
+        list && (anchor.bottom <= list.top || anchor.top >= list.bottom) ? 'hidden' : 'visible'
+      details.dataset.side = x === left ? 'left' : 'right'
+    }
+
+    position()
+    const observer = new ResizeObserver(position)
+    observer.observe(panel)
+    observer.observe(details)
+    let frame = 0
+    const handleResize = (): void => {
+      view.cancelAnimationFrame(frame)
+      frame = view.requestAnimationFrame(position)
+    }
+    view.addEventListener('resize', handleResize)
+    view.addEventListener('scroll', position, true)
+    return () => {
+      observer.disconnect()
+      view.cancelAnimationFrame(frame)
+      view.removeEventListener('resize', handleResize)
+      view.removeEventListener('scroll', position, true)
+    }
+  }, [selected])
+
+  function cancelHoverTimer(): void {
+    clearTimeout(hoverTimer.current)
+  }
+
+  function openHoveredBranch(branch: WorkspaceGitBranch): void {
+    cancelHoverTimer()
+    // 横向移入子菜单时，鼠标可能短暂经过旁边的分支行。
+    if (!selected || selected === branch) onSelectBranch(branch)
+    else hoverTimer.current = setTimeout(() => onSelectBranch(branch), 100)
+  }
+
+  function closeHoveredBranch(): void {
+    cancelHoverTimer()
+    hoverTimer.current = setTimeout(() => {
+      if (!detailsRef.current?.contains(menuRef.current?.ownerDocument.activeElement ?? null))
+        onSelectBranch(null)
+    }, 220)
+  }
 
   function renderRemoteAction(
     item: WorkbenchGitRemoteActionItem,
@@ -186,9 +272,8 @@ export function WorkbenchGitBranchMenu({
 
   function toggleFolder(key: string, expanded: boolean): void {
     if (searching) return
-    const namespace = selectedRemote ? 'remote' : 'local'
-    if (expanded && selected && `${namespace}:${selected.name}`.startsWith(`${key}/`))
-      onSelectBranch(null)
+    cancelHoverTimer()
+    onSelectBranch(null)
     setCollapsedFolders((current) => {
       const next = new Set(current)
       if (expanded) next.add(key)
@@ -207,7 +292,9 @@ export function WorkbenchGitBranchMenu({
     }
     if (event.key === 'ArrowLeft' && inDetails) {
       event.preventDefault()
+      cancelHoverTimer()
       event.currentTarget.querySelector<HTMLElement>('[data-selected="true"] > button')?.focus()
+      onSelectBranch(null)
       return
     }
     const vertical = event.key === 'ArrowDown' || event.key === 'ArrowUp'
@@ -239,6 +326,10 @@ export function WorkbenchGitBranchMenu({
         data-current={current || undefined}
         data-selected={isSelected || undefined}
         title={branch.name}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== 'touch') openHoveredBranch(branch)
+        }}
+        onPointerLeave={closeHoveredBranch}
       >
         <button
           type="button"
@@ -250,6 +341,7 @@ export function WorkbenchGitBranchMenu({
           aria-expanded={isSelected}
           aria-controls={isSelected ? detailsId : undefined}
           onClick={(event) => {
+            cancelHoverTimer()
             onSelectBranch(branch)
             if (event.detail === 0) {
               requestAnimationFrame(() => {
@@ -317,21 +409,17 @@ export function WorkbenchGitBranchMenu({
   function renderDetails(branch: WorkspaceGitBranch): ReactElement {
     const pull = remoteActions.find((item) => item.action === 'pull')
     const push = remoteActions.find((item) => item.action === 'upload')
+    const sync = remoteActions.find((item) => item.action === 'sync')
     return (
       <section
         ref={detailsRef}
         id={detailsId}
         className={styles.gitBranchMenuDetails}
-        aria-labelledby={`${detailsId}-name`}
+        aria-label={t('workbench.gitBranchActions', { branch: branch.name })}
         tabIndex={-1}
+        onPointerEnter={cancelHoverTimer}
+        onPointerLeave={closeHoveredBranch}
       >
-        <div
-          id={`${detailsId}-name`}
-          className={styles.gitBranchMenuDetailsName}
-          title={branch.name}
-        >
-          {branch.name}
-        </div>
         <div className={styles.gitBranchMenuDetailsList}>
           {!selectedCurrent &&
             renderCommand('workbench.gitBranchCheckoutCreated', GitBranchIcon, () =>
@@ -367,19 +455,57 @@ export function WorkbenchGitBranchMenu({
               )}
             </>
           )}
+          {selectedCurrent &&
+            sync &&
+            renderRemoteAction(sync, running?.action === 'sync' ? running : null)}
+          <div className={styles.gitBranchMenuSeparator} />
+          {renderCommand(
+            'workbench.gitBranchShowLog',
+            ClockCounterClockwiseIcon,
+            () => onInspectBranch(branch, false),
+            false
+          )}
+          {!selectedCurrent &&
+            renderCommand(
+              currentBranch ? 'workbench.gitBranchCompare' : 'workbench.gitBranchCompareWithHead',
+              GitDiffIcon,
+              () => onInspectBranch(branch, true),
+              false
+            )}
+          {renderCommand(
+            'workbench.gitBranchCopyName',
+            CopyIcon,
+            () => onCopyBranch(branch),
+            false
+          )}
+          {!selectedRemote && (
+            <>
+              <div className={styles.gitBranchMenuSeparator} />
+              {renderCommand('workbench.gitBranchRename', PencilSimpleIcon, () =>
+                onOpenRenameBranch(branch)
+              )}
+              {!selectedCurrent &&
+                renderCommand('workbench.gitBranchDelete', TrashIcon, () => onDeleteBranch(branch))}
+            </>
+          )}
         </div>
       </section>
     )
   }
 
-  function renderCommand(key: string, CommandIcon: Icon, onClick: () => void): ReactElement {
+  function renderCommand(
+    key: string,
+    CommandIcon: Icon,
+    onClick: () => void,
+    mutates = true
+  ): ReactElement {
     return (
       <button
         type="button"
         className={styles.gitBranchMenuCommand}
         data-git-menu-item
-        disabled={branchesLocked}
-        title={branchesBlocked ?? undefined}
+        disabled={mutates && branchesLocked}
+        title={mutates ? (branchesBlocked ?? undefined) : undefined}
         onClick={onClick}
       >
         <CommandIcon size={15} aria-hidden="true" />
@@ -389,7 +515,7 @@ export function WorkbenchGitBranchMenu({
   }
 
   return (
-    <div className={styles.gitBranchMenu} onKeyDown={handleKeyDown}>
+    <div ref={menuRef} className={styles.gitBranchMenu} onKeyDown={handleKeyDown}>
       <div className={styles.gitBranchMenuBrowser}>
         <div className={styles.gitBranchMenuSearch}>
           <SearchField
@@ -399,6 +525,7 @@ export function WorkbenchGitBranchMenu({
             placeholder={t('workbench.gitBranchSearchPlaceholder')}
             aria-label={t('workbench.gitBranchSearchPlaceholder')}
             onChange={(event) => {
+              cancelHoverTimer()
               const nextSearch = event.target.value
               if (selected && filterWorkbenchGitBranches([selected], nextSearch).length === 0)
                 onSelectBranch(null)

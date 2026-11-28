@@ -50,6 +50,7 @@ export function mergeWorkbenchEditorSavedTab(
 
   return {
     ...currentTab,
+    savedModificationBase: currentTab.savedModificationBase ?? requestedTab.file,
     file: saved,
     content: currentTab.content === requestedTab.content ? saved.content : currentTab.content,
     textConversion: resolveWorkbenchTextConversion(saved, currentFormat),

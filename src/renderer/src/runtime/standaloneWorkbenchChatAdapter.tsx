@@ -2270,10 +2270,6 @@ function StandaloneWorkbenchChatSessionSurface({
             storeReasoningLevel(value)
           },
         },
-        thinkingVisibility: {
-          value: showThinkingProcess,
-          onChange: setShowThinkingProcess,
-        },
         features: {
           // Electron 里没有语音识别服务（与 Desktop 相同）。
           voiceInput: false,
@@ -2315,6 +2311,18 @@ function StandaloneWorkbenchChatSessionSurface({
         },
       },
       modelSelector,
+      capabilityControls: [
+        {
+          id: 'thinking-visibility',
+          kind: 'toggle',
+          placement: 'model-menu',
+          label: t('chat.composerThinkingVisibility'),
+          value: showThinkingProcess,
+          onChange: (value) => {
+            if (typeof value === 'boolean') setShowThinkingProcess(value)
+          },
+        },
+      ],
       slots: {
         contextUsageIndicator: (
           <>

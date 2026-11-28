@@ -9,7 +9,9 @@ import { getWorkbenchMainLocale } from './workbenchMainLocale'
 const zhCN = {
   'search.tavilyInvalidKey': 'Tavily 拒绝了这个 API Key，请检查后重试。',
   'search.tavilyVerificationUnavailable': '暂时无法验证 Tavily API Key，请检查网络后重试。',
-  'search.tavilySettingsChanged': 'Tavily 设置刚刚被更新，请重试。',
+  'search.invalidSettings': '请检查搜索服务的接口地址和 API Key。',
+  'search.missingKey': '请先输入此搜索服务的 API Key。',
+  'search.customVerificationFailed': '自定义搜索接口验证失败，请检查地址、密钥和返回格式。',
   'menu.file': '文件',
   'menu.newProject': '新建项目…',
   'menu.openProject': '打开项目…',
@@ -422,8 +424,12 @@ export type WorkbenchMainMessageKey = keyof typeof zhCN
 
 const enUS: Record<WorkbenchMainMessageKey, string> = {
   'search.tavilyInvalidKey': 'Tavily rejected this API key. Check the key and try again.',
-  'search.tavilyVerificationUnavailable': 'Could not verify the Tavily API key. Check your connection and try again.',
-  'search.tavilySettingsChanged': 'Tavily settings changed. Try again.',
+  'search.tavilyVerificationUnavailable':
+    'Could not verify the Tavily API key. Check your connection and try again.',
+  'search.invalidSettings': 'Check the search endpoint and API key.',
+  'search.missingKey': 'Enter an API key for this search provider.',
+  'search.customVerificationFailed':
+    'Could not verify the custom search endpoint. Check its address, API key and response format.',
   'menu.file': 'File',
   'menu.newProject': 'New Project…',
   'menu.openProject': 'Open Project…',
@@ -668,7 +674,8 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'process.cliQueryTooLarge': 'The launcher installation information exceeds the read limit.',
   'process.cliQueryTimedOut': 'Reading launcher installation information timed out.',
   'process.scriptNotFile': 'The script to run is not a file: {path}',
-  'process.packageBinMissing': 'Cannot find an executable entry for {package} in the project dependencies.',
+  'process.packageBinMissing':
+    'Cannot find an executable entry for {package} in the project dependencies.',
   'process.packageBinNotNode': 'The executable entry for {package} is not a supported Node script.',
   'process.invalidTarget': 'The process target is invalid or also specifies a shell command.',
   'terminal.processExited': 'Process exited (exit={code} signal={signal})',

@@ -8,7 +8,14 @@ import {
   useRef,
   useState,
 } from 'react'
-import { BugIcon, CaretDownIcon, CheckIcon, GearSixIcon, PlayIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import {
+  BugIcon,
+  CaretDownIcon,
+  CheckIcon,
+  GearSixIcon,
+  PlayIcon,
+  SpinnerGapIcon,
+} from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { describeWorkbenchRunConfiguration } from '@renderer/models/commands/workbenchNamedRunConfigurations'
 import { hasWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
@@ -60,6 +67,7 @@ export function WorkbenchTopLeading({
   hasUnsavedOpenTabs,
   onRepositoryChanged,
   onOpenGitCommitTool,
+  onInspectGitBranch,
 }: Pick<
   TopToolbarProps,
   | 'gitWorkspaceRoot'
@@ -70,7 +78,9 @@ export function WorkbenchTopLeading({
   | 'hasUnsavedOpenTabs'
   | 'onRepositoryChanged'
   | 'onOpenGitCommitTool'
->): Nullable<ReactElement> {
+> & {
+  onInspectGitBranch: (workspaceRoot: string, branch: string, compare: boolean) => void
+}): Nullable<ReactElement> {
   // 分离的 HEAD 上控件照样在：从分支菜单才能切回分支。
   const gitControlReady = !!gitSummary?.repository && hasWorkbenchGitHead(gitSummary.status)
   if (!gitControlReady) return null
@@ -86,6 +96,7 @@ export function WorkbenchTopLeading({
       onWorkingTreeChanged={onGitWorkingTreeChanged}
       onRepositoryChanged={onRepositoryChanged}
       onOpenCommitTool={onOpenGitCommitTool}
+      onInspectBranch={onInspectGitBranch}
     />
   )
 }

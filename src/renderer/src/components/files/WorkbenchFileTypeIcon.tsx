@@ -130,7 +130,7 @@ const BuiltinFileIconColors: Partial<Record<WorkbenchBuiltinFilePresentationVari
   webassembly: 'var(--workbench-file-webassembly)',
   config: 'var(--workbench-file-config)',
   css: 'var(--workbench-file-css)',
-  gitignore: 'var(--workbench-text-muted)',
+  gitignore: 'var(--workbench-file-muted, var(--workbench-text-muted))',
   javascript: 'var(--workbench-file-javascript)',
   json: 'var(--workbench-file-json)',
   jsx: 'var(--workbench-file-jsx)',
@@ -191,7 +191,11 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
     )
 
   // Add space inside the square marks, preserving the shared icon slot and tab gap.
-  if (LanguageIcon && !presentation.icon && (builtinVariant === 'javascript' || builtinVariant === 'typescript'))
+  if (
+    LanguageIcon &&
+    !presentation.icon &&
+    (builtinVariant === 'javascript' || builtinVariant === 'typescript')
+  )
     return (
       <svg
         {...iconProps}
@@ -203,7 +207,11 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
         aria-label={iconProps['aria-label'] ?? alt}
         aria-hidden={iconProps['aria-label'] || alt ? undefined : true}
         style={{
-          ...style, width: size, height: size, fill: iconColor, color: iconColor,
+          ...style,
+          width: size,
+          height: size,
+          fill: iconColor,
+          color: iconColor,
           ...(transform ? { transform, transformOrigin: 'center' } : {}),
         }}
       >

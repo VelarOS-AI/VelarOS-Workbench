@@ -121,7 +121,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
         // 标签栏上的「关闭全部 / 未修改」只管自己这一组。
         onCloseAllOpenFiles: () => workbench.closeAllOpenFiles(group.index),
-        onCloseUnmodifiedOpenFiles: () => workbench.closeUnmodifiedOpenFiles(group.index),
+        onCloseUnmodifiedOpenFiles: () => void workbench.closeUnmodifiedOpenFiles(group.index),
         onCloseOpenFilesToRight: workbench.closeOpenFilesToRight,
         onRevertOpenFile: (path) => workbench.revertOpenFiles([path]),
         onReorderOpenTabs: workbench.reorderOpenTabs,
